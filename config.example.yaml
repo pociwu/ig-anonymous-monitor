@@ -1,0 +1,45 @@
+accounts:
+  - url: https://insta-stories-viewer.com/sin_9311/
+    enabled: true
+    label: sin_9311
+
+paths:
+  data_dir: ./data
+  download_root: ./downloads
+  diagnostics_dir: ./data/diagnostics
+
+browser:
+  headless: true
+  timeout_seconds: 45
+  retry_count: 1
+  # Use a fixed location so systemd can find Playwright Chromium.
+  browsers_path: ./data/ms-playwright
+
+schedule:
+  interval_minutes: 15
+  account_delay_min_seconds: 10
+  account_delay_max_seconds: 20
+  media_limit_per_account: 50
+
+heartbeat:
+  enabled: true
+  time: "09:00"
+  timezone: Asia/Taipei
+
+retention:
+  diagnostic_runs: 10
+  database_backups: 7
+
+telegram:
+  enabled: true
+  retry_limit_per_run: 20
+  send_new_media: true
+  max_new_media_attachments: 10
+
+# API token is kept in .env as APIFY_API_TOKEN, never here.
+apify:
+  enabled: false
+  actor_id: apify/instagram-profile-scraper
+  monthly_cap_usd: 5.0
+  request_reservation_usd: 0.01
+  request_timeout_seconds: 180

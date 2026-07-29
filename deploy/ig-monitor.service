@@ -1,0 +1,20 @@
+[Unit]
+Description=IG anonymous profile monitor
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/srv/ig-monitor
+Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=-/srv/ig-monitor/.env
+Environment=PLAYWRIGHT_BROWSERS_PATH=/srv/ig-monitor/data/ms-playwright
+ExecStart=/home/ubuntu/miniconda3/envs/ig-monitor/bin/python -m ig_monitor --config /srv/ig-monitor/config.yaml
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=6
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,11 @@
+[Unit]
+Description=Run IG anonymous profile monitor every 15 minutes
+
+[Timer]
+OnCalendar=*:0/15
+Persistent=true
+AccuracySec=30s
+Unit=ig-monitor.service
+
+[Install]
+WantedBy=timers.target
