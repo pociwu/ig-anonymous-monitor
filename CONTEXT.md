@@ -20,6 +20,18 @@
 
 **Continuous integration**: GitHub Actions 在 `main` 與 Pull Request 使用 Python 3.12 執行 pytest；測試未通過的變更不得合併到 `main`。
 
+## Media identity
+
+**Duplicate media**: 同一 Instagram 帳號內，內容與構圖高度一致、差異主要來自解析度或壓縮的兩筆或多筆照片／影片。裁切、浮水印、文字覆蓋或重新編輯版視為不同媒體；不同 Instagram 帳號的相同內容也不視為重複。
+
+**Canonical media**: 一組 Duplicate media 中畫質最高、被保留作為顯示與檔案來源的那一筆媒體；若後續取得更高畫質版本，Canonical media 可被替換。
+
+**Media quality rank**: Canonical media 的品質排序。照片依像素總數、檔案大小排序；影片依像素總數、位元率、檔案大小排序；完全相同時保留最早下載版本。
+
+**Duplicate record**: 已確認與 Canonical media 相同、但為避免日後重新下載而保留的不可見媒體紀錄；不會再次存檔、發送附件或出現在儀表板。
+
+**Media collection**: 帳號媒體依來源分成 Posts、Stories 與 Highlights；每個來源再分為照片與影片。相同 Canonical media 可保留多個來源關聯，但只保存與顯示一份內容。
+
 **Instagram Profile ID**: Instagram 帳號的穩定識別碼；巡檢程式會為每個帳號保存此值，並在使用者名稱改變後用它查回目前的名稱。
 
 _Avoid_: 帳號名稱、Apify ID

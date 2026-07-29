@@ -80,7 +80,7 @@ DETAIL_PAGE = """<!doctype html>
 <html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{{ account.display_name or account.label }} · IG Monitor</title>
 <style>
-:root{color-scheme:dark}*{box-sizing:border-box}body{font-family:system-ui,-apple-system,sans-serif;background:#0b1120;color:#e5e7eb;margin:0;padding:24px}main{max-width:1200px;margin:auto}a{color:#c4b5fd;text-decoration:none}.profile{display:flex;gap:18px;align-items:center;background:#172033;border:1px solid #27344d;border-radius:16px;padding:20px}.avatar{width:96px;height:96px;border-radius:50%;object-fit:cover;background:#27344d}.avatar-fallback{display:grid;place-items:center;font-size:2rem;font-weight:700}.muted{color:#94a3b8}.stats{display:flex;gap:18px;flex-wrap:wrap;margin-top:10px}.stats strong{display:block;font-size:1.25rem}.meta{background:#172033;border-radius:12px;padding:16px;margin:16px 0;overflow-wrap:anywhere}.gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px}.media{background:#172033;border-radius:14px;overflow:hidden;border:1px solid #27344d}.media img,.media video{width:100%;aspect-ratio:1/1;display:block;object-fit:cover;background:#020617}.caption{padding:10px;font-size:.85rem;color:#94a3b8}@media(max-width:600px){body{padding:14px}.profile{align-items:flex-start}.avatar{width:72px;height:72px}.gallery{grid-template-columns:repeat(2,minmax(0,1fr))}}\n+</style></head><body><main>
+:root{color-scheme:dark}*{box-sizing:border-box}body{font-family:system-ui,-apple-system,sans-serif;background:#0b1120;color:#e5e7eb;margin:0;padding:24px}main{max-width:1200px;margin:auto}a{color:#c4b5fd;text-decoration:none}.profile{display:flex;gap:18px;align-items:center;background:#172033;border:1px solid #27344d;border-radius:16px;padding:20px}.avatar{width:96px;height:96px;border-radius:50%;object-fit:cover;background:#27344d}.avatar-fallback{display:grid;place-items:center;font-size:2rem;font-weight:700}.muted{color:#94a3b8}.stats{display:flex;gap:18px;flex-wrap:wrap;margin-top:10px}.stats strong{display:block;font-size:1.25rem}.meta{background:#172033;border-radius:12px;padding:16px;margin:16px 0;overflow-wrap:anywhere}.tabs{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}.tabs button{border:1px solid #334155;background:#172033;color:#cbd5e1;border-radius:999px;padding:9px 14px;cursor:pointer}.tabs button.active{background:#7c3aed;border-color:#8b5cf6;color:white}.gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px}.media{background:#172033;border-radius:14px;overflow:hidden;border:1px solid #27344d}.media[hidden]{display:none}.media img,.media video{width:100%;aspect-ratio:1/1;display:block;object-fit:cover;background:#020617}.caption{padding:10px;font-size:.85rem;color:#94a3b8}@media(max-width:600px){body{padding:14px}.profile{align-items:flex-start}.avatar{width:72px;height:72px}.gallery{grid-template-columns:repeat(2,minmax(0,1fr))}}\n+</style></head><body><main>
 <p><a href="{{ url_for('index') }}">← 返回帳號列表</a></p>
 <section class="profile">
 {% if account.has_avatar %}<img class="avatar" src="{{ url_for('avatar_asset', account_id=account.id) }}" alt="{{ account.label }}">
@@ -89,15 +89,50 @@ DETAIL_PAGE = """<!doctype html>
 <div class="stats"><span><strong>{{ account.posts }}</strong>發文</span><span><strong>{{ account.followers }}</strong>跟隨者</span><span><strong>{{ account.following }}</strong>追蹤中</span></div></div>
 </section>
 <section class="meta"><div>Instagram Profile ID：{{ account.instagram_profile_id or '尚未建立' }}</div><div>有效網址：{{ account.effective_url }}</div>{% if account.bio %}<p>{{ account.bio }}</p>{% endif %}</section>
-<h2>照片與影片（{{ media|length }}）</h2>
+<h2>照片與影片</h2>
+<nav class="tabs source-tabs">
+<button class="active" data-source="posts">貼文 {{ counts.posts.all }}</button>
+<button data-source="stories">Stories {{ counts.stories.all }}</button>
+<button data-source="highlights">Highlights {{ counts.highlights.all }}</button>
+</nav>
+<nav class="tabs kind-tabs">
+<button class="active" data-kind="all">全部</button>
+<button data-kind="image">照片</button>
+<button data-kind="video">影片</button>
+</nav>
 <section class="gallery">
-{% for item in media %}<article class="media">
+{% for item in media %}<article class="media" data-sources="{{ item.categories|join(' ') }}" data-kind="{{ item.kind }}">
 {% if item.kind == 'video' %}<video controls preload="metadata" src="{{ url_for('media_asset', media_id=item.id) }}"></video>
 {% else %}<a href="{{ url_for('media_asset', media_id=item.id) }}" target="_blank"><img loading="lazy" src="{{ url_for('media_asset', media_id=item.id) }}" alt="IG photo"></a>{% endif %}
-<div class="caption">{{ item.category }}{% if item.published_at %} · {{ item.published_at }}{% endif %}</div>
+<div class="caption">{{ item.categories|join(' · ') }}{% if item.published_at %} · {{ item.published_at }}{% endif %}</div>
 </article>
 {% else %}<p class="muted">目前沒有已下載的照片或影片。</p>{% endfor %}
 </section>
+<script>
+let selectedSource='posts',selectedKind='all';
+function filterMedia(){
+ document.querySelectorAll('.media').forEach(el=>{
+  const sourceMatch=el.dataset.sources.split(' ').includes(selectedSource);
+  const kindMatch=selectedKind==='all'||el.dataset.kind===selectedKind;
+  el.hidden=!(sourceMatch&&kindMatch);
+ });
+ const c={{ counts|tojson }}[selectedSource];
+ document.querySelector('[data-kind="all"]').textContent=`全部 ${c.all}`;
+ document.querySelector('[data-kind="image"]').textContent=`照片 ${c.image}`;
+ document.querySelector('[data-kind="video"]').textContent=`影片 ${c.video}`;
+}
+document.querySelectorAll('[data-source]').forEach(button=>button.addEventListener('click',()=>{
+ selectedSource=button.dataset.source;
+ document.querySelectorAll('[data-source]').forEach(x=>x.classList.toggle('active',x===button));
+ filterMedia();
+}));
+document.querySelectorAll('[data-kind]').forEach(button=>button.addEventListener('click',()=>{
+ selectedKind=button.dataset.kind;
+ document.querySelectorAll('[data-kind]').forEach(x=>x.classList.toggle('active',x===button));
+ filterMedia();
+}));
+filterMedia();
+</script>
 </main></body></html>"""
 
 
@@ -163,9 +198,11 @@ def dashboard_data(db_path: Path, status_provider: Callable[[], dict[str, str]] 
             "accounts": accounts, "services": status_provider()}
 
 
-def account_detail_data(db_path: Path, account_id: int) -> tuple[dict[str, Any] | None, list[dict[str, Any]]]:
+def account_detail_data(
+    db_path: Path, account_id: int
+) -> tuple[dict[str, Any] | None, list[dict[str, Any]], dict[str, dict[str, int]]]:
     if not db_path.is_file():
-        return None, []
+        return None, [], _empty_collection_counts()
     connection = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
     connection.row_factory = sqlite3.Row
     try:
@@ -174,7 +211,7 @@ def account_detail_data(db_path: Path, account_id: int) -> tuple[dict[str, Any] 
             FROM accounts WHERE id=? AND enabled=1
         """, (account_id,)).fetchone()
         if row is None:
-            return None, []
+            return None, [], _empty_collection_counts()
         snapshot = json.loads(row["snapshot_json"]) if row["snapshot_json"] else {}
         account = {
             "id": row["id"], "label": row["label"], "username": snapshot.get("username"),
@@ -185,17 +222,45 @@ def account_detail_data(db_path: Path, account_id: int) -> tuple[dict[str, Any] 
             "has_avatar": bool(snapshot.get("avatar_path") and Path(snapshot["avatar_path"]).is_file()),
         }
         media_rows = connection.execute("""
-            SELECT id,kind,category,published_at,local_path FROM media
-            WHERE account_id=? AND status='downloaded' AND local_path IS NOT NULL
-            ORDER BY COALESCE(published_at,downloaded_at) DESC,id DESC
+            SELECT m.id,m.kind,m.published_at,m.local_path,GROUP_CONCAT(ms.category) AS categories
+            FROM media m JOIN media_sources ms ON ms.media_id=m.id
+            WHERE m.account_id=? AND m.status='downloaded' AND m.duplicate_of_id IS NULL
+              AND m.local_path IS NOT NULL
+            GROUP BY m.id,m.kind,m.published_at,m.local_path,m.downloaded_at
+            ORDER BY COALESCE(m.published_at,m.downloaded_at) DESC,m.id DESC
         """, (account_id,)).fetchall()
-        media = [
-            {key: item[key] for key in ("id", "kind", "category", "published_at")}
-            for item in media_rows if Path(item["local_path"]).is_file()
-        ]
-        return account, media
+        media = []
+        counts = _empty_collection_counts()
+        for item in media_rows:
+            if not Path(item["local_path"]).is_file():
+                continue
+            categories = sorted({_collection_name(value) for value in (item["categories"] or "").split(",")})
+            media.append({
+                "id": item["id"], "kind": item["kind"], "published_at": item["published_at"],
+                "categories": categories,
+            })
+            for category in categories:
+                counts[category]["all"] += 1
+                counts[category][item["kind"]] += 1
+        return account, media, counts
     finally:
         connection.close()
+
+
+def _empty_collection_counts() -> dict[str, dict[str, int]]:
+    return {
+        name: {"all": 0, "image": 0, "video": 0}
+        for name in ("posts", "stories", "highlights")
+    }
+
+
+def _collection_name(value: str) -> str:
+    lowered = value.strip().lower()
+    if "highlight" in lowered:
+        return "highlights"
+    if "stor" in lowered:
+        return "stories"
+    return "posts"
 
 
 def _avatar_path(db_path: Path, account_id: int) -> Path | None:
@@ -239,10 +304,10 @@ def create_app(db_path: Path, status_provider: Callable[[], dict[str, str]] = sy
 
     @app.get("/account/<int:account_id>")
     def account_detail(account_id: int):
-        account, media = account_detail_data(db_path, account_id)
+        account, media, counts = account_detail_data(db_path, account_id)
         if account is None:
             abort(404)
-        return render_template_string(DETAIL_PAGE, account=account, media=media)
+        return render_template_string(DETAIL_PAGE, account=account, media=media, counts=counts)
 
     @app.get("/account/<int:account_id>/avatar")
     def avatar_asset(account_id: int):

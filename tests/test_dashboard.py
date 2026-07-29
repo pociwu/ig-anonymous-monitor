@@ -40,6 +40,10 @@ class DashboardTests(unittest.TestCase):
                 self.assertEqual(detail.status_code, 200)
                 self.assertIn(b"12345", detail.data)
                 self.assertIn(f"/media/{media_row['id']}".encode(), detail.data)
+                self.assertIn(b'data-source="posts"', detail.data)
+                self.assertIn(b'data-source="stories"', detail.data)
+                self.assertIn(b'data-source="highlights"', detail.data)
+                self.assertIn(b'data-sources="posts"', detail.data)
                 self.assertEqual(app.test_client().get(f"/account/{row['id']}/avatar").data, b"avatar")
                 self.assertEqual(app.test_client().get(f"/media/{media_row['id']}").data, b"photo")
             finally:

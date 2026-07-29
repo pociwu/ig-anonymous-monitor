@@ -58,10 +58,18 @@ class Database:
           width INTEGER, height INTEGER, source_rank INTEGER NOT NULL DEFAULT 0,
           status TEXT NOT NULL DEFAULT 'pending', attempts INTEGER NOT NULL DEFAULT 0,
           local_path TEXT, sha256 TEXT, last_error TEXT,
+          duplicate_of_id INTEGER, fingerprint_json TEXT, file_size INTEGER,
+          video_duration REAL, video_bitrate INTEGER,
           discovered_at TEXT NOT NULL, downloaded_at TEXT,
           UNIQUE(account_id, media_key)
         );
         CREATE INDEX IF NOT EXISTS idx_media_pending ON media(account_id, status, discovered_at);
+        CREATE INDEX IF NOT EXISTS idx_media_content ON media(account_id,kind,status,sha256);
+        CREATE TABLE IF NOT EXISTS media_sources (
+          media_id INTEGER NOT NULL REFERENCES media(id) ON DELETE CASCADE,
+          category TEXT NOT NULL,
+          PRIMARY KEY(media_id,category)
+        );
         CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS runs (
           id INTEGER PRIMARY KEY, started_at TEXT NOT NULL, finished_at TEXT,
@@ -75,7 +83,13 @@ class Database:
         """)
         self._add_column_if_missing("accounts", "effective_url", "TEXT")
         self._add_column_if_missing("accounts", "instagram_profile_id", "TEXT")
+        self._add_column_if_missing("media", "duplicate_of_id", "INTEGER")
+        self._add_column_if_missing("media", "fingerprint_json", "TEXT")
+        self._add_column_if_missing("media", "file_size", "INTEGER")
+        self._add_column_if_missing("media", "video_duration", "REAL")
+        self._add_column_if_missing("media", "video_bitrate", "INTEGER")
         self.conn.execute("UPDATE accounts SET effective_url=url WHERE effective_url IS NULL")
+        self.conn.execute("INSERT OR IGNORE INTO media_sources(media_id,category) SELECT id,category FROM media")
         self.conn.commit()
 
     def _add_column_if_missing(self, table: str, column: str, definition: str) -> None:
@@ -131,6 +145,13 @@ class Database:
                     source_rank=MAX(excluded.source_rank,media.source_rank)
                 """, (account_id, item.media_key, item.logical_id, item.category, item.kind, item.url,
                       item.position, item.published_at, item.width, item.height, item.source_rank, now))
+                media_row = con.execute(
+                    "SELECT id FROM media WHERE account_id=? AND media_key=?", (account_id, item.media_key)
+                ).fetchone()
+                con.execute(
+                    "INSERT OR IGNORE INTO media_sources(media_id,category) VALUES(?,?)",
+                    (media_row["id"], item.category),
+                )
             con.execute("""
               UPDATE accounts SET snapshot_json=?,fail_count=0,failure_notified=0,failure_since=NULL,
                 last_error=NULL,last_success_at=?,updated_at=? WHERE id=?
@@ -220,9 +241,17 @@ class Database:
         """, (account_id, limit)).fetchall()
         return [dict(r) for r in rows]
 
-    def mark_media_downloaded(self, media_id: int, local_path: str, sha256: str) -> None:
-        self.conn.execute("""UPDATE media SET status='downloaded',local_path=?,sha256=?,downloaded_at=?,last_error=NULL
-                             WHERE id=?""", (local_path, sha256, utc_now(), media_id))
+    def mark_media_downloaded(
+        self, media_id: int, local_path: str, sha256: str, fingerprint_json: str | None = None,
+        width: int | None = None, height: int | None = None, file_size: int | None = None,
+        video_duration: float | None = None, video_bitrate: int | None = None,
+    ) -> None:
+        self.conn.execute("""UPDATE media SET status='downloaded',local_path=?,sha256=?,fingerprint_json=?,
+                             width=COALESCE(?,width),height=COALESCE(?,height),file_size=?,
+                             video_duration=?,video_bitrate=?,duplicate_of_id=NULL,
+                             downloaded_at=?,last_error=NULL WHERE id=?""",
+                          (local_path, sha256, fingerprint_json, width, height, file_size,
+                           video_duration, video_bitrate, utc_now(), media_id))
         self.conn.commit()
 
     def mark_media_failed(self, media_id: int, error: str) -> None:
@@ -231,10 +260,68 @@ class Database:
 
     def downloaded_by_hash(self, account_id: int, sha256: str) -> dict[str, Any] | None:
         row = self.conn.execute(
-            "SELECT * FROM media WHERE account_id=? AND sha256=? AND status='downloaded' LIMIT 1",
+            """SELECT * FROM media WHERE account_id=? AND sha256=? AND status='downloaded'
+               AND duplicate_of_id IS NULL ORDER BY id LIMIT 1""",
             (account_id, sha256),
         ).fetchone()
         return dict(row) if row else None
+
+    def canonical_media(self, account_id: int, kind: str, exclude_id: int | None = None) -> list[dict[str, Any]]:
+        rows = self.conn.execute("""
+          SELECT * FROM media WHERE account_id=? AND kind=? AND status='downloaded'
+          AND duplicate_of_id IS NULL AND id!=COALESCE(?, -1) ORDER BY id
+        """, (account_id, kind, exclude_id)).fetchall()
+        return [dict(row) for row in rows]
+
+    def downloaded_media(self) -> list[dict[str, Any]]:
+        rows = self.conn.execute("""
+          SELECT * FROM media WHERE status='downloaded' AND local_path IS NOT NULL ORDER BY account_id,id
+        """).fetchall()
+        return [dict(row) for row in rows]
+
+    def store_media_fingerprint(
+        self, media_id: int, sha256: str, fingerprint_json: str, width: int, height: int,
+        file_size: int, video_duration: float | None, video_bitrate: int | None,
+    ) -> None:
+        self.conn.execute("""UPDATE media SET sha256=?,fingerprint_json=?,width=?,height=?,file_size=?,
+                             video_duration=?,video_bitrate=? WHERE id=?""",
+                          (sha256, fingerprint_json, width, height, file_size,
+                           video_duration, video_bitrate, media_id))
+        self.conn.commit()
+
+    def mark_media_duplicate(self, media_id: int, canonical_id: int, sha256: str,
+                             fingerprint_json: str | None = None) -> list[str]:
+        with self.transaction() as con:
+            paths = [row[0] for row in con.execute(
+                "SELECT DISTINCT local_path FROM media WHERE id=? AND local_path IS NOT NULL", (media_id,)
+            )]
+            con.execute("""INSERT OR IGNORE INTO media_sources(media_id,category)
+                           SELECT ?,category FROM media_sources WHERE media_id=?""", (canonical_id, media_id))
+            con.execute("DELETE FROM media_sources WHERE media_id=?", (media_id,))
+            con.execute("""UPDATE media SET status='duplicate',duplicate_of_id=?,sha256=?,
+                           fingerprint_json=COALESCE(?,fingerprint_json),local_path=NULL,last_error=NULL
+                           WHERE id=?""", (canonical_id, sha256, fingerprint_json, media_id))
+        return paths
+
+    def promote_canonical(self, new_id: int, old_id: int) -> list[str]:
+        with self.transaction() as con:
+            paths = [row[0] for row in con.execute("""
+                SELECT DISTINCT local_path FROM media
+                WHERE (id=? OR duplicate_of_id=?) AND local_path IS NOT NULL
+            """, (old_id, old_id))]
+            con.execute("""INSERT OR IGNORE INTO media_sources(media_id,category)
+                           SELECT ?,category FROM media_sources WHERE media_id=?""", (new_id, old_id))
+            con.execute("DELETE FROM media_sources WHERE media_id=?", (old_id,))
+            con.execute("UPDATE media SET duplicate_of_id=? WHERE duplicate_of_id=?", (new_id, old_id))
+            con.execute("""UPDATE media SET status='duplicate',duplicate_of_id=?,local_path=NULL,last_error=NULL
+                           WHERE id=?""", (new_id, old_id))
+        return paths
+
+    def media_path_referenced(self, local_path: str) -> bool:
+        row = self.conn.execute(
+            "SELECT 1 FROM media WHERE local_path=? AND status='downloaded' LIMIT 1", (local_path,)
+        ).fetchone()
+        return row is not None
 
     def media_counts(self, account_id: int) -> dict[str, int]:
         rows = self.conn.execute("SELECT status,COUNT(*) n FROM media WHERE account_id=? GROUP BY status", (account_id,))

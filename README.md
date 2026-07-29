@@ -35,6 +35,29 @@ sudo systemctl enable --now ig-monitor-dashboard.service
 
 Open `http://<tailscale-hostname-or-ip>:8888/`. The page is read-only and refreshes every 30 seconds.
 
+## Media deduplication
+
+Install the video inspection tools on Ubuntu:
+
+```bash
+sudo apt update
+sudo apt install -y ffmpeg
+```
+
+Preview existing duplicate photos and videos without changing files:
+
+```bash
+python -m ig_monitor --config config.yaml --dedupe-media --dry-run
+```
+
+After reviewing the counts, apply the cleanup:
+
+```bash
+python -m ig_monitor --config config.yaml --dedupe-media --apply
+```
+
+Deduplication is scoped to one Instagram account. It keeps the highest-quality version, preserves source links for Posts, Stories, and Highlights, and leaves duplicate records hidden so the same source is not downloaded again.
+
 以 Playwright 等待 `insta-stories-viewer.com` 的動態內容，監控最多 10 個 IG 頁面。程式保存完整快照、透過 Telegram 通知變化，並在帳號公開時分批下載網站能提供的最高畫質照片與影片。
 
 ## 已實作功能

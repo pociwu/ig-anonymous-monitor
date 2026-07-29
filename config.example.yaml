@@ -43,3 +43,10 @@ apify:
   monthly_cap_usd: 5.0
   request_reservation_usd: 0.01
   request_timeout_seconds: 180
+
+media_dedup:
+  enabled: true
+  image_phash_distance: 4
+  aspect_ratio_tolerance_percent: 1.0
+  video_duration_tolerance_seconds: 1.0
+  video_duration_tolerance_percent: 1.0

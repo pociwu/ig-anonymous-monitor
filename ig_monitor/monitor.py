@@ -130,7 +130,8 @@ class Monitor:
                         continue
                     stats = await download_account_media(self.db, scraper, account,
                                                          self.config.paths.download_root,
-                                                         self.config.schedule.media_limit_per_account)
+                                                         self.config.schedule.media_limit_per_account,
+                                                         self.config.dedup)
                     attachments = stats.pop("attachments", [])
                     if self.config.telegram.send_new_media:
                         stats["attachments"] = attachments[:self.config.telegram.max_new_media_attachments]

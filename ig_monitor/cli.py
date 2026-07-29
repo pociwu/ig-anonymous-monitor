@@ -8,6 +8,7 @@ from pathlib import Path
 
 from .config import load_config
 from .db import Database
+from .dedup import deduplicate_existing_media
 from .monitor import Monitor, check_accounts
 from .telegram import TelegramSender
 from .utils import process_lock
@@ -20,6 +21,10 @@ def build_parser() -> argparse.ArgumentParser:
     group.add_argument("--check", action="store_true", help="只載入與解析，不寫入、不通知、不下載")
     group.add_argument("--send-test", action="store_true", help="傳送 Telegram 測試訊息")
     group.add_argument("--reset-account", metavar="URL_OR_USERNAME", help="清除單一帳號監控基準")
+    group.add_argument("--dedupe-media", action="store_true", help="Analyze and deduplicate downloaded media")
+    apply_group = parser.add_mutually_exclusive_group()
+    apply_group.add_argument("--dry-run", action="store_true", help="Preview media deduplication")
+    apply_group.add_argument("--apply", action="store_true", help="Apply media deduplication")
     return parser
 
 
@@ -40,8 +45,10 @@ def setup_logging(data_dir: Path, verbose: bool = False, write_file: bool = True
 
 
 async def _async_main(args: argparse.Namespace) -> int:
-    config = load_config(args.config, require_telegram=not args.check)
-    setup_logging(config.paths.data_dir, write_file=not args.check)
+    if (args.dry_run or args.apply) and not args.dedupe_media:
+        raise ValueError("--dry-run/--apply can only be used with --dedupe-media")
+    config = load_config(args.config, require_telegram=not (args.check or args.dedupe_media))
+    setup_logging(config.paths.data_dir, write_file=not (args.check or args.dedupe_media))
     if args.check:
         return await check_accounts(config)
     if args.send_test:
@@ -54,6 +61,22 @@ async def _async_main(args: argparse.Namespace) -> int:
     db = Database(config.paths.data_dir / "state.sqlite3")
     try:
         db.sync_accounts(config.accounts)
+        if args.dedupe_media:
+            if not args.dry_run and not args.apply:
+                raise ValueError("--dedupe-media requires --dry-run or --apply")
+            report = deduplicate_existing_media(db, config.dedup, apply=args.apply)
+            mode = "APPLY" if args.apply else "DRY-RUN"
+            logging.info(
+                "%s media dedup: scanned=%d analyzed=%d groups=%d duplicates=%d upgrades=%d files=%d errors=%d",
+                mode, report["scanned"], report["analyzed"], report["duplicate_groups"],
+                report["duplicate_rows"], report["quality_upgrades"], report["removable_files"],
+                len(report["errors"]),
+            )
+            if report["ffmpeg_missing"]:
+                logging.warning("ffmpeg/ffprobe unavailable; video deduplication used SHA-256 only")
+            for error in report["errors"]:
+                logging.warning("%s", error)
+            return 1 if report["errors"] else 0
         if args.reset_account:
             if not db.reset_account(args.reset_account):
                 logging.error("找不到帳號：%s", args.reset_account)

@@ -78,6 +78,15 @@ class ApifyConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class DedupConfig:
+    enabled: bool
+    image_phash_distance: int
+    aspect_ratio_tolerance_percent: float
+    video_duration_tolerance_seconds: float
+    video_duration_tolerance_percent: float
+
+
+@dataclass(frozen=True, slots=True)
 class AppConfig:
     accounts: tuple[AccountConfig, ...]
     paths: PathsConfig
@@ -87,6 +96,7 @@ class AppConfig:
     retention: RetentionConfig
     telegram: TelegramConfig
     apify: ApifyConfig
+    dedup: DedupConfig
     config_path: Path
 
 
@@ -201,5 +211,24 @@ def load_config(path: str | Path, require_telegram: bool = True) -> AppConfig:
     if apify_cfg.enabled and not apify_cfg.token:
         raise ValueError("APIFY_API_TOKEN is required when apify.enabled is true")
 
+    dedup = _section(raw, "media_dedup")
+    phash_distance = int(dedup.get("image_phash_distance", 4))
+    aspect_tolerance = float(dedup.get("aspect_ratio_tolerance_percent", 1.0))
+    duration_seconds = float(dedup.get("video_duration_tolerance_seconds", 1.0))
+    duration_percent = float(dedup.get("video_duration_tolerance_percent", 1.0))
+    if not 0 <= phash_distance <= 16:
+        raise ValueError("media_dedup.image_phash_distance must be between 0 and 16")
+    if not 0 <= aspect_tolerance <= 10:
+        raise ValueError("media_dedup.aspect_ratio_tolerance_percent must be between 0 and 10")
+    if duration_seconds < 0 or duration_percent < 0:
+        raise ValueError("media_dedup video duration tolerances cannot be negative")
+    dedup_cfg = DedupConfig(
+        enabled=bool(dedup.get("enabled", True)),
+        image_phash_distance=phash_distance,
+        aspect_ratio_tolerance_percent=aspect_tolerance,
+        video_duration_tolerance_seconds=duration_seconds,
+        video_duration_tolerance_percent=duration_percent,
+    )
+
     return AppConfig(tuple(accounts), path_cfg, browser_cfg, schedule_cfg, heartbeat_cfg,
-                     retention_cfg, telegram_cfg, apify_cfg, config_path)
+                     retention_cfg, telegram_cfg, apify_cfg, dedup_cfg, config_path)
