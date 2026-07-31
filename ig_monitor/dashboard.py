@@ -1,14 +1,19 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import json
 import os
 import sqlite3
 import subprocess
 from pathlib import Path
 from typing import Any, Callable
+from urllib.parse import urlparse
 
-from flask import Flask, abort, render_template_string, send_file, url_for
+from flask import Flask, abort, redirect, render_template_string, request, send_file, url_for
+
+from .account_registry import AccountRegistry, AccountValidator
+from .config import load_config
 
 
 PAGE = """<!doctype html>
@@ -36,11 +41,11 @@ body{font-family:system-ui,sans-serif;background:#101827;color:#e5e7eb;margin:0;
 
 
 CARD_PAGE = """<!doctype html>
-<html lang="zh-Hant"><head><meta charset="utf-8"><meta http-equiv="refresh" content="30">
+<html lang="zh-Hant"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1"><title>IG Monitor</title>
 <style>
-:root{color-scheme:dark}*{box-sizing:border-box}body{font-family:system-ui,-apple-system,sans-serif;background:#0b1120;color:#e5e7eb;margin:0;padding:24px}main{max-width:1200px;margin:auto}a{color:inherit;text-decoration:none}.summary,.accounts{display:grid;gap:14px}.summary{grid-template-columns:repeat(auto-fit,minmax(140px,1fr));margin-bottom:28px}.accounts{grid-template-columns:repeat(auto-fill,minmax(260px,1fr))}.metric,.account-card,.service{background:#172033;border:1px solid #27344d;border-radius:16px}.metric{padding:16px}.metric strong{display:block;font-size:1.65rem;margin-top:4px}.account-card{padding:18px;transition:.18s transform,.18s border-color}.account-card:hover{transform:translateY(-3px);border-color:#8b5cf6}.identity{display:flex;gap:14px;align-items:center}.avatar{width:72px;height:72px;border-radius:50%;object-fit:cover;background:#27344d;border:2px solid #475569}.avatar-fallback{display:grid;place-items:center;font-size:1.5rem;font-weight:700}.name{font-size:1.15rem;font-weight:750}.handle,.muted{color:#94a3b8}.facts{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:16px 0}.fact{background:#0f172a;border-radius:10px;padding:9px;text-align:center}.fact strong{display:block}.row{display:flex;justify-content:space-between;gap:12px;margin-top:8px}.value{overflow-wrap:anywhere;text-align:right}.ok{color:#86efac}.bad{color:#fca5a5}.services{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}.service{padding:16px}@media(max-width:600px){body{padding:14px}.accounts{grid-template-columns:1fr}}\n+</style></head><body><main>
-<h1>IG Monitor</h1><p class="muted">唯讀儀表板 · 每 30 秒更新 · {{ data.generated_at }}</p>
+:root{color-scheme:dark}*{box-sizing:border-box}body{font-family:system-ui,-apple-system,sans-serif;background:#0b1120;color:#e5e7eb;margin:0;padding:24px}main{max-width:1200px;margin:auto}a{color:inherit;text-decoration:none}.summary,.accounts{display:grid;gap:14px}.summary{grid-template-columns:repeat(auto-fit,minmax(140px,1fr));margin-bottom:28px}.accounts{grid-template-columns:repeat(auto-fill,minmax(260px,1fr))}.metric,.account-card,.service,.manage{background:#172033;border:1px solid #27344d;border-radius:16px}.metric{padding:16px}.metric strong{display:block;font-size:1.65rem;margin-top:4px}.manage{padding:16px;margin:0 0 28px}.manage form{display:grid;grid-template-columns:minmax(260px,2fr) minmax(140px,1fr) auto;gap:10px}.manage input,.manage button{border:1px solid #334155;border-radius:10px;padding:11px 12px;font:inherit}.manage input{background:#0f172a;color:#e5e7eb}.manage button{background:#7c3aed;color:white;cursor:pointer}.error{color:#fecaca;background:#7f1d1d;padding:10px;border-radius:10px}.account-card{padding:18px;transition:.18s transform,.18s border-color}.account-card>a{display:block}.account-card:hover{transform:translateY(-3px);border-color:#8b5cf6}.remove-form{margin-top:14px;padding-top:12px;border-top:1px solid #334155}.remove-form button{width:100%;border:1px solid #7f1d1d;border-radius:9px;padding:9px;background:#3f1721;color:#fecaca;cursor:pointer}.identity{display:flex;gap:14px;align-items:center}.avatar{width:72px;height:72px;border-radius:50%;object-fit:cover;background:#27344d;border:2px solid #475569}.avatar-fallback{display:grid;place-items:center;font-size:1.5rem;font-weight:700}.name{font-size:1.15rem;font-weight:750}.handle,.muted{color:#94a3b8}.facts{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:16px 0}.fact{background:#0f172a;border-radius:10px;padding:9px;text-align:center}.fact strong{display:block}.row{display:flex;justify-content:space-between;gap:12px;margin-top:8px}.value{overflow-wrap:anywhere;text-align:right}.ok{color:#86efac}.bad{color:#fca5a5}.services{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}.service{padding:16px}@media(max-width:700px){body{padding:14px}.accounts{grid-template-columns:1fr}.manage form{grid-template-columns:1fr}}</style></head><body><main>
+<h1>IG Monitor</h1><p class="muted">監控管理頁面 · {{ data.generated_at }}</p>
 <section class="summary">
 <div class="metric">啟用帳號<strong>{{ data.summary.accounts }}</strong></div>
 <div class="metric">公開帳號<strong>{{ data.summary.public }}</strong></div>
@@ -48,10 +53,23 @@ CARD_PAGE = """<!doctype html>
 <div class="metric">異常帳號<strong>{{ data.summary.error }}</strong></div>
 <div class="metric">待處理媒體<strong>{{ data.summary.pending }}</strong></div>
 </section>
+{% if management_enabled %}
+<section class="manage">
+<h2>新增監控帳號</h2>
+<form method="post" action="{{ url_for('add_account') }}">
+  <input type="url" name="url" required placeholder="https://insta-stories-viewer.com/username/" autocomplete="off">
+  <input type="text" name="label" maxlength="100" placeholder="顯示標籤（選填）">
+  <button type="submit">驗證並新增</button>
+</form>
+{% if error %}<p class="error">{{ error }}</p>{% endif %}
+<p class="muted">新增前會實際載入頁面；驗證可能需要約 45～90 秒。最多監控 10 個帳號。</p>
+</section>
+{% endif %}
 <h2>巡檢帳號</h2>
 <section class="accounts">
 {% for a in data.accounts %}
-<a class="account-card" href="{{ url_for('account_detail', account_id=a.id) }}">
+<article class="account-card">
+<a href="{{ url_for('account_detail', account_id=a.id) }}">
   <div class="identity">
     {% if a.has_avatar %}<img class="avatar" src="{{ url_for('avatar_asset', account_id=a.id) }}" alt="{{ a.label }}">
     {% else %}<div class="avatar avatar-fallback">{{ (a.username or a.label or '?')[0]|upper }}</div>{% endif %}
@@ -66,9 +84,15 @@ CARD_PAGE = """<!doctype html>
   <div class="row"><span>Profile ID</span><span class="value">{{ a.instagram_profile_id or '尚未建立' }}</span></div>
   <div class="row"><span>媒體</span><span>{{ a.downloaded }} 已下載 / {{ a.pending }} 待處理</span></div>
 </a>
+{% if management_enabled %}
+<form class="remove-form" method="post" action="{{ url_for('remove_account', account_id=a.id) }}" onsubmit="return confirm('確定停止監控這個帳號？既有照片與影片會保留。')">
+  <button type="submit">移除監控</button>
+</form>
+{% endif %}
+</article>
 {% else %}<p class="muted">尚無巡檢帳號資料。</p>{% endfor %}
 </section>
-<h2>systemd</h2><section class="services">
+<h2>服務狀態</h2><section class="services">
 <div class="service">巡檢服務：<strong>{{ data.services.monitor }}</strong></div>
 <div class="service">排程器：<strong>{{ data.services.timer }}</strong></div>
 <div class="service">下次排程：<span>{{ data.services.next_run }}</span></div>
@@ -158,6 +182,20 @@ def system_status() -> dict[str, str]:
         "timer": _systemctl_status(["systemctl", "is-active", "ig-monitor.timer"]),
         "next_run": next_run,
     }
+
+
+def validate_account_page(config_path: Path, url: str) -> None:
+    async def validate() -> None:
+        from .scraper import ProfileScraper
+
+        config = load_config(config_path, require_telegram=False)
+        async with ProfileScraper(config.browser) as scraper:
+            await scraper.scrape(url)
+
+    try:
+        asyncio.run(validate())
+    except Exception as exc:
+        raise ValueError(f"網址驗證失敗：{exc}") from exc
 
 
 def dashboard_data(db_path: Path, status_provider: Callable[[], dict[str, str]] = system_status) -> dict[str, Any]:
@@ -296,8 +334,30 @@ def _media_path(db_path: Path, media_id: int) -> Path | None:
         connection.close()
 
 
-def create_app(db_path: Path, status_provider: Callable[[], dict[str, str]] = system_status) -> Flask:
+def _require_same_origin() -> None:
+    origin = request.headers.get("Origin")
+    if not origin:
+        return
+    parsed = urlparse(origin)
+    if parsed.scheme not in {"http", "https"} or parsed.netloc.casefold() != request.host.casefold():
+        abort(403)
+
+
+def create_app(
+    db_path: Path,
+    status_provider: Callable[[], dict[str, str]] = system_status,
+    *,
+    config_path: Path | None = None,
+    account_validator: AccountValidator | None = None,
+) -> Flask:
     app = Flask(__name__)
+    if config_path is not None and account_validator is None:
+        account_validator = lambda url: validate_account_page(config_path, url)
+    registry = (
+        AccountRegistry(config_path, db_path, account_validator)
+        if config_path is not None and account_validator is not None
+        else None
+    )
 
     @app.after_request
     def no_store(response):
@@ -306,7 +366,44 @@ def create_app(db_path: Path, status_provider: Callable[[], dict[str, str]] = sy
 
     @app.get("/")
     def index():
-        return render_template_string(CARD_PAGE, data=dashboard_data(db_path, status_provider))
+        return render_template_string(
+            CARD_PAGE,
+            data=dashboard_data(db_path, status_provider),
+            management_enabled=registry is not None,
+            error=None,
+        )
+
+    @app.post("/accounts")
+    def add_account():
+        if registry is None:
+            abort(404)
+        _require_same_origin()
+        try:
+            registry.add(request.form.get("url", ""), request.form.get("label"))
+        except ValueError as exc:
+            return render_template_string(
+                CARD_PAGE,
+                data=dashboard_data(db_path, status_provider),
+                management_enabled=True,
+                error=str(exc),
+            ), 400
+        return redirect(url_for("index"), code=303)
+
+    @app.post("/accounts/<int:account_id>/remove")
+    def remove_account(account_id: int):
+        if registry is None:
+            abort(404)
+        _require_same_origin()
+        try:
+            registry.remove(account_id)
+        except ValueError as exc:
+            return render_template_string(
+                CARD_PAGE,
+                data=dashboard_data(db_path, status_provider),
+                management_enabled=True,
+                error=str(exc),
+            ), 400
+        return redirect(url_for("index"), code=303)
 
     @app.get("/healthz")
     def health():
@@ -341,10 +438,17 @@ def main() -> None:
 
     parser = argparse.ArgumentParser(description="IG Monitor dashboard")
     parser.add_argument("--db", default="data/state.sqlite3")
+    parser.add_argument("--config", default=None, help="Enable account management with this config.yaml")
     parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument("--port", type=int, default=8888)
     args = parser.parse_args()
-    serve(create_app(Path(args.db).expanduser().resolve()), host=args.host, port=args.port, threads=4)
+    config_path = Path(args.config).expanduser().resolve() if args.config else None
+    serve(
+        create_app(Path(args.db).expanduser().resolve(), config_path=config_path),
+        host=args.host,
+        port=args.port,
+        threads=4,
+    )
 
 
 if __name__ == "__main__":

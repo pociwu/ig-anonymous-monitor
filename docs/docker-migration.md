@@ -66,6 +66,8 @@ git pull --ff-only origin main
 mkdir -p data downloads
 printf '\nPUID=%s\nPGID=%s\n' "$(id -u)" "$(id -g)" >> .env
 sudo chown -R "$(id -u):$(id -g)" data downloads
+sudo chown "$(id -u):$(id -g)" config.yaml
+chmod 600 config.yaml
 chmod 600 .env
 ```
 
@@ -94,6 +96,8 @@ curl --fail http://127.0.0.1:8888/healthz
 - `monitor`：啟動後立即巡檢，完成後依 `config.yaml` 的
   `schedule.interval_minutes` 等待下一輪。
 - `dashboard`：監聽 `0.0.0.0:8888`，健康檢查路徑為 `/healthz`。
+- Dashboard 首頁可驗證、新增及移除監控帳號，因此 `config.yaml` 必須可由
+  `PUID`/`PGID` 指定的使用者寫入。
 - 兩個容器共用 `data/` 與 `downloads/`。
 - Chromium、ffmpeg 及 ffprobe 已包含在映像，不再依賴 Miniconda。
 

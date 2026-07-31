@@ -116,6 +116,10 @@ class Database:
         row = self.conn.execute("SELECT * FROM accounts WHERE url=? OR account_key=?", (url_or_key, url_or_key)).fetchone()
         return dict(row) if row else None
 
+    def get_account_by_id(self, account_id: int) -> dict[str, Any] | None:
+        row = self.conn.execute("SELECT * FROM accounts WHERE id=?", (account_id,)).fetchone()
+        return dict(row) if row else None
+
     @staticmethod
     def snapshot_from_row(row: dict[str, Any]) -> ProfileSnapshot | None:
         return ProfileSnapshot.from_dict(json.loads(row["snapshot_json"])) if row.get("snapshot_json") else None

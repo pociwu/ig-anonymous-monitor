@@ -16,7 +16,8 @@ docker compose ps
 
 - `monitor` 容器立即巡檢，完成後依 `schedule.interval_minutes` 執行下一輪。
 - `dashboard` 容器監聽 `0.0.0.0:8888`，並提供 `/healthz`。
-- `config.yaml` 唯讀掛載；`data/` 和 `downloads/` 持久化於主機。
+- 首頁可驗證並新增監控網址，也能停止監控單一帳號；移除時保留既有媒體。
+- `config.yaml` 對監控容器唯讀、對 Dashboard 可寫；`data/` 和 `downloads/` 持久化於主機。
 - Telegram、Apify 金鑰只由 `.env` 注入，且不會被加入映像。
 
 既有 systemd/Miniconda 主機請依照
@@ -44,9 +45,9 @@ The first successful inspection saves an Instagram Profile ID for each enabled a
 
 Run tests in the Conda environment with `conda run -n ig-monitor python -m pytest`. Existing environments created before the test dependency was added need `conda install -n ig-monitor pytest` once.
 
-## Read-only monitoring dashboard
+## Monitoring dashboard
 
-The dashboard runs as a separate Flask/Waitress service on `0.0.0.0:8888`. It has no application login and is intended to be reachable only through the configured Tailscale ACL.
+The dashboard runs as a separate Flask/Waitress service on `0.0.0.0:8888`. It has no application login and is intended to be reachable only through the configured Tailscale ACL. In Docker deployment it can update the account list in `config.yaml`.
 
 ```bash
 docker compose up -d dashboard

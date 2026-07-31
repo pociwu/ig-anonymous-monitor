@@ -15,10 +15,6 @@ x-runtime: &runtime
     PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
     PYTHONUNBUFFERED: "1"
     TZ: Asia/Taipei
-  volumes:
-    - ./config.yaml:/srv/ig-monitor/config.yaml:ro
-    - ./data:/srv/ig-monitor/data
-    - ./downloads:/srv/ig-monitor/downloads
   restart: unless-stopped
 
 services:
@@ -31,6 +27,10 @@ services:
       - --config
       - /srv/ig-monitor/config.yaml
     ipc: host
+    volumes:
+      - ./config.yaml:/srv/ig-monitor/config.yaml:ro
+      - ./data:/srv/ig-monitor/data
+      - ./downloads:/srv/ig-monitor/downloads
     read_only: true
     tmpfs:
       - /tmp
@@ -44,6 +44,8 @@ services:
       - ig_monitor.dashboard
       - --db
       - /srv/ig-monitor/data/state.sqlite3
+      - --config
+      - /srv/ig-monitor/config.yaml
       - --host
       - 0.0.0.0
       - --port
@@ -51,8 +53,13 @@ services:
     depends_on:
       monitor:
         condition: service_started
+    ipc: host
     ports:
       - "0.0.0.0:8888:8888"
+    volumes:
+      - ./config.yaml:/srv/ig-monitor/config.yaml
+      - ./data:/srv/ig-monitor/data
+      - ./downloads:/srv/ig-monitor/downloads
     read_only: true
     tmpfs:
       - /tmp

@@ -112,7 +112,7 @@ def _section(data: dict, name: str) -> dict:
     return value
 
 
-def _account_url(value: object) -> str:
+def normalize_account_url(value: object) -> str:
     url = str(value)
     parsed = urlparse(url)
     parts = [p for p in parsed.path.split("/") if p]
@@ -140,7 +140,7 @@ def load_config(path: str | Path, require_telegram: bool = True) -> AppConfig:
     for item in items:
         if not isinstance(item, dict) or not item.get("url"):
             raise ValueError("每個 accounts 項目都必須包含 url")
-        url = _account_url(item["url"])
+        url = normalize_account_url(item["url"])
         if url in seen:
             raise ValueError(f"重複網址：{url}")
         seen.add(url)
