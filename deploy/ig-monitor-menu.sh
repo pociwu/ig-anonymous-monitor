@@ -4,9 +4,13 @@ set -u
 PROJECT_DIR="${IG_MONITOR_DIR:-/srv/ig-monitor}"
 CONFIG_FILE="${IG_MONITOR_CONFIG:-${PROJECT_DIR}/config.yaml}"
 STATE_DB="${IG_MONITOR_DB:-${PROJECT_DIR}/data/state.sqlite3}"
-PYTHON_BIN="${IG_MONITOR_PYTHON:-${HOME}/miniconda3/envs/ig-monitor/bin/python}"
-SERVICE_NAME="${IG_MONITOR_SERVICE:-ig-monitor.service}"
-TIMER_NAME="${IG_MONITOR_TIMER:-ig-monitor.timer}"
+COMPOSE_FILE="${IG_MONITOR_COMPOSE:-${PROJECT_DIR}/compose.yaml}"
+CONTAINER_CONFIG="/srv/ig-monitor/config.yaml"
+CONTAINER_DB="/srv/ig-monitor/data/state.sqlite3"
+
+compose() {
+  docker compose --project-directory "${PROJECT_DIR}" -f "${COMPOSE_FILE}" "$@"
+}
 
 pause_menu() {
   printf '\n'
@@ -19,9 +23,8 @@ show_account_summary() {
   printf '%s\n' " IG Monitor｜巡檢帳號摘要"
   printf '%s\n' "========================================"
 
-  if [[ ! -x "${PYTHON_BIN}" ]]; then
-    printf '找不到 Conda Python：%s\n' "${PYTHON_BIN}"
-    printf '%s\n' "可設定：export IG_MONITOR_PYTHON=/正確路徑/python"
+  if ! docker compose version >/dev/null 2>&1; then
+    printf '%s\n' "找不到 docker compose，請先完成 Docker 部署。"
     pause_menu
     return
   fi
@@ -31,7 +34,13 @@ show_account_summary() {
     return
   fi
 
-  "${PYTHON_BIN}" - "${CONFIG_FILE}" "${STATE_DB}" <<'PY'
+  if ! compose exec -T dashboard true >/dev/null 2>&1; then
+    printf '%s\n' "dashboard 容器未執行，請先執行：docker compose up -d"
+    pause_menu
+    return
+  fi
+
+  compose exec -T dashboard python - "${CONTAINER_CONFIG}" "${CONTAINER_DB}" <<'PY'
 import json
 import sqlite3
 import sys
@@ -137,26 +146,45 @@ show_schedule() {
   printf '%s\n' "========================================"
   printf '目前時間：%s\n\n' "$(date '+%Y-%m-%d %H:%M:%S %Z')"
 
-  if ! command -v systemctl >/dev/null 2>&1; then
-    printf '%s\n' "找不到 systemctl，這個選項需在 Ubuntu systemd 主機執行。"
+  if ! docker compose version >/dev/null 2>&1; then
+    printf '%s\n' "找不到 docker compose，請先完成 Docker 部署。"
     pause_menu
     return
   fi
 
-  printf 'Timer：%s\n' "${TIMER_NAME}"
-  printf '啟用狀態：%s\n' "$(systemctl is-enabled "${TIMER_NAME}" 2>/dev/null || true)"
-  printf '運作狀態：%s\n' "$(systemctl is-active "${TIMER_NAME}" 2>/dev/null || true)"
-  printf '\n上次與下次執行：\n'
-  systemctl list-timers --all "${TIMER_NAME}" --no-pager 2>/dev/null || \
-    printf '%s\n' "尚未安裝或載入 ${TIMER_NAME}"
+  printf '%s\n' "容器狀態："
+  compose ps
 
-  printf '\n最近一次巡檢結果：\n'
-  systemctl show "${SERVICE_NAME}" \
-    -p Result -p ExecMainStatus -p ActiveState -p SubState --no-pager 2>/dev/null || true
+  printf '\n排程與最近一次巡檢：\n'
+  compose exec -T dashboard python - "${CONTAINER_CONFIG}" "${CONTAINER_DB}" <<'PY'
+import sqlite3
+import sys
+from pathlib import Path
 
-  printf '\nTimer 設定：\n'
-  systemctl cat "${TIMER_NAME}" --no-pager 2>/dev/null | \
-    grep -E '^(OnCalendar|OnUnit|RandomizedDelaySec|AccuracySec|Persistent)=' || true
+import yaml
+
+config = yaml.safe_load(Path(sys.argv[1]).read_text(encoding="utf-8")) or {}
+interval = int(config.get("schedule", {}).get("interval_minutes", 15))
+print(f"巡檢間隔：每次完成後 {interval} 分鐘")
+
+db_path = Path(sys.argv[2])
+if not db_path.is_file():
+    print("最近巡檢：尚無資料庫")
+    raise SystemExit
+
+connection = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+row = connection.execute(
+    "SELECT started_at,finished_at,status,detail FROM runs ORDER BY id DESC LIMIT 1"
+).fetchone()
+connection.close()
+if row:
+    print(f"最近開始：{row[0] or '（無）'}")
+    print(f"最近完成：{row[1] or '執行中'}")
+    print(f"最近結果：{row[2] or '（無）'}")
+    print(f"詳細資訊：{row[3] or '（無）'}")
+else:
+    print("最近巡檢：尚無紀錄")
+PY
 
   pause_menu
 }

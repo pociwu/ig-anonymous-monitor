@@ -12,7 +12,7 @@ dependencies = [
   "httpx>=0.27,<1",
   "ImageHash>=4.3,<5",
   "Pillow>=10,<13",
-  "playwright>=1.45,<2",
+  "playwright>=1.61,<1.62",
   "python-dotenv>=1.0,<2",
   "PyYAML>=6.0,<7",
   "waitress>=3.0,<4",
@@ -24,6 +24,7 @@ test = ["pytest>=8,<9"]
 [project.scripts]
 ig-monitor = "ig_monitor.cli:main"
 ig-monitor-dashboard = "ig_monitor.dashboard:main"
+ig-monitor-scheduler = "ig_monitor.scheduler:main"
 
 [tool.setuptools.packages.find]
 include = ["ig_monitor*"]

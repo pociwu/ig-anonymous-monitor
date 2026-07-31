@@ -1,0 +1,17 @@
+.git
+.github
+.agents
+.codex
+.conda
+.env
+.pytest_cache
+.testvenv
+__pycache__
+*.egg-info
+*.py[cod]
+config.yaml
+data
+downloads
+deploy
+docs
+tests

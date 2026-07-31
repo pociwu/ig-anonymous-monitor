@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sqlite3
 import subprocess
 from pathlib import Path
 from typing import Any, Callable
 
 from flask import Flask, abort, render_template_string, send_file, url_for
-from waitress import serve
 
 
 PAGE = """<!doctype html>
@@ -145,6 +145,12 @@ def _systemctl_status(command: list[str]) -> str:
 
 
 def system_status() -> dict[str, str]:
+    if os.getenv("IG_MONITOR_RUNTIME") == "docker":
+        return {
+            "monitor": "Docker Compose",
+            "timer": "內建排程器",
+            "next_run": "依 config.yaml 的 interval_minutes",
+        }
     timer_rows = _systemctl_status(["systemctl", "list-timers", "--all", "ig-monitor.timer", "--no-pager"]).splitlines()
     next_run = timer_rows[-1] if len(timer_rows) > 1 else "unknown"
     return {
@@ -302,6 +308,10 @@ def create_app(db_path: Path, status_provider: Callable[[], dict[str, str]] = sy
     def index():
         return render_template_string(CARD_PAGE, data=dashboard_data(db_path, status_provider))
 
+    @app.get("/healthz")
+    def health():
+        return {"status": "ok"}
+
     @app.get("/account/<int:account_id>")
     def account_detail(account_id: int):
         account, media, counts = account_detail_data(db_path, account_id)
@@ -327,6 +337,8 @@ def create_app(db_path: Path, status_provider: Callable[[], dict[str, str]] = sy
 
 
 def main() -> None:
+    from waitress import serve
+
     parser = argparse.ArgumentParser(description="IG Monitor dashboard")
     parser.add_argument("--db", default="data/state.sqlite3")
     parser.add_argument("--host", default="0.0.0.0")

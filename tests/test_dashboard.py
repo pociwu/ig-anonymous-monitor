@@ -1,14 +1,23 @@
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 from ig_monitor.config import AccountConfig
-from ig_monitor.dashboard import create_app
+from ig_monitor.dashboard import create_app, system_status
 from ig_monitor.db import Database
 from ig_monitor.models import MediaCandidate, PrivacyState, ProfileSnapshot
 
 
 class DashboardTests(unittest.TestCase):
+    def test_docker_runtime_status_does_not_depend_on_systemd(self):
+        with patch.dict("os.environ", {"IG_MONITOR_RUNTIME": "docker"}):
+            self.assertEqual(system_status(), {
+                "monitor": "Docker Compose",
+                "timer": "內建排程器",
+                "next_run": "依 config.yaml 的 interval_minutes",
+            })
+
     def test_dashboard_shows_saved_profile_id_and_state(self):
         with tempfile.TemporaryDirectory() as tmp:
             db = Database(Path(tmp) / "state.sqlite3")
@@ -46,5 +55,8 @@ class DashboardTests(unittest.TestCase):
                 self.assertIn(b'data-sources="posts"', detail.data)
                 self.assertEqual(app.test_client().get(f"/account/{row['id']}/avatar").data, b"avatar")
                 self.assertEqual(app.test_client().get(f"/media/{media_row['id']}").data, b"photo")
+                health = app.test_client().get("/healthz")
+                self.assertEqual(health.status_code, 200)
+                self.assertEqual(health.get_json(), {"status": "ok"})
             finally:
                 db.close()

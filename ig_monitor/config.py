@@ -166,7 +166,10 @@ def load_config(path: str | Path, require_telegram: bool = True) -> AppConfig:
     delay_max = int(schedule.get("account_delay_max_seconds", 20))
     if delay_min < 0 or delay_max < delay_min:
         raise ValueError("帳號間隔必須滿足 0 <= min <= max")
-    schedule_cfg = ScheduleConfig(int(schedule.get("interval_minutes", 15)), delay_min, delay_max,
+    interval_minutes = int(schedule.get("interval_minutes", 15))
+    if interval_minutes < 1:
+        raise ValueError("schedule.interval_minutes must be at least 1")
+    schedule_cfg = ScheduleConfig(interval_minutes, delay_min, delay_max,
                                   max(1, int(schedule.get("media_limit_per_account", 50))))
 
     heartbeat = _section(raw, "heartbeat")

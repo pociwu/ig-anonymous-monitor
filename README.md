@@ -1,5 +1,27 @@
 # IG Anonymous Monitor
 
+## Docker Compose 部署
+
+正式部署改用 Docker Compose，支援 Ubuntu 22.04/24.04 的 amd64 與 arm64。映像包含
+Playwright Chromium、ffmpeg、ffprobe 及全部 Python 相依套件，不再需要 Miniconda。
+
+```bash
+cp config.example.yaml config.yaml
+cp .env.example .env
+mkdir -p data downloads
+docker compose build
+docker compose up -d
+docker compose ps
+```
+
+- `monitor` 容器立即巡檢，完成後依 `schedule.interval_minutes` 執行下一輪。
+- `dashboard` 容器監聽 `0.0.0.0:8888`，並提供 `/healthz`。
+- `config.yaml` 唯讀掛載；`data/` 和 `downloads/` 持久化於主機。
+- Telegram、Apify 金鑰只由 `.env` 注入，且不會被加入映像。
+
+既有 systemd/Miniconda 主機請依照
+[Ubuntu Docker 遷移指南](docs/docker-migration.md) 停止舊排程、備份 SQLite，再啟動容器。
+
 ## Apify identity resolution and monthly cap
 
 Add the secret to `/srv/ig-monitor/.env`:
@@ -27,10 +49,9 @@ Run tests in the Conda environment with `conda run -n ig-monitor python -m pytes
 The dashboard runs as a separate Flask/Waitress service on `0.0.0.0:8888`. It has no application login and is intended to be reachable only through the configured Tailscale ACL.
 
 ```bash
-conda run -n ig-monitor python -m pip install -e '.[test]'
-sudo cp deploy/ig-monitor-dashboard.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now ig-monitor-dashboard.service
+docker compose up -d dashboard
+docker compose ps
+curl --fail http://127.0.0.1:8888/healthz
 ```
 
 Open `http://<tailscale-hostname-or-ip>:8888/`. The page is read-only and refreshes every 30 seconds.
@@ -78,9 +99,10 @@ Deduplication is scoped to one Instagram account. It keeps the highest-quality v
 - 台灣時間 09:00 可選的每日存活摘要。
 - 程序鎖避免排程重疊；帳號之間隨機等待 10～20 秒。
 
-## Ubuntu + Miniconda 安裝
+## 舊版 Ubuntu + Miniconda 安裝
 
-以下假設專案位於 `/srv/ig-monitor`，請把路徑和使用者名稱改成實際值。
+此方式僅保留供回復舊部署使用；新安裝請使用 Docker Compose。以下假設專案位於
+`/srv/ig-monitor`，請把路徑和使用者名稱改成實際值。
 
 ```bash
 cd /srv/ig-monitor
@@ -146,7 +168,7 @@ conda run -n ig-monitor python -m ig_monitor --config config.yaml
 conda run -n ig-monitor python -m ig_monitor --config config.yaml --reset-account sin_9311
 ```
 
-## systemd 排程
+## 舊版 systemd 排程
 
 先編輯 `deploy/ig-monitor.service`，替換：
 

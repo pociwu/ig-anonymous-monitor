@@ -71,6 +71,20 @@ apify:
             with self.assertRaisesRegex(ValueError, "APIFY_API_TOKEN"):
                 load_config(path, require_telegram=False)
 
+    def test_schedule_interval_must_be_positive(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "config.yaml"
+            path.write_text("""
+accounts:
+  - url: https://insta-stories-viewer.com/a/
+telegram:
+  enabled: false
+schedule:
+  interval_minutes: 0
+""", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "interval_minutes"):
+                load_config(path, require_telegram=False)
+
 
 if __name__ == "__main__":
     unittest.main()

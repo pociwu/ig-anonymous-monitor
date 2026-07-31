@@ -16,3 +16,12 @@ jobs:
       - run: python -m pip install --upgrade pip
       - run: python -m pip install -e '.[test]'
       - run: python -m pytest
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: cp .env.example .env
+      - run: cp config.example.yaml config.yaml
+      - run: docker compose config
+      - run: docker build --tag ig-anonymous-monitor:test .

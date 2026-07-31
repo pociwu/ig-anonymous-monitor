@@ -340,7 +340,9 @@ class Database:
                 privacy = json.loads(row["snapshot_json"]).get("privacy")
                 if privacy in ("private", "public"):
                     result[privacy] += 1
-        result["pending"] = self.conn.execute("SELECT COUNT(*) FROM media WHERE status!='downloaded'").fetchone()[0]
+        result["pending"] = self.conn.execute(
+            "SELECT COUNT(*) FROM media WHERE status IN ('pending','failed')"
+        ).fetchone()[0]
         return result
 
     def get_meta(self, key: str) -> str | None:

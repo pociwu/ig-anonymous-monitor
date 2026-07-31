@@ -1,0 +1,68 @@
+name: ig-monitor
+
+x-runtime: &runtime
+  build:
+    context: .
+  image: ig-anonymous-monitor:local
+  init: true
+  user: "${PUID:-1000}:${PGID:-1000}"
+  working_dir: /srv/ig-monitor
+  env_file:
+    - .env
+  environment:
+    HOME: /tmp
+    IG_MONITOR_RUNTIME: docker
+    PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
+    PYTHONUNBUFFERED: "1"
+    TZ: Asia/Taipei
+  volumes:
+    - ./config.yaml:/srv/ig-monitor/config.yaml:ro
+    - ./data:/srv/ig-monitor/data
+    - ./downloads:/srv/ig-monitor/downloads
+  restart: unless-stopped
+
+services:
+  monitor:
+    <<: *runtime
+    command:
+      - python
+      - -m
+      - ig_monitor.scheduler
+      - --config
+      - /srv/ig-monitor/config.yaml
+    ipc: host
+    read_only: true
+    tmpfs:
+      - /tmp
+    stop_grace_period: 5m
+
+  dashboard:
+    <<: *runtime
+    command:
+      - python
+      - -m
+      - ig_monitor.dashboard
+      - --db
+      - /srv/ig-monitor/data/state.sqlite3
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8888"
+    depends_on:
+      monitor:
+        condition: service_started
+    ports:
+      - "0.0.0.0:8888:8888"
+    read_only: true
+    tmpfs:
+      - /tmp
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8888/healthz', timeout=3).read()"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

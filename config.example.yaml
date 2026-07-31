@@ -16,6 +16,7 @@ browser:
   browsers_path: ./data/ms-playwright
 
 schedule:
+  # Docker scheduler waits this many minutes after a completed inspection.
   interval_minutes: 15
   account_delay_min_seconds: 10
   account_delay_max_seconds: 20
