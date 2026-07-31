@@ -7,7 +7,7 @@ from pathlib import Path
 
 import yaml
 
-from .config import load_config, normalize_account_url
+from .config import MAX_ACCOUNTS, load_config, normalize_account_url
 from .db import Database
 
 
@@ -29,8 +29,8 @@ class AccountRegistry:
             config = load_config(self.config_path, require_telegram=False)
             if any(account.url == normalized for account in config.accounts):
                 raise ValueError("此帳號已在監控清單中")
-            if len(config.accounts) >= 10:
-                raise ValueError("監控帳號已達 10 個上限")
+            if len(config.accounts) >= MAX_ACCOUNTS:
+                raise ValueError(f"監控帳號已達 {MAX_ACCOUNTS} 個上限")
             self.validator(normalized)
             raw = self._read_raw()
             key = normalized.rstrip("/").rsplit("/", 1)[-1]
@@ -63,6 +63,32 @@ class AccountRegistry:
             ]
             if len(raw["accounts"]) == len(accounts):
                 raise ValueError("找不到要移除的監控帳號")
+            self._write_raw(raw)
+            self._sync_database()
+
+    def reorder(self, account_ids: list[int]) -> None:
+        with self._lock:
+            db = Database(self.db_path)
+            try:
+                enabled_rows = db.enabled_accounts()
+            finally:
+                db.close()
+            expected_ids = {row["id"] for row in enabled_rows}
+            if len(account_ids) != len(expected_ids) or set(account_ids) != expected_ids:
+                raise ValueError("排序內容與目前監控帳號不一致，請重新整理後再試")
+            urls_by_id = {row["id"]: row["url"] for row in enabled_rows}
+            raw = self._read_raw()
+            accounts = raw.get("accounts", [])
+            items_by_url = {
+                normalize_account_url(item.get("url", "")): item
+                for item in accounts
+            }
+            ordered_urls = [urls_by_id[account_id] for account_id in account_ids]
+            disabled = [
+                item for item in accounts
+                if normalize_account_url(item.get("url", "")) not in set(ordered_urls)
+            ]
+            raw["accounts"] = [items_by_url[url] for url in ordered_urls] + disabled
             self._write_raw(raw)
             self._sync_database()
 

@@ -98,6 +98,7 @@ curl --fail http://127.0.0.1:8888/healthz
 - `dashboard`：監聽 `0.0.0.0:8888`，健康檢查路徑為 `/healthz`。
 - Dashboard 首頁可驗證、新增及移除監控帳號，因此 `config.yaml` 必須可由
   `PUID`/`PGID` 指定的使用者寫入。
+- 最多可監控 16 個帳號；拖曳首頁卡片後，顯示與巡檢順序會寫回 `config.yaml`。
 - 兩個容器共用 `data/` 與 `downloads/`。
 - Chromium、ffmpeg 及 ffprobe 已包含在映像，不再依賴 Miniconda。
 

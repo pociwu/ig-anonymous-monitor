@@ -44,7 +44,7 @@ CARD_PAGE = """<!doctype html>
 <html lang="zh-Hant"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1"><title>IG Monitor</title>
 <style>
-:root{color-scheme:dark}*{box-sizing:border-box}body{font-family:system-ui,-apple-system,sans-serif;background:#0b1120;color:#e5e7eb;margin:0;padding:24px}main{max-width:1200px;margin:auto}a{color:inherit;text-decoration:none}.summary,.accounts{display:grid;gap:14px}.summary{grid-template-columns:repeat(auto-fit,minmax(140px,1fr));margin-bottom:28px}.accounts{grid-template-columns:repeat(auto-fill,minmax(260px,1fr))}.metric,.account-card,.service,.manage{background:#172033;border:1px solid #27344d;border-radius:16px}.metric{padding:16px}.metric strong{display:block;font-size:1.65rem;margin-top:4px}.manage{padding:16px;margin:0 0 28px}.manage form{display:grid;grid-template-columns:minmax(260px,2fr) minmax(140px,1fr) auto;gap:10px}.manage input,.manage button{border:1px solid #334155;border-radius:10px;padding:11px 12px;font:inherit}.manage input{background:#0f172a;color:#e5e7eb}.manage button{background:#7c3aed;color:white;cursor:pointer}.error{color:#fecaca;background:#7f1d1d;padding:10px;border-radius:10px}.account-card{padding:18px;transition:.18s transform,.18s border-color}.account-card>a{display:block}.account-card:hover{transform:translateY(-3px);border-color:#8b5cf6}.remove-form{margin-top:14px;padding-top:12px;border-top:1px solid #334155}.remove-form button{width:100%;border:1px solid #7f1d1d;border-radius:9px;padding:9px;background:#3f1721;color:#fecaca;cursor:pointer}.identity{display:flex;gap:14px;align-items:center}.avatar{width:72px;height:72px;border-radius:50%;object-fit:cover;background:#27344d;border:2px solid #475569}.avatar-fallback{display:grid;place-items:center;font-size:1.5rem;font-weight:700}.name{font-size:1.15rem;font-weight:750}.handle,.muted{color:#94a3b8}.facts{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:16px 0}.fact{background:#0f172a;border-radius:10px;padding:9px;text-align:center}.fact strong{display:block}.row{display:flex;justify-content:space-between;gap:12px;margin-top:8px}.value{overflow-wrap:anywhere;text-align:right}.ok{color:#86efac}.bad{color:#fca5a5}.services{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}.service{padding:16px}@media(max-width:700px){body{padding:14px}.accounts{grid-template-columns:1fr}.manage form{grid-template-columns:1fr}}</style></head><body><main>
+:root{color-scheme:dark}*{box-sizing:border-box}body{font-family:system-ui,-apple-system,sans-serif;background:#0b1120;color:#e5e7eb;margin:0;padding:24px}main{max-width:1200px;margin:auto}a{color:inherit;text-decoration:none}.summary,.accounts{display:grid;gap:14px}.summary{grid-template-columns:repeat(auto-fit,minmax(140px,1fr));margin-bottom:28px}.accounts{grid-template-columns:repeat(auto-fill,minmax(260px,1fr))}.metric,.account-card,.service,.manage{background:#172033;border:1px solid #27344d;border-radius:16px}.metric{padding:16px}.metric strong{display:block;font-size:1.65rem;margin-top:4px}.manage{padding:16px;margin:0 0 28px}.manage form{display:grid;grid-template-columns:minmax(260px,2fr) minmax(140px,1fr) auto;gap:10px}.manage input,.manage button{border:1px solid #334155;border-radius:10px;padding:11px 12px;font:inherit}.manage input{background:#0f172a;color:#e5e7eb}.manage button{background:#7c3aed;color:white;cursor:pointer}.error{color:#fecaca;background:#7f1d1d;padding:10px;border-radius:10px}.account-card{padding:18px;transition:.18s transform,.18s border-color}.account-card[draggable=true]{cursor:grab}.account-card.dragging{opacity:.45;transform:scale(.98)}.drag-handle{color:#94a3b8;text-align:right;font-size:.82rem;margin:-5px 0 8px;user-select:none}.account-card>a{display:block}.account-card:hover{transform:translateY(-3px);border-color:#8b5cf6}.remove-form{margin-top:14px;padding-top:12px;border-top:1px solid #334155}.remove-form button{width:100%;border:1px solid #7f1d1d;border-radius:9px;padding:9px;background:#3f1721;color:#fecaca;cursor:pointer}.identity{display:flex;gap:14px;align-items:center}.avatar{width:72px;height:72px;border-radius:50%;object-fit:cover;background:#27344d;border:2px solid #475569}.avatar-fallback{display:grid;place-items:center;font-size:1.5rem;font-weight:700}.name{font-size:1.15rem;font-weight:750}.handle,.muted{color:#94a3b8}.facts{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:16px 0}.fact{background:#0f172a;border-radius:10px;padding:9px;text-align:center}.fact strong{display:block}.row{display:flex;justify-content:space-between;gap:12px;margin-top:8px}.value{overflow-wrap:anywhere;text-align:right}.ok{color:#86efac}.bad{color:#fca5a5}.services{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}.service{padding:16px}@media(max-width:700px){body{padding:14px}.accounts{grid-template-columns:1fr}.manage form{grid-template-columns:1fr}}</style></head><body><main>
 <h1>IG Monitor</h1><p class="muted">監控管理頁面 · {{ data.generated_at }}</p>
 <section class="summary">
 <div class="metric">啟用帳號<strong>{{ data.summary.accounts }}</strong></div>
@@ -62,13 +62,14 @@ CARD_PAGE = """<!doctype html>
   <button type="submit">驗證並新增</button>
 </form>
 {% if error %}<p class="error">{{ error }}</p>{% endif %}
-<p class="muted">新增前會實際載入頁面；驗證可能需要約 45～90 秒。最多監控 10 個帳號。</p>
+<p class="muted">新增前會實際載入頁面；驗證可能需要約 45～90 秒。最多監控 16 個帳號。</p>
 </section>
 {% endif %}
 <h2>巡檢帳號</h2>
 <section class="accounts">
 {% for a in data.accounts %}
-<article class="account-card">
+<article class="account-card" data-account-id="{{ a.id }}" {% if management_enabled %}draggable="true"{% endif %}>
+{% if management_enabled %}<div class="drag-handle" title="拖曳調整順序">⠿ 拖曳排序</div>{% endif %}
 <a href="{{ url_for('account_detail', account_id=a.id) }}">
   <div class="identity">
     {% if a.has_avatar %}<img class="avatar" src="{{ url_for('avatar_asset', account_id=a.id) }}" alt="{{ a.label }}">
@@ -97,6 +98,28 @@ CARD_PAGE = """<!doctype html>
 <div class="service">排程器：<strong>{{ data.services.timer }}</strong></div>
 <div class="service">下次排程：<span>{{ data.services.next_run }}</span></div>
 </section>
+{% if management_enabled %}
+<script>
+const accountList=document.querySelector('.accounts');let dragged=null;
+accountList?.querySelectorAll('.account-card').forEach(card=>{
+  card.addEventListener('dragstart',event=>{dragged=card;card.classList.add('dragging');event.dataTransfer.effectAllowed='move'});
+  card.addEventListener('dragend',()=>{card.classList.remove('dragging');dragged=null});
+});
+accountList?.addEventListener('dragover',event=>{
+  event.preventDefault();const target=event.target.closest('.account-card');
+  if(!dragged||!target||target===dragged)return;
+  const box=target.getBoundingClientRect();
+  const before=event.clientY<box.top+box.height/2||(Math.abs(event.clientY-(box.top+box.height/2))<box.height/3&&event.clientX<box.left+box.width/2);
+  accountList.insertBefore(dragged,before?target:target.nextSibling);
+});
+accountList?.addEventListener('drop',async event=>{
+  event.preventDefault();
+  const account_ids=[...accountList.querySelectorAll('.account-card')].map(card=>Number(card.dataset.accountId));
+  const response=await fetch('{{ url_for("reorder_accounts") }}',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({account_ids})});
+  if(!response.ok){alert('排序儲存失敗，頁面將重新整理。');location.reload()}
+});
+</script>
+{% endif %}
 </main></body></html>"""
 
 
@@ -207,7 +230,7 @@ def dashboard_data(db_path: Path, status_provider: Callable[[], dict[str, str]] 
         try:
             rows = connection.execute("""
                 SELECT id,label,url,effective_url,instagram_profile_id,snapshot_json,fail_count,last_error,last_success_at
-                FROM accounts WHERE enabled=1 ORDER BY id
+                FROM accounts WHERE enabled=1 ORDER BY sort_order,id
             """).fetchall()
             summary["accounts"] = len(rows)
             for row in rows:
@@ -404,6 +427,21 @@ def create_app(
                 error=str(exc),
             ), 400
         return redirect(url_for("index"), code=303)
+
+    @app.post("/accounts/reorder")
+    def reorder_accounts():
+        if registry is None:
+            abort(404)
+        _require_same_origin()
+        payload = request.get_json(silent=True) or {}
+        account_ids = payload.get("account_ids")
+        if not isinstance(account_ids, list) or any(type(value) is not int for value in account_ids):
+            return {"error": "排序格式錯誤"}, 400
+        try:
+            registry.reorder(account_ids)
+        except ValueError as exc:
+            return {"error": str(exc)}, 400
+        return "", 204
 
     @app.get("/healthz")
     def health():

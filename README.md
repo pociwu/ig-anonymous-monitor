@@ -80,7 +80,7 @@ python -m ig_monitor --config config.yaml --dedupe-media --apply
 
 Deduplication is scoped to one Instagram account. It keeps the highest-quality version, preserves source links for Posts, Stories, and Highlights, and leaves duplicate records hidden so the same source is not downloaded again.
 
-以 Playwright 等待 `insta-stories-viewer.com` 的動態內容，監控最多 10 個 IG 頁面。程式保存完整快照、透過 Telegram 通知變化，並在帳號公開時分批下載網站能提供的最高畫質照片與影片。
+以 Playwright 等待 `insta-stories-viewer.com` 的動態內容，監控最多 16 個 IG 頁面。程式保存完整快照、透過 Telegram 通知變化，並在帳號公開時分批下載網站能提供的最高畫質照片與影片。
 
 ## 已實作功能
 
@@ -129,7 +129,7 @@ cp .env.example .env
 chmod 600 .env
 ```
 
-編輯 `config.yaml` 加入最多 10 個網址。一般設定放在 YAML；Telegram Bot Token、Chat ID 和可選的 Topic ID 只放在 `.env`。
+編輯 `config.yaml` 加入最多 16 個網址，或在 Dashboard 首頁驗證新增並拖曳卡片調整巡檢順序。一般設定放在 YAML；Telegram Bot Token、Chat ID 和可選的 Topic ID 只放在 `.env`。
 
 下載目錄預設結構：
 

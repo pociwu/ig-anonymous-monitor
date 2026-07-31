@@ -131,6 +131,36 @@ telegram:
             saved = load_config(config_path, require_telegram=False)
             self.assertEqual([account.key for account in saved.accounts], ["existing"])
 
+    def test_home_can_add_the_sixteenth_account(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config_path = root / "config.yaml"
+            accounts = "\n".join(
+                f"  - url: https://insta-stories-viewer.com/account_{index}/"
+                for index in range(15)
+            )
+            config_path.write_text(
+                f"accounts:\n{accounts}\ntelegram:\n  enabled: false\n",
+                encoding="utf-8",
+            )
+            db_path = root / "state.sqlite3"
+            db = Database(db_path)
+            db.sync_accounts(load_config(config_path, require_telegram=False).accounts)
+            db.close()
+            app = create_app(
+                db_path,
+                lambda: {"monitor": "active", "timer": "active", "next_run": "soon"},
+                config_path=config_path,
+                account_validator=lambda _url: None,
+            )
+
+            response = app.test_client().post("/accounts", data={
+                "url": "https://insta-stories-viewer.com/account_15/",
+            })
+
+            self.assertEqual(response.status_code, 303)
+            self.assertEqual(len(load_config(config_path, require_telegram=False).accounts), 16)
+
     def test_remove_button_stops_monitoring_without_deleting_media(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -175,3 +205,39 @@ telegram:
             self.assertNotIn(b"remove_me", app.test_client().get("/").data)
             self.assertEqual(app.test_client().get(f"/account/{remove_row['id']}").status_code, 404)
             self.assertTrue(media_file.is_file())
+
+    def test_drag_order_is_saved_and_used_by_the_dashboard(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config_path = root / "config.yaml"
+            config_path.write_text("""
+accounts:
+  - url: https://insta-stories-viewer.com/first/
+  - url: https://insta-stories-viewer.com/second/
+  - url: https://insta-stories-viewer.com/third/
+telegram:
+  enabled: false
+""", encoding="utf-8")
+            db_path = root / "state.sqlite3"
+            db = Database(db_path)
+            db.sync_accounts(load_config(config_path, require_telegram=False).accounts)
+            ids = {row["account_key"]: row["id"] for row in db.enabled_accounts()}
+            db.close()
+            app = create_app(
+                db_path,
+                lambda: {"monitor": "active", "timer": "active", "next_run": "soon"},
+                config_path=config_path,
+                account_validator=lambda _url: None,
+            )
+
+            response = app.test_client().post("/accounts/reorder", json={
+                "account_ids": [ids["third"], ids["first"], ids["second"]],
+            })
+
+            self.assertEqual(response.status_code, 204)
+            saved = load_config(config_path, require_telegram=False)
+            self.assertEqual([account.key for account in saved.accounts], ["third", "first", "second"])
+            home = app.test_client().get("/").data.decode("utf-8")
+            self.assertLess(home.index(">third<"), home.index(">first<"))
+            self.assertLess(home.index(">first<"), home.index(">second<"))
+            self.assertIn('draggable="true"', home)

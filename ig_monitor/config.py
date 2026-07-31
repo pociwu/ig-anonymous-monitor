@@ -9,6 +9,9 @@ import yaml
 from dotenv import load_dotenv
 
 
+MAX_ACCOUNTS = 16
+
+
 @dataclass(frozen=True, slots=True)
 class AccountConfig:
     url: str
@@ -133,8 +136,8 @@ def load_config(path: str | Path, require_telegram: bool = True) -> AppConfig:
     items = raw.get("accounts", [])
     if not isinstance(items, list) or not items:
         raise ValueError("accounts 至少需要一個帳號")
-    if len(items) > 10:
-        raise ValueError("accounts 最多只能設定 10 個網址")
+    if len(items) > MAX_ACCOUNTS:
+        raise ValueError(f"accounts 最多只能設定 {MAX_ACCOUNTS} 個網址")
     accounts: list[AccountConfig] = []
     seen: set[str] = set()
     for item in items:

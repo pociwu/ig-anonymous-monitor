@@ -42,6 +42,31 @@ telegram:
             with self.assertRaisesRegex(ValueError, "格式錯誤"):
                 load_config(path, require_telegram=False)
 
+    def test_sixteen_accounts_are_allowed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "config.yaml"
+            accounts = "\n".join(
+                f"  - url: https://insta-stories-viewer.com/account_{index}/"
+                for index in range(16)
+            )
+            path.write_text(f"accounts:\n{accounts}\ntelegram:\n  enabled: false\n", encoding="utf-8")
+
+            config = load_config(path, require_telegram=False)
+
+            self.assertEqual(len(config.accounts), 16)
+
+    def test_seventeen_accounts_are_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "config.yaml"
+            accounts = "\n".join(
+                f"  - url: https://insta-stories-viewer.com/account_{index}/"
+                for index in range(17)
+            )
+            path.write_text(f"accounts:\n{accounts}\ntelegram:\n  enabled: false\n", encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, "16"):
+                load_config(path, require_telegram=False)
+
 
     def test_apify_cap_cannot_exceed_five_usd(self):
         with tempfile.TemporaryDirectory() as tmp:

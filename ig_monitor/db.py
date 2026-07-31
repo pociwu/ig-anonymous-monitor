@@ -37,7 +37,7 @@ class Database:
         self.conn.executescript("""
         CREATE TABLE IF NOT EXISTS accounts (
           id INTEGER PRIMARY KEY, url TEXT NOT NULL UNIQUE, account_key TEXT NOT NULL,
-          label TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1,
+          label TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1, sort_order INTEGER NOT NULL DEFAULT 0,
           effective_url TEXT, instagram_profile_id TEXT,
           snapshot_json TEXT, fail_count INTEGER NOT NULL DEFAULT 0,
           failure_notified INTEGER NOT NULL DEFAULT 0, failure_since TEXT,
@@ -83,6 +83,7 @@ class Database:
         """)
         self._add_column_if_missing("accounts", "effective_url", "TEXT")
         self._add_column_if_missing("accounts", "instagram_profile_id", "TEXT")
+        self._add_column_if_missing("accounts", "sort_order", "INTEGER NOT NULL DEFAULT 0")
         self._add_column_if_missing("media", "duplicate_of_id", "INTEGER")
         self._add_column_if_missing("media", "fingerprint_json", "TEXT")
         self._add_column_if_missing("media", "file_size", "INTEGER")
@@ -101,16 +102,20 @@ class Database:
         now = utc_now()
         with self.transaction() as con:
             con.execute("UPDATE accounts SET enabled=0, updated_at=?", (now,))
-            for account in accounts:
+            for sort_order, account in enumerate(accounts):
                 con.execute("""
-                  INSERT INTO accounts(url,account_key,label,enabled,effective_url,created_at,updated_at)
-                  VALUES(?,?,?,?,?,?,?)
+                  INSERT INTO accounts(url,account_key,label,enabled,sort_order,effective_url,created_at,updated_at)
+                  VALUES(?,?,?,?,?,?,?,?)
                   ON CONFLICT(url) DO UPDATE SET account_key=excluded.account_key,
-                    label=excluded.label,enabled=excluded.enabled,updated_at=excluded.updated_at
-                """, (account.url, account.key, account.label, int(account.enabled), account.url, now, now))
+                    label=excluded.label,enabled=excluded.enabled,sort_order=excluded.sort_order,
+                    updated_at=excluded.updated_at
+                """, (account.url, account.key, account.label, int(account.enabled), sort_order,
+                      account.url, now, now))
 
     def enabled_accounts(self) -> list[dict[str, Any]]:
-        return [dict(r) for r in self.conn.execute("SELECT * FROM accounts WHERE enabled=1 ORDER BY id")]
+        return [dict(r) for r in self.conn.execute(
+            "SELECT * FROM accounts WHERE enabled=1 ORDER BY sort_order,id"
+        )]
 
     def get_account(self, url_or_key: str) -> dict[str, Any] | None:
         row = self.conn.execute("SELECT * FROM accounts WHERE url=? OR account_key=?", (url_or_key, url_or_key)).fetchone()
