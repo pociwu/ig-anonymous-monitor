@@ -180,24 +180,62 @@ class Database:
         self._add_column_if_missing("media", "video_bitrate", "INTEGER")
         self.conn.execute("UPDATE accounts SET effective_url=url WHERE effective_url IS NULL")
         self.conn.execute("INSERT OR IGNORE INTO media_sources(media_id,category) SELECT id,category FROM media")
+        self._backfill_profile_history()
+        self.conn.commit()
+
+    def _backfill_profile_history(self) -> None:
+        fields = ("posts", "followers", "following")
+
+        def insert(account_id: int, observed_at: str | None, state: dict[str, int]) -> None:
+            if not observed_at:
+                return
+            self.conn.execute(
+                """INSERT OR IGNORE INTO profile_history(
+                     account_id,observed_at,posts,followers,following
+                   ) VALUES(?,?,?,?,?)""",
+                (account_id, observed_at, *(state[field] for field in fields)),
+            )
+
         for row in self.conn.execute(
-            "SELECT id,snapshot_json,last_success_at,updated_at FROM accounts WHERE snapshot_json IS NOT NULL"
+            """SELECT id,snapshot_json,last_success_at,created_at,updated_at
+               FROM accounts WHERE snapshot_json IS NOT NULL"""
         ).fetchall():
             try:
                 snapshot = json.loads(row["snapshot_json"])
                 observed_at = snapshot.get("observed_at") or row["last_success_at"] or row["updated_at"]
-                self.conn.execute(
-                    """INSERT OR IGNORE INTO profile_history(
-                         account_id,observed_at,posts,followers,following
-                       ) VALUES(?,?,?,?,?)""",
-                    (
-                        row["id"], observed_at, int(snapshot.get("posts", 0)),
-                        int(snapshot.get("followers", 0)), int(snapshot.get("following", 0)),
-                    ),
-                )
+                state = {field: int(snapshot.get(field, 0)) for field in fields}
             except (TypeError, ValueError, json.JSONDecodeError):
                 continue
-        self.conn.commit()
+            insert(row["id"], observed_at, state)
+            found_initial = False
+            count_change_found = False
+            events = self.conn.execute(
+                """SELECT kind,payload_json,created_at FROM events
+                   WHERE account_id=? AND kind IN ('initial','change')
+                   ORDER BY created_at DESC,id DESC""",
+                (row["id"],),
+            ).fetchall()
+            for event in events:
+                try:
+                    payload = json.loads(event["payload_json"])
+                    if event["kind"] == "initial":
+                        initial = payload.get("snapshot", {})
+                        initial_state = {field: int(initial.get(field, state[field])) for field in fields}
+                        insert(row["id"], initial.get("observed_at") or event["created_at"], initial_state)
+                        found_initial = True
+                        continue
+                    changes = payload.get("changes", {})
+                    changed_fields = [field for field in fields if field in changes]
+                    if not changed_fields:
+                        continue
+                    insert(row["id"], event["created_at"], state)
+                    count_change_found = True
+                    for field in changed_fields:
+                        state[field] = int(changes[field][0])
+                except (IndexError, KeyError, TypeError, ValueError, json.JSONDecodeError):
+                    continue
+            if count_change_found and not found_initial:
+                insert(row["id"], row["created_at"], state)
 
     def _add_column_if_missing(self, table: str, column: str, definition: str) -> None:
         columns = {row[1] for row in self.conn.execute(f"PRAGMA table_info({table})")}

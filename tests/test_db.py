@@ -1,3 +1,4 @@
+import json
 import tempfile
 import unittest
 from datetime import UTC, datetime, timedelta
@@ -58,6 +59,49 @@ class DatabaseTests(unittest.TestCase):
         self.assertEqual(
             [(row["posts"], row["followers"], row["following"]) for row in history],
             [(10, 20, 30), (12, 25, 28)],
+        )
+
+    def test_existing_events_backfill_profile_count_history(self):
+        first = ProfileSnapshot(
+            "a", None, 10, 20, 30, "", PrivacyState.PUBLIC, "",
+            observed_at="2026-07-01T00:00:00+00:00",
+        )
+        current = ProfileSnapshot(
+            "a", None, 12, 25, 28, "", PrivacyState.PUBLIC, "",
+            observed_at="2026-07-03T00:00:00+00:00",
+        )
+        self.db.conn.execute(
+            "UPDATE accounts SET snapshot_json=?,last_success_at=? WHERE id=?",
+            (json.dumps(current.to_dict()), current.observed_at, self.row["id"]),
+        )
+        self.db.conn.execute(
+            """INSERT INTO events(event_key,account_id,kind,payload_json,created_at)
+               VALUES(?,?,?,?,?)""",
+            ("legacy-initial", self.row["id"], "initial", json.dumps({"snapshot": first.to_dict()}),
+             "2026-07-01T00:00:00+00:00"),
+        )
+        self.db.conn.execute(
+            """INSERT INTO events(event_key,account_id,kind,payload_json,created_at)
+               VALUES(?,?,?,?,?)""",
+            ("legacy-change", self.row["id"], "change", json.dumps({"changes": {
+                "posts": [10, 12], "followers": [20, 25], "following": [30, 28],
+            }}), "2026-07-02T00:00:00+00:00"),
+        )
+        self.db.conn.execute("DELETE FROM profile_history WHERE account_id=?", (self.row["id"],))
+        self.db.conn.commit()
+        path = self.db.path
+        self.db.close()
+        self.db = Database(path)
+
+        history = self.db.profile_history(self.row["id"])
+
+        self.assertEqual(
+            [(row["observed_at"], row["posts"], row["followers"], row["following"]) for row in history],
+            [
+                ("2026-07-01T00:00:00+00:00", 10, 20, 30),
+                ("2026-07-02T00:00:00+00:00", 12, 25, 28),
+                ("2026-07-03T00:00:00+00:00", 12, 25, 28),
+            ],
         )
 
 
