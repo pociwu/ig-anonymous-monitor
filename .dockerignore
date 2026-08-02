@@ -4,6 +4,7 @@
 .codex
 .conda
 .env
+collector-secrets
 .pytest_cache
 .testvenv
 __pycache__

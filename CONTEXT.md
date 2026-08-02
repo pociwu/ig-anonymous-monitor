@@ -2,6 +2,156 @@
 
 ## Identity resolution
 
+**Anonymous profile monitoring**: 不使用 Instagram 登入憑證，透過匿名檢視來源取得公開個人檔案狀態與可見媒體的既有巡檢流程。
+_Avoid_: 公開 API 巡檢
+
+**Authenticated Instagram enrichment**: 使用專用 Instagram 登入帳號與持久化工作階段，補充 Anonymous profile monitoring 無法提供的 Instagram 資料；本階段由 `instagrapi` 提供。
+_Avoid_: Threads API、官方 Instagram API
+
+**Threads integration**: 未來可選、與 Instagram 巡檢分離的 Threads 平台資料整合；只使用 Meta 官方 Threads API，不使用已封存的非官方 `threads-api` 套件。
+_Avoid_: instagrapi threads-api
+
+**Follower membership**: 某個 Instagram 帳號出現在受監控帳號 Followers 名單中的關係；方向為該帳號追蹤受監控帳號。
+_Avoid_: 好友
+
+**Following membership**: 某個 Instagram 帳號出現在受監控帳號 Following 名單中的關係；方向為受監控帳號追蹤該帳號。
+_Avoid_: 好友
+
+**Mutual follow**: 同一對帳號同時存在 Follower membership 與 Following membership 的雙向關係；共同名單只代表受監控帳號自身的 Mutual follow 集合。
+_Avoid_: 共同好友、與登入帳號的共同名單、跨監控帳號交集
+
+**Complete relationship snapshot**: 已成功讀取某個受監控帳號全部 Followers 或全部 Following 分頁的一次名單觀測；只有此種快照能成為下一次移除異動的比較基準。
+_Avoid_: 名單快取、部分名單
+
+**Incomplete relationship observation**: 因限流、登入失效、challenge、分頁錯誤或主動停止而未讀完全部分頁的名單觀測；不得覆蓋 Complete relationship snapshot，也不得單憑缺席產生移除事件。
+_Avoid_: 空名單、完整快照
+
+**Relationship change**: 兩份具充分證據的關係觀測之間，Follower membership、Following membership 或 Mutual follow 的加入或離開。
+_Avoid_: 計數變化
+
+**Instagram collector identity**: 專門供 Authenticated Instagram enrichment 使用的 Instagram 登入帳號；固定綁定單一 OCI 公網 IP、持久裝置指紋與工作階段，不與手機、瀏覽器或其他主機共用。
+_Avoid_: 監控帳號、受監控帳號、小帳
+
+**Monitored Instagram account**: 系統觀察其公開檔案、媒體與關係名單的目標 Instagram 帳號；不持有其登入憑證。
+_Avoid_: 登入小帳、Instagram collector identity
+
+**Collector observation period**: Instagram collector identity 首次在固定 OCI IP 建立持久工作階段後，至少 72 小時不擷取 Monitored Instagram account 的人工核准階段；期間每 24 小時至多一次工作階段健康檢查。
+_Avoid_: 自動養號、模擬真人互動
+
+**Collector active state**: Collector observation period 結束且經操作人員明確核准後，Instagram collector identity 才能進行 Authenticated Instagram enrichment 的狀態。
+_Avoid_: 登入成功、養號完成
+
+**Collector risk hold**: 發生 challenge、登入失效、限流或其他風控訊號後，停止所有 authenticated collection 且不得自動反覆登入的狀態；恢復需要人工處理並重新經過 Collector observation period。
+_Avoid_: 自動重試、暫時錯誤
+
+**Relationship tracking scope**: 單一 Monitored Instagram account 的 Followers 或 Following 成員數不超過 1,000 時，允許建立 Complete relationship snapshot 的安全擷取範圍；兩個方向分別判定。
+_Avoid_: API 分頁上限
+
+**Relationship scope exceeded**: Followers 或 Following 任一方向超過 1,000 人的明確狀態；該方向只記錄總數，不翻完整名單、不產生成員異動，也不視為空名單。
+_Avoid_: Incomplete relationship observation、無 followers
+
+**Relationship collection trigger**: Anonymous profile monitoring 確認公開帳號的 Followers 或 Following 總數改變後，為該帳號合併排入一次 Authenticated Instagram enrichment 關係名單工作的事件；私人或公開狀態不明的帳號不會觸發。
+_Avoid_: 每 15 分鐘抓名單、即時關係異動
+
+**Relationship reconciliation**: 公開且位於 Relationship tracking scope 的帳號即使總數未變，也每 30 天隨機分散執行一次完整名單比較，以發現加入與離開互相抵銷的 Relationship change。
+_Avoid_: 每月固定整點巡檢
+
+**Relationship membership source**: `instagrapi` 登入工作階段回傳的 Followers／Following Instagram ID 與 username；匿名檢視來源不被視為成員名單來源。
+_Avoid_: insta-stories-viewer Followers API
+
+**Member profile enrichment**: 以 Relationship membership source 的 username 向匿名檢視來源查詢單一公開成員的詳細個人資料；只因新成員、username 改變或 Dashboard 人工點開而排程，不會遍歷整份名單。
+_Avoid_: 名單巡檢、全名單補抓
+
+**Member enrichment budget**: 全系統每個台北時區曆日最多執行 66 次 Member profile enrichment；工作間隔隨機 30 至 90 秒，超額工作保留至後續日期。
+_Avoid_: 每帳號每日上限、佇列長度
+
+**Relationship change digest**: 每個 Monitored Instagram account 在一次完整名單比較後產生至多一則 Telegram 彙總；分別呈現 Followers、Following 與 Mutual follow 的加入／離開數量，各分類最多列出 20 個 username，完整內容連結至 Dashboard。
+_Avoid_: 每成員通知、基準名單新增通知
+
+**Relationship baseline event**: 首份 Complete relationship snapshot 建立完成的通知；只報告基準規模與完成狀態，不將基準中的既有成員描述為 Relationship change。
+_Avoid_: 首次新增名單
+
+**Collector credentials**: 只存在 Ubuntu 主機 `.env` 的 Instagram collector identity username、password 與可選 TOTP secret；不得透過 Dashboard 輸入或保存於設定檔、資料庫、日誌、Telegram 或 GitHub。
+_Avoid_: Dashboard 登入資料、session 檔
+
+**Collector session**: 保存於獨立 `collector-secrets` 主機目錄的敏感 Instagram cookies、authorization data、裝置 UUID 與 client settings；只掛載至 Relationship worker，不屬於一般資料庫備份，也不得由其他服務下載或顯示。
+_Avoid_: Collector credentials、API token
+
+**Collector administration**: 只能在 Ubuntu CLI 執行的首次登入、challenge 處理、人工核准啟用及解除 Collector risk hold 操作。
+_Avoid_: Dashboard 重新登入
+
+**Current relationship state**: 每個 Monitored Instagram account 與名單成員目前是否存在 Follower membership、Following membership 及 Mutual follow 的單一持續更新狀態；不為每次巡檢複製整份名單。
+_Avoid_: 關係快照歷史
+
+**Relationship history event**: 保存 365 天的 Follower membership、Following membership 或 Mutual follow 加入／離開紀錄，包含首次與最後觀察時間及產生事件的完整巡檢。
+_Avoid_: Telegram 訊息、計數變化
+
+**Relationship run record**: 保存 90 天的一次關係巡檢執行摘要，包含觸發原因、分頁與成員數、完整性、超限狀態、錯誤及開始／結束時間。
+_Avoid_: Complete relationship snapshot
+
+**Relationship dashboard**: Monitored Instagram account 詳細頁中的 Followers、Following、共同名單與異動紀錄讀取介面；每頁 50 筆伺服器端分頁，提供搜尋、狀態篩選、成員詳細頁與資料完整性標示，不提供 Instagram 互動操作。
+_Avoid_: Instagram 管理介面、完整名單單頁載入
+
+**Collector-fatal signal**: challenge/checkpoint、登入或憑證失效、2FA、feedback block、`PleaseWaitFewMinutes`、429／rate limit、Sentry block、帳號停權或條款要求等會立即進入 Collector risk hold 的訊號。
+_Avoid_: 一般擷取失敗、可重試錯誤
+
+**Transient relationship failure**: timeout、DNS／連線中斷、回應截斷、JSON 解碼或 Instagram 5xx 等只使本次名單觀測不完整的失敗；不覆蓋基準、不產生移除，也不立即重試。
+_Avoid_: Collector-fatal signal
+
+**Target relationship ineligible**: Monitored Instagram account 不存在、轉為私人或公開狀態不明，因而停止該目標關係工作的狀態；不代表 Instagram collector identity 失效。
+_Avoid_: Collector risk hold
+
+**Relationship work budget**: 全系統每個台北時區曆日最多執行 6 個 `instagrapi` 關係名單工作；工作全域單工，相鄰開始時間至少間隔 4 小時，同一目標的多次觸發合併且超額工作跨日保留。
+_Avoid_: Member enrichment budget、每帳號上限
+
+**Relationship baseline rollout**: Collector canary 成功後，依 Dashboard 卡片順序且受 Relationship work budget 約束，分批為其餘公開且位於 Relationship tracking scope 的目標建立首份基準；16 個目標至少跨三個台北曆日完成，且不得繞過預算立即全抓。
+_Avoid_: 批次初始化、首次異動
+
+**Collector canary**: Collector observation period 完成並人工核准後，以一個人工指定的低量公開帳號進行 7 天關係巡檢驗證的上線閘門；期間任何 Collector-fatal signal 都會進入 risk hold，且其他目標不得開始基準。
+_Avoid_: Collector observation period、全量試跑
+
+**Canonical Instagram Profile ID**: Monitored Instagram account 唯一保存的穩定 Instagram ID；可由 `instagrapi` 或 Apify 提供，但兩者必須交叉驗證，來源不同不代表存在多個 ID。
+_Avoid_: instagrapi ID、Apify ID
+
+**Identity conflict**: `instagrapi` 與既有 Canonical Instagram Profile ID 回傳不同值的狀態；不得自動覆蓋，必須保存診斷並通知操作人員。
+_Avoid_: Username change、ID 更新
+
+**Relationship worker**: 唯一可讀取 Collector credentials 與 Collector session、執行 `instagrapi` 關係工作的單工 Docker 服務；負責 collector 生命週期與 Relationship work budget，不執行 Playwright。
+_Avoid_: monitor、Member enrichment worker
+
+**Member enrichment worker**: 不持有 Instagram 登入憑證或 session，只使用 Playwright 與匿名檢視來源執行 Member profile enrichment 並落實 Member enrichment budget 的 Docker 服務。
+_Avoid_: Relationship worker、匿名巡檢主程序
+
+**Collector state notification**: Instagram collector identity 進入觀察期、等待核准、Active、risk hold 或重新觀察，以及 Identity conflict 或長時間工作積壓時產生的一次性 Telegram 通知；只含狀態、分類、時間、積壓數與建議 CLI，不含登入身分或 session 資料。
+_Avoid_: 每輪健康通知、完整例外通知
+
+**Relationship member profile**: Member profile enrichment 保存的公開個人資料與頭像；不包含 Posts、Stories、Highlights、Reels 或其他媒體下載，也不使該成員成為 Monitored Instagram account。
+_Avoid_: 完整監控帳號、成員媒體
+
+**Member promotion**: 操作人員將 Relationship member profile 明確加入正式監控清單的動作；受 16 個 Monitored Instagram account 上限、網址驗證、既有排程與媒體去重規則約束。
+_Avoid_: 自動監控、點開成員
+
+**Frozen relationship state**: Monitored Instagram account 轉為私人或公開狀態不明後保留的最後 Complete relationship snapshot；不將成員視為離開，且在重新公開後首次完整比較前不更新基準。
+_Avoid_: 空名單、移除全部成員
+
+**Private-interval net change**: 帳號重新公開後，與 Frozen relationship state 比較得出的加入與離開集合；只表示異動發生於兩份完整快照之間，不表示確切事件時間。
+_Avoid_: 即時關係異動
+
+**Relationship collection pace**: 單一 Relationship worker 工作以每頁最多 200 人讀取，API 分頁間隨機等待 10 至 20 秒，Followers 與 Following 方向間隨機冷卻 2 至 5 分鐘，全程不平行且每方向最多讀取 1,000 人。
+_Avoid_: Relationship work budget、帳號間隔
+
+**Relationship monitoring removal**: Monitored Instagram account 被移除時取消或安全停止其關係與成員補充工作，但保留最後狀態與歷史且不產生全員離開事件；相同 Canonical Instagram Profile ID 重新加入時接回歷史並建立新基準。
+_Avoid_: 刪除關係資料、全員取消追蹤
+
+**Authenticated enrichment global switch**: 新版部署後預設關閉且只能由 Ubuntu CLI／設定檔啟用的總閘門；關閉時 Relationship worker 不登入或呼叫 Instagram，並優先於所有帳號級設定。
+_Avoid_: Collector active state、Dashboard 開關
+
+**Account relationship tracking switch**: 每個 Monitored Instagram account 是否參與關係工作的獨立設定；預設開啟但受 Authenticated enrichment global switch 與 collector 狀態約束，關閉時保留歷史，再開啟時建立新基準。
+_Avoid_: 移除監控帳號、全域 collector 開關
+
+**Directional relationship refresh**: 只有 Followers 或 Following 總數改變時，只重新取得該方向 Complete relationship snapshot，並使用另一方向最近完整基準重算 Mutual follow；首次基準、30 天校正、重新公開與人工診斷才強制更新雙向。
+_Avoid_: 每次雙向抓取、部分共同名單
+
 ## Monitoring dashboard
 
 **Monitoring dashboard endpoint**: 供操作人員檢視巡檢帳號、摘要與排程狀態的 HTTP 服務端點；服務直接監聽 `0.0.0.0:8888`。

@@ -2,6 +2,7 @@ accounts:
   - url: https://insta-stories-viewer.com/sin_9311/
     enabled: true
     label: sin_9311
+    relationship_tracking: true
 
 paths:
   data_dir: ./data
@@ -51,3 +52,23 @@ media_dedup:
   aspect_ratio_tolerance_percent: 1.0
   video_duration_tolerance_seconds: 1.0
   video_duration_tolerance_percent: 1.0
+
+# 全域預設關閉；完成 CLI 登入、72 小時觀察及 canary 核准後才開啟。
+instagram_enrichment:
+  enabled: false
+  member_limit_per_direction: 1000
+  page_size: 200
+  page_delay_min_seconds: 10
+  page_delay_max_seconds: 20
+  direction_delay_min_seconds: 120
+  direction_delay_max_seconds: 300
+  daily_relationship_jobs: 6
+  minimum_job_interval_minutes: 240
+  reconciliation_days: 30
+  observation_hours: 72
+  canary_days: 7
+  daily_member_enrichments: 66
+  member_delay_min_seconds: 30
+  member_delay_max_seconds: 90
+  member_retry_min_hours: 6
+  member_stale_days: 30

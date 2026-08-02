@@ -48,6 +48,39 @@ def _value(field: str, value: Any) -> str:
 
 def format_event(kind: str, payload: dict[str, Any]) -> str:
     label = payload.get("label", "IG Monitor")
+    if kind == "relationship_digest":
+        direction = "Followers" if payload.get("direction") == "followers" else "Following"
+        if payload.get("baseline"):
+            return f"{label}：{direction} 初始名單完成\n總數：{payload.get('total', 0)}"
+        interval = "（私人期間的淨異動）" if payload.get("private_interval") else ""
+        lines = [
+            f"{label}：{direction} 名單異動{interval}",
+            f"新增：{payload.get('joined_count', 0)}　移除：{payload.get('left_count', 0)}",
+        ]
+        if payload.get("joined"):
+            lines.append("新增帳號：" + "、".join(payload["joined"][:20]))
+        if payload.get("left"):
+            lines.append("移除帳號：" + "、".join(payload["left"][:20]))
+        if payload.get("mutual_available"):
+            lines.append(
+                f"共同名單新增：{payload.get('mutual_joined_count', 0)}　移除：{payload.get('mutual_left_count', 0)}"
+            )
+        else:
+            lines.append("共同名單：尚無另一方向的完整基準")
+        if payload.get("private_interval_started_at"):
+            lines.append(f"私人期間開始：{payload['private_interval_started_at']}")
+        return "\n".join(lines)
+    if kind == "collector_state":
+        text = f"Instagram collector：{payload.get('old_state')} → {payload.get('state')}"
+        if payload.get("reason"):
+            text += f"\n原因分類：{payload['reason']}"
+        return text
+    if kind == "identity_conflict":
+        return "Instagram Profile ID 來源不一致，relationship 巡檢已停止；請由 CLI 檢查。"
+    if kind == "queue_stuck":
+        queue = "關係名單" if payload.get("queue") == "relationship" else "成員補資料"
+        label_text = f"（{payload['label']}）" if payload.get("label") else ""
+        return f"{queue}佇列已超過等待上限{label_text}，請檢查 worker 與 collector 狀態。"
     if kind == "initial":
         s = payload["snapshot"]
         return "\n".join([

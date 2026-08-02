@@ -4,7 +4,7 @@ import asyncio
 import json
 import logging
 import random
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -13,6 +13,7 @@ from .apify import ApifyClient, ApifyError, IdentityResult
 from .db import Database
 from .media import download_account_media, save_avatar
 from .models import PrivacyState, ScrapeFailure
+from .relationships import RelationshipTrigger
 from .scraper import ProfileScraper
 from .telegram import TelegramSender
 from .utils import save_diagnostic, sha256_bytes, snapshot_changes, stable_key
@@ -47,6 +48,7 @@ class Monitor:
         self.config = config
         self.db = db
         self.telegram = TelegramSender(config.telegram)
+        self.relationship_trigger = RelationshipTrigger(db, config.instagram_enrichment)
         self.apify = apify_client or (ApifyClient(config.apify) if config.apify.enabled else None)
         for path in (config.paths.data_dir, config.paths.download_root, config.paths.diagnostics_dir,
                      config.browser.browsers_path):
@@ -106,6 +108,13 @@ class Monitor:
                                 if privacy and privacy[0].value == "private" and privacy[1].value == "public":
                                     opened.add(account["id"])
                         self.db.record_success(account["id"], result.snapshot, events, result.media)
+                        observed_at = (
+                            datetime.fromisoformat(result.snapshot.observed_at)
+                            if result.snapshot.observed_at else datetime.now(UTC)
+                        )
+                        self.relationship_trigger.observe_profile(
+                            account["id"], old, result.snapshot, observed_at
+                        )
                         if self.apify and not account.get("instagram_profile_id"):
                             await self._enrol_identity(account, result.snapshot.username)
                         LOG.info("%s 載入成功：%s，發現媒體 %d", account["label"],
@@ -143,6 +152,7 @@ class Monitor:
                              stats["downloaded"], stats["duplicate"], stats["failed"], stats["pending"])
 
             self._enqueue_heartbeat_if_due()
+            self.db.enqueue_relationship_watchdogs(datetime.now(UTC))
             self._backup_if_due()
             sent, send_failed = await self.telegram.deliver_pending(self.db)
             LOG.info("Telegram：成功 %d、失敗 %d", sent, send_failed)

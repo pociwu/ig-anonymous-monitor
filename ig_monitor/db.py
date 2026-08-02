@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from contextlib import contextmanager
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterable, Iterator
 
@@ -80,10 +80,88 @@ class Database:
           reservation_usd REAL NOT NULL, actual_usd REAL, created_at TEXT NOT NULL
         );
         CREATE INDEX IF NOT EXISTS idx_apify_usage_cycle ON apify_usage(cycle_key);
+        CREATE TABLE IF NOT EXISTS collector_state (
+          id INTEGER PRIMARY KEY CHECK(id=1), state TEXT NOT NULL DEFAULT 'unconfigured',
+          observed_since TEXT, approved_at TEXT, canary_account_id INTEGER REFERENCES accounts(id),
+          canary_started_at TEXT, last_health_check_at TEXT, last_job_started_at TEXT,
+          risk_reason TEXT, updated_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS relationship_jobs (
+          id INTEGER PRIMARY KEY, account_id INTEGER NOT NULL REFERENCES accounts(id),
+          need_followers INTEGER NOT NULL DEFAULT 0, need_following INTEGER NOT NULL DEFAULT 0,
+          reason TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending', available_at TEXT NOT NULL,
+          lease_until TEXT, started_at TEXT, attempts INTEGER NOT NULL DEFAULT 0, last_error TEXT,
+          created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_relationship_jobs_ready
+          ON relationship_jobs(status,available_at,id);
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_relationship_jobs_one_open
+          ON relationship_jobs(account_id) WHERE status IN ('pending','leased');
+        CREATE TABLE IF NOT EXISTS relationship_runs (
+          id INTEGER PRIMARY KEY, job_id INTEGER REFERENCES relationship_jobs(id),
+          account_id INTEGER NOT NULL REFERENCES accounts(id), direction TEXT NOT NULL,
+          status TEXT NOT NULL, complete INTEGER NOT NULL DEFAULT 0, expected_count INTEGER,
+          collected_count INTEGER NOT NULL DEFAULT 0, cursor TEXT, error TEXT,
+          started_at TEXT NOT NULL, finished_at TEXT
+        );
+        CREATE TABLE IF NOT EXISTS relationship_members (
+          instagram_profile_id TEXT PRIMARY KEY, username TEXT NOT NULL,
+          display_name TEXT, avatar_url TEXT, posts INTEGER, followers INTEGER, following INTEGER,
+          bio TEXT, privacy TEXT, profile_observed_at TEXT, username_observed_at TEXT NOT NULL,
+          created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS relationship_run_members (
+          run_id INTEGER NOT NULL REFERENCES relationship_runs(id) ON DELETE CASCADE,
+          instagram_profile_id TEXT NOT NULL REFERENCES relationship_members(instagram_profile_id),
+          username TEXT NOT NULL, position INTEGER NOT NULL DEFAULT 0,
+          PRIMARY KEY(run_id,instagram_profile_id)
+        );
+        CREATE TABLE IF NOT EXISTS account_relationships (
+          account_id INTEGER NOT NULL REFERENCES accounts(id), direction TEXT NOT NULL,
+          instagram_profile_id TEXT NOT NULL REFERENCES relationship_members(instagram_profile_id),
+          username TEXT NOT NULL, first_seen_at TEXT NOT NULL, last_seen_at TEXT NOT NULL,
+          active INTEGER NOT NULL DEFAULT 1, removed_at TEXT,
+          PRIMARY KEY(account_id,direction,instagram_profile_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_account_relationships_active
+          ON account_relationships(account_id,direction,active,username);
+        CREATE TABLE IF NOT EXISTS relationship_history (
+          id INTEGER PRIMARY KEY, account_id INTEGER NOT NULL REFERENCES accounts(id),
+          direction TEXT NOT NULL, change_kind TEXT NOT NULL,
+          instagram_profile_id TEXT REFERENCES relationship_members(instagram_profile_id),
+          username TEXT, interval_change INTEGER NOT NULL DEFAULT 0,
+          observed_at TEXT NOT NULL, run_id INTEGER REFERENCES relationship_runs(id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_relationship_history_account
+          ON relationship_history(account_id,observed_at DESC,id DESC);
+        CREATE TABLE IF NOT EXISTS member_enrichment_jobs (
+          id INTEGER PRIMARY KEY, instagram_profile_id TEXT NOT NULL REFERENCES relationship_members(instagram_profile_id),
+          reason TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending', available_at TEXT NOT NULL,
+          attempts INTEGER NOT NULL DEFAULT 0, lease_until TEXT, last_error TEXT,
+          created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_member_enrichment_jobs_ready
+          ON member_enrichment_jobs(status,available_at,id);
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_member_enrichment_jobs_one_open
+          ON member_enrichment_jobs(instagram_profile_id) WHERE status IN ('pending','leased');
+        CREATE TABLE IF NOT EXISTS member_enrichment_attempts (
+          id INTEGER PRIMARY KEY, instagram_profile_id TEXT NOT NULL,
+          status TEXT NOT NULL, error TEXT, attempted_at TEXT NOT NULL
+        );
         """)
         self._add_column_if_missing("accounts", "effective_url", "TEXT")
         self._add_column_if_missing("accounts", "instagram_profile_id", "TEXT")
         self._add_column_if_missing("accounts", "sort_order", "INTEGER NOT NULL DEFAULT 0")
+        self._add_column_if_missing("accounts", "relationship_tracking", "INTEGER NOT NULL DEFAULT 1")
+        self._add_column_if_missing("accounts", "relationship_status", "TEXT NOT NULL DEFAULT 'unavailable'")
+        self._add_column_if_missing("accounts", "relationship_frozen_at", "TEXT")
+        self._add_column_if_missing("accounts", "followers_baseline_at", "TEXT")
+        self._add_column_if_missing("accounts", "following_baseline_at", "TEXT")
+        self._add_column_if_missing("accounts", "relationship_reconciled_at", "TEXT")
+        self._add_column_if_missing("accounts", "identity_verified_source", "TEXT")
+        self._add_column_if_missing("accounts", "identity_verified_at", "TEXT")
+        self._add_column_if_missing("accounts", "identity_conflict_json", "TEXT")
+        self._add_column_if_missing("relationship_jobs", "started_at", "TEXT")
         self._add_column_if_missing("media", "duplicate_of_id", "INTEGER")
         self._add_column_if_missing("media", "fingerprint_json", "TEXT")
         self._add_column_if_missing("media", "file_size", "INTEGER")
@@ -104,13 +182,21 @@ class Database:
             con.execute("UPDATE accounts SET enabled=0, updated_at=?", (now,))
             for sort_order, account in enumerate(accounts):
                 con.execute("""
-                  INSERT INTO accounts(url,account_key,label,enabled,sort_order,effective_url,created_at,updated_at)
-                  VALUES(?,?,?,?,?,?,?,?)
+                  INSERT INTO accounts(url,account_key,label,enabled,sort_order,effective_url,
+                    relationship_tracking,created_at,updated_at)
+                  VALUES(?,?,?,?,?,?,?,?,?)
                   ON CONFLICT(url) DO UPDATE SET account_key=excluded.account_key,
                     label=excluded.label,enabled=excluded.enabled,sort_order=excluded.sort_order,
+                    relationship_tracking=excluded.relationship_tracking,
                     updated_at=excluded.updated_at
                 """, (account.url, account.key, account.label, int(account.enabled), sort_order,
-                      account.url, now, now))
+                      account.url, int(account.relationship_tracking), now, now))
+            con.execute(
+                """UPDATE relationship_jobs SET status='cancelled',lease_until=NULL,updated_at=?
+                   WHERE status IN ('pending','leased') AND account_id IN (
+                     SELECT id FROM accounts WHERE enabled=0 OR relationship_tracking=0
+                   )""", (now,)
+            )
 
     def enabled_accounts(self) -> list[dict[str, Any]]:
         return [dict(r) for r in self.conn.execute(
@@ -182,6 +268,688 @@ class Database:
         url = f"https://insta-stories-viewer.com/{username}/"
         self.conn.execute("UPDATE accounts SET effective_url=?,updated_at=? WHERE id=?", (url, now, account_id))
         self.conn.commit()
+
+    def set_relationship_status(self, account_id: int, status: str) -> None:
+        self.conn.execute(
+            "UPDATE accounts SET relationship_status=?,updated_at=? WHERE id=?",
+            (status, utc_now(), account_id),
+        )
+        self.conn.commit()
+
+    def freeze_relationships(self, account_id: int, observed_at: str) -> None:
+        with self.transaction() as con:
+            con.execute(
+                """UPDATE accounts SET relationship_status='frozen',relationship_frozen_at=?,updated_at=?
+                   WHERE id=?""",
+                (observed_at, utc_now(), account_id),
+            )
+            con.execute(
+                """UPDATE relationship_jobs SET status='cancelled',lease_until=NULL,updated_at=?
+                   WHERE account_id=? AND status IN ('pending','leased')""",
+                (utc_now(), account_id),
+            )
+
+    def enqueue_relationship_job(
+        self,
+        account_id: int,
+        need_followers: bool,
+        need_following: bool,
+        reason: str,
+        available_at: str,
+    ) -> int:
+        now = utc_now()
+        with self.transaction() as con:
+            row = con.execute(
+                """SELECT id,need_followers,need_following FROM relationship_jobs
+                   WHERE account_id=? AND status IN ('pending','leased') ORDER BY id LIMIT 1""",
+                (account_id,),
+            ).fetchone()
+            if row:
+                con.execute(
+                    """UPDATE relationship_jobs SET need_followers=?,need_following=?,reason=?,updated_at=?
+                       WHERE id=?""",
+                    (
+                        int(bool(row["need_followers"]) or need_followers),
+                        int(bool(row["need_following"]) or need_following),
+                        reason,
+                        now,
+                        row["id"],
+                    ),
+                )
+                return int(row["id"])
+            cursor = con.execute(
+                """INSERT INTO relationship_jobs(
+                     account_id,need_followers,need_following,reason,status,available_at,created_at,updated_at
+                   ) VALUES(?,?,?,?, 'pending',?,?,?)""",
+                (account_id, int(need_followers), int(need_following), reason, available_at, now, now),
+            )
+            con.execute(
+                """UPDATE accounts SET relationship_status=CASE
+                     WHEN relationship_status='scope_exceeded' THEN relationship_status ELSE 'queued' END,
+                     updated_at=? WHERE id=?""",
+                (now, account_id),
+            )
+            return int(cursor.lastrowid)
+
+    def relationship_jobs(self, account_id: int | None = None) -> list[dict[str, Any]]:
+        if account_id is None:
+            rows = self.conn.execute("SELECT * FROM relationship_jobs ORDER BY id")
+        else:
+            rows = self.conn.execute(
+                "SELECT * FROM relationship_jobs WHERE account_id=? ORDER BY id", (account_id,)
+            )
+        return [dict(row) for row in rows]
+
+    def get_relationship_job(self, job_id: int) -> dict[str, Any]:
+        row = self.conn.execute("SELECT * FROM relationship_jobs WHERE id=?", (job_id,)).fetchone()
+        if row is None:
+            raise KeyError(job_id)
+        return dict(row)
+
+    def has_open_relationship_job(self, account_id: int) -> bool:
+        return self.conn.execute(
+            """SELECT 1 FROM relationship_jobs WHERE account_id=?
+               AND status IN ('pending','leased') LIMIT 1""", (account_id,)
+        ).fetchone() is not None
+
+    def enqueue_due_reconciliations(self, now: datetime, days: int, random_uniform) -> int:
+        queued = 0
+        threshold = now - timedelta(days=days)
+        rows = self.conn.execute(
+            """SELECT * FROM accounts WHERE enabled=1 AND relationship_tracking=1
+               ORDER BY sort_order,id"""
+        ).fetchall()
+        for row in rows:
+            if self.has_open_relationship_job(row["id"]):
+                continue
+            if not row["snapshot_json"] or json.loads(row["snapshot_json"]).get("privacy") != "public":
+                continue
+            reconciled = row["relationship_reconciled_at"]
+            if reconciled and datetime.fromisoformat(reconciled) > threshold:
+                continue
+            available = now + timedelta(seconds=random_uniform(0, 86_400))
+            self.enqueue_relationship_job(
+                row["id"], True, True, "reconciliation", available.isoformat(timespec="seconds")
+            )
+            queued += 1
+        return queued
+
+    def prune_relationship_data(self, now: datetime) -> None:
+        history_cutoff = (now - timedelta(days=365)).isoformat(timespec="seconds")
+        run_cutoff = (now - timedelta(days=90)).isoformat(timespec="seconds")
+        with self.transaction() as con:
+            con.execute("DELETE FROM relationship_history WHERE observed_at<?", (history_cutoff,))
+            con.execute(
+                """UPDATE relationship_history SET run_id=NULL WHERE run_id IN (
+                     SELECT id FROM relationship_runs WHERE started_at<?
+                   )""", (run_cutoff,)
+            )
+            con.execute("DELETE FROM relationship_runs WHERE started_at<?", (run_cutoff,))
+            con.execute("DELETE FROM member_enrichment_attempts WHERE attempted_at<?", (run_cutoff,))
+            con.execute(
+                "DELETE FROM member_enrichment_jobs WHERE status IN ('completed','cancelled') AND updated_at<?",
+                (history_cutoff,),
+            )
+            con.execute(
+                "DELETE FROM account_relationships WHERE active=0 AND removed_at<?", (history_cutoff,)
+            )
+            con.execute(
+                """DELETE FROM relationship_members WHERE updated_at<?
+                   AND NOT EXISTS(SELECT 1 FROM account_relationships ar
+                                  WHERE ar.instagram_profile_id=relationship_members.instagram_profile_id
+                                    AND ar.active=1)
+                   AND NOT EXISTS(SELECT 1 FROM member_enrichment_jobs ej
+                                  WHERE ej.instagram_profile_id=relationship_members.instagram_profile_id
+                                    AND ej.status IN ('pending','leased'))""", (history_cutoff,)
+            )
+
+    def collector_state(self) -> dict[str, Any]:
+        row = self.conn.execute("SELECT * FROM collector_state WHERE id=1").fetchone()
+        if row is None:
+            now = utc_now()
+            self.conn.execute(
+                "INSERT INTO collector_state(id,state,updated_at) VALUES(1,'unconfigured',?)", (now,)
+            )
+            self.conn.commit()
+            row = self.conn.execute("SELECT * FROM collector_state WHERE id=1").fetchone()
+        return dict(row)
+
+    def enqueue_relationship_watchdogs(self, now: datetime) -> None:
+        relationship_cutoff = (now - timedelta(hours=24)).isoformat(timespec="seconds")
+        member_cutoff = (now - timedelta(hours=72)).isoformat(timespec="seconds")
+        created_at = now.isoformat(timespec="seconds")
+        with self.transaction() as con:
+            for row in con.execute(
+                """SELECT j.id,j.account_id,a.label FROM relationship_jobs j
+                   JOIN accounts a ON a.id=j.account_id
+                   WHERE j.status IN ('pending','leased') AND j.created_at<=?""",
+                (relationship_cutoff,),
+            ).fetchall():
+                con.execute(
+                    """INSERT OR IGNORE INTO events(event_key,account_id,kind,payload_json,created_at)
+                       VALUES(?,?,'queue_stuck',?,?)""",
+                    (
+                        f"relationship-queue-stuck:{row['id']}", row["account_id"],
+                        json.dumps({"queue": "relationship", "label": row["label"], "job_id": row["id"]}),
+                        created_at,
+                    ),
+                )
+            for row in con.execute(
+                """SELECT id FROM member_enrichment_jobs
+                   WHERE status IN ('pending','leased') AND created_at<=?""",
+                (member_cutoff,),
+            ).fetchall():
+                con.execute(
+                    """INSERT OR IGNORE INTO events(event_key,kind,payload_json,created_at)
+                       VALUES(?,'queue_stuck',?,?)""",
+                    (
+                        f"member-queue-stuck:{row['id']}",
+                        json.dumps({"queue": "member_enrichment", "job_id": row["id"]}), created_at,
+                    ),
+                )
+
+    def set_collector_state(self, state: str, changed_at: str) -> None:
+        previous = self.collector_state()
+        with self.transaction() as con:
+            con.execute(
+                """UPDATE collector_state SET state=?,risk_reason=NULL,updated_at=? WHERE id=1""",
+                (state, changed_at),
+            )
+            if previous["state"] != state:
+                con.execute(
+                    """INSERT OR IGNORE INTO events(event_key,kind,payload_json,created_at)
+                       VALUES(?,?,?,?)""",
+                    (
+                        f"collector-state:{state}:{changed_at}",
+                        "collector_state",
+                        json.dumps({"old_state": previous["state"], "state": state}),
+                        changed_at,
+                    ),
+                )
+
+    def begin_collector_observation(self, observed_at: str) -> None:
+        previous = self.collector_state()
+        with self.transaction() as con:
+            con.execute(
+                """UPDATE collector_state SET state='observing',observed_since=?,approved_at=NULL,
+                   canary_account_id=NULL,canary_started_at=NULL,last_health_check_at=?,
+                   last_job_started_at=NULL,risk_reason=NULL,updated_at=? WHERE id=1""",
+                (observed_at, observed_at, observed_at),
+            )
+            if previous["state"] != "observing":
+                con.execute(
+                    """INSERT OR IGNORE INTO events(event_key,kind,payload_json,created_at)
+                       VALUES(?,?,?,?)""",
+                    (
+                        f"collector-state:observing:{observed_at}", "collector_state",
+                        json.dumps({"old_state": previous["state"], "state": "observing"}), observed_at,
+                    ),
+                )
+
+    def update_collector_health(self, checked_at: str) -> None:
+        self.conn.execute(
+            "UPDATE collector_state SET last_health_check_at=?,updated_at=? WHERE id=1",
+            (checked_at, checked_at),
+        )
+        self.conn.commit()
+
+    def approve_collector_canary(self, account_id: int, approved_at: str) -> None:
+        previous = self.collector_state()
+        with self.transaction() as con:
+            con.execute(
+                """UPDATE collector_state SET state='canary',approved_at=?,canary_account_id=?,
+                   canary_started_at=?,updated_at=? WHERE id=1""",
+                (approved_at, account_id, approved_at, approved_at),
+            )
+            con.execute(
+                """INSERT OR IGNORE INTO events(event_key,kind,payload_json,created_at)
+                   VALUES(?,?,?,?)""",
+                (
+                    f"collector-state:canary:{approved_at}", "collector_state",
+                    json.dumps({"old_state": previous["state"], "state": "canary"}), approved_at,
+                ),
+            )
+
+    def place_collector_risk_hold(self, reason: str) -> None:
+        now = utc_now()
+        previous = self.collector_state()
+        with self.transaction() as con:
+            con.execute(
+                "UPDATE collector_state SET state='risk_hold',risk_reason=?,updated_at=? WHERE id=1",
+                (reason, now),
+            )
+            con.execute(
+                "UPDATE relationship_jobs SET status='pending',lease_until=NULL,updated_at=? WHERE status='leased'",
+                (now,),
+            )
+            if previous["state"] != "risk_hold":
+                con.execute(
+                    """INSERT OR IGNORE INTO events(event_key,kind,payload_json,created_at)
+                       VALUES(?,?,?,?)""",
+                    (
+                        f"collector-risk:{now}", "collector_state",
+                        json.dumps({"old_state": previous["state"], "state": "risk_hold", "reason": reason}), now,
+                    ),
+                )
+
+    def relationship_job_count_for_taipei_day(self, now: datetime) -> int:
+        local_day = now.astimezone(timezone(timedelta(hours=8))).date().isoformat()
+        row = self.conn.execute(
+            """SELECT COUNT(*) FROM relationship_jobs
+               WHERE started_at IS NOT NULL AND date(datetime(started_at), '+8 hours')=?""",
+            (local_day,),
+        ).fetchone()
+        return int(row[0])
+
+    def claim_relationship_job(self, now: str, canary_account_id: int | None = None) -> dict[str, Any] | None:
+        lease_until = (datetime.fromisoformat(now) + timedelta(minutes=30)).isoformat(timespec="seconds")
+        with self.transaction() as con:
+            con.execute(
+                """UPDATE relationship_jobs SET status='pending',lease_until=NULL,updated_at=?
+                   WHERE status='leased' AND lease_until<?""",
+                (now, now),
+            )
+            query = """SELECT j.* FROM relationship_jobs j JOIN accounts a ON a.id=j.account_id
+                       WHERE j.status='pending' AND j.available_at<=? AND a.enabled=1
+                         AND a.relationship_tracking=1"""
+            params: list[Any] = [now]
+            if canary_account_id is not None:
+                query += " AND j.account_id=?"
+                params.append(canary_account_id)
+            query += " ORDER BY CASE j.reason WHEN 'reopened' THEN 0 WHEN 'count_change' THEN 1 WHEN 'canary' THEN 2 ELSE 3 END,j.id LIMIT 1"
+            row = con.execute(query, params).fetchone()
+            if row is None:
+                return None
+            updated = con.execute(
+                """UPDATE relationship_jobs SET status='leased',lease_until=?,started_at=?,
+                   attempts=attempts+1,updated_at=?
+                   WHERE id=? AND status='pending'""",
+                (lease_until, now, now, row["id"]),
+            )
+            if updated.rowcount != 1:
+                return None
+            con.execute(
+                "UPDATE collector_state SET last_job_started_at=?,updated_at=? WHERE id=1", (now, now)
+            )
+            claimed = dict(row)
+            claimed["status"] = "leased"
+            claimed["lease_until"] = lease_until
+            return claimed
+
+    def finish_relationship_job(self, job_id: int, status: str, error: str | None = None) -> None:
+        self.conn.execute(
+            """UPDATE relationship_jobs SET status=?,lease_until=NULL,last_error=?,updated_at=? WHERE id=?""",
+            (status, error, utc_now(), job_id),
+        )
+        self.conn.commit()
+
+    def start_relationship_run(
+        self, job_id: int, account_id: int, direction: str, started_at: str
+    ) -> int:
+        cursor = self.conn.execute(
+            """INSERT INTO relationship_runs(job_id,account_id,direction,status,started_at)
+               VALUES(?,?,?,'running',?)""",
+            (job_id, account_id, direction, started_at),
+        )
+        self.conn.commit()
+        return int(cursor.lastrowid)
+
+    def stage_relationship_members(self, run_id: int, members: Iterable[Any]) -> None:
+        now = utc_now()
+        with self.transaction() as con:
+            start = con.execute(
+                "SELECT COALESCE(MAX(position),-1)+1 FROM relationship_run_members WHERE run_id=?", (run_id,)
+            ).fetchone()[0]
+            for offset, member in enumerate(members):
+                prior = con.execute(
+                    "SELECT username FROM relationship_members WHERE instagram_profile_id=?",
+                    (member.profile_id,),
+                ).fetchone()
+                con.execute(
+                    """INSERT INTO relationship_members(
+                         instagram_profile_id,username,display_name,avatar_url,username_observed_at,created_at,updated_at
+                       ) VALUES(?,?,?,?,?,?,?)
+                       ON CONFLICT(instagram_profile_id) DO UPDATE SET
+                         username=excluded.username,
+                         display_name=COALESCE(excluded.display_name,relationship_members.display_name),
+                         avatar_url=COALESCE(excluded.avatar_url,relationship_members.avatar_url),
+                         username_observed_at=excluded.username_observed_at,updated_at=excluded.updated_at""",
+                    (member.profile_id, member.username, member.display_name, member.avatar_url, now, now, now),
+                )
+                if prior and prior["username"].casefold() != member.username.casefold():
+                    con.execute(
+                        """INSERT OR IGNORE INTO member_enrichment_jobs(
+                             instagram_profile_id,reason,status,available_at,created_at,updated_at
+                           ) VALUES(?,'renamed','pending',?,?,?)""",
+                        (member.profile_id, now, now, now),
+                    )
+                con.execute(
+                    """INSERT OR REPLACE INTO relationship_run_members(
+                         run_id,instagram_profile_id,username,position) VALUES(?,?,?,?)""",
+                    (run_id, member.profile_id, member.username, start + offset),
+                )
+
+    def finish_relationship_run(
+        self, run_id: int, status: str, complete: bool, count: int, error: str | None = None
+    ) -> None:
+        self.conn.execute(
+            """UPDATE relationship_runs SET status=?,complete=?,collected_count=?,error=?,finished_at=?
+               WHERE id=?""",
+            (status, int(complete), count, error, utc_now(), run_id),
+        )
+        self.conn.commit()
+
+    def apply_complete_relationship_run(
+        self, run_id: int, account_id: int, direction: str, observed_at: str,
+        member_stale_days: int = 30,
+    ) -> None:
+        baseline_column = {
+            "followers": "followers_baseline_at", "following": "following_baseline_at"
+        }[direction]
+        with self.transaction() as con:
+            account = con.execute("SELECT * FROM accounts WHERE id=?", (account_id,)).fetchone()
+            staged_rows = con.execute(
+                "SELECT instagram_profile_id,username FROM relationship_run_members WHERE run_id=?",
+                (run_id,),
+            ).fetchall()
+            staged = {row["instagram_profile_id"]: row["username"] for row in staged_rows}
+            existing_rows = con.execute(
+                """SELECT instagram_profile_id,username FROM account_relationships
+                   WHERE account_id=? AND direction=? AND active=1""",
+                (account_id, direction),
+            ).fetchall()
+            existing = {row["instagram_profile_id"]: row["username"] for row in existing_rows}
+            has_baseline = account[baseline_column] is not None
+            opposite_baseline = (
+                account["following_baseline_at"] if direction == "followers"
+                else account["followers_baseline_at"]
+            )
+            existing_mutual_rows = con.execute(
+                """SELECT f.instagram_profile_id,f.username FROM account_relationships f
+                   JOIN account_relationships g ON g.account_id=f.account_id
+                    AND g.instagram_profile_id=f.instagram_profile_id
+                    AND g.direction='following' AND g.active=1
+                   WHERE f.account_id=? AND f.direction='followers' AND f.active=1""",
+                (account_id,),
+            ).fetchall()
+            existing_mutual = {
+                row["instagram_profile_id"]: row["username"] for row in existing_mutual_rows
+            }
+            joined = sorted(set(staged) - set(existing))
+            left = sorted(set(existing) - set(staged))
+            interval_change = int(account["relationship_frozen_at"] is not None)
+
+            for profile_id, username in staged.items():
+                con.execute(
+                    """INSERT INTO account_relationships(
+                         account_id,direction,instagram_profile_id,username,first_seen_at,last_seen_at,active
+                       ) VALUES(?,?,?,?,?,?,1)
+                       ON CONFLICT(account_id,direction,instagram_profile_id) DO UPDATE SET
+                         username=excluded.username,last_seen_at=excluded.last_seen_at,active=1,removed_at=NULL""",
+                    (account_id, direction, profile_id, username, observed_at, observed_at),
+                )
+            for profile_id in left:
+                con.execute(
+                    """UPDATE account_relationships SET active=0,removed_at=?,last_seen_at=?
+                       WHERE account_id=? AND direction=? AND instagram_profile_id=?""",
+                    (observed_at, observed_at, account_id, direction, profile_id),
+                )
+            if has_baseline:
+                for kind, identifiers, names in (
+                    ("joined", joined, staged), ("left", left, existing)
+                ):
+                    for profile_id in identifiers:
+                        con.execute(
+                            """INSERT INTO relationship_history(
+                                 account_id,direction,change_kind,instagram_profile_id,username,
+                                 interval_change,observed_at,run_id) VALUES(?,?,?,?,?,?,?,?)""",
+                            (account_id, direction, kind, profile_id, names[profile_id], interval_change, observed_at, run_id),
+                        )
+            new_mutual_rows = con.execute(
+                """SELECT f.instagram_profile_id,f.username FROM account_relationships f
+                   JOIN account_relationships g ON g.account_id=f.account_id
+                    AND g.instagram_profile_id=f.instagram_profile_id
+                    AND g.direction='following' AND g.active=1
+                   WHERE f.account_id=? AND f.direction='followers' AND f.active=1""",
+                (account_id,),
+            ).fetchall()
+            new_mutual = {row["instagram_profile_id"]: row["username"] for row in new_mutual_rows}
+            mutual_joined = sorted(set(new_mutual) - set(existing_mutual))
+            mutual_left = sorted(set(existing_mutual) - set(new_mutual))
+            if has_baseline and opposite_baseline:
+                for kind, identifiers, names in (
+                    ("joined", mutual_joined, new_mutual), ("left", mutual_left, existing_mutual)
+                ):
+                    for profile_id in identifiers:
+                        con.execute(
+                            """INSERT INTO relationship_history(
+                                 account_id,direction,change_kind,instagram_profile_id,username,
+                                 interval_change,observed_at,run_id) VALUES(?,'mutual',?,?,?,?,?,?)""",
+                            (account_id, kind, profile_id, names[profile_id], interval_change, observed_at, run_id),
+                        )
+            for profile_id in joined:
+                member_row = con.execute(
+                    "SELECT profile_observed_at FROM relationship_members WHERE instagram_profile_id=?",
+                    (profile_id,),
+                ).fetchone()
+                stale_cutoff = (
+                    datetime.fromisoformat(observed_at) - timedelta(days=member_stale_days)
+                ).isoformat(timespec="seconds")
+                if not member_row["profile_observed_at"] or member_row["profile_observed_at"] <= stale_cutoff:
+                    con.execute(
+                        """INSERT OR IGNORE INTO member_enrichment_jobs(
+                             instagram_profile_id,reason,status,available_at,created_at,updated_at
+                           ) VALUES(?,'new_member','pending',?,?,?)""",
+                        (profile_id, observed_at, observed_at, observed_at),
+                    )
+            payload = {
+                "label": account["label"], "direction": direction,
+                "baseline": not has_baseline, "total": len(staged),
+                "joined": [staged[item] for item in joined[:20]],
+                "left": [existing[item] for item in left[:20]],
+                "joined_count": len(joined) if has_baseline else 0,
+                "left_count": len(left) if has_baseline else 0,
+                "mutual_available": bool(opposite_baseline),
+                "mutual_joined": [new_mutual[item] for item in mutual_joined[:20]],
+                "mutual_left": [existing_mutual[item] for item in mutual_left[:20]],
+                "mutual_joined_count": len(mutual_joined) if has_baseline and opposite_baseline else 0,
+                "mutual_left_count": len(mutual_left) if has_baseline and opposite_baseline else 0,
+                "private_interval": bool(interval_change),
+                "private_interval_started_at": account["relationship_frozen_at"],
+            }
+            con.execute(
+                """INSERT OR IGNORE INTO events(event_key,account_id,kind,payload_json,created_at)
+                   VALUES(?,?,?,?,?)""",
+                (f"relationship:{run_id}", account_id, "relationship_digest", json.dumps(payload, ensure_ascii=False), observed_at),
+            )
+            con.execute(
+                f"""UPDATE accounts SET {baseline_column}=?,
+                    relationship_status=CASE
+                      WHEN relationship_status='scope_exceeded' THEN 'scope_exceeded'
+                      WHEN relationship_frozen_at IS NULL THEN 'complete' ELSE 'frozen' END,
+                    relationship_reconciled_at=?,updated_at=? WHERE id=?""",
+                (observed_at, observed_at, observed_at, account_id),
+            )
+            con.execute("DELETE FROM relationship_run_members WHERE run_id=?", (run_id,))
+
+    def finalize_relationship_account(self, account_id: int, observed_at: str) -> None:
+        self.conn.execute(
+            """UPDATE accounts SET relationship_status=CASE
+                 WHEN relationship_status='scope_exceeded' THEN 'scope_exceeded' ELSE 'complete' END,
+               relationship_frozen_at=NULL,
+               relationship_reconciled_at=?,updated_at=? WHERE id=?""",
+            (observed_at, observed_at, account_id),
+        )
+        self.conn.commit()
+
+    def relationship_memberships(self, account_id: int, direction: Any) -> list[dict[str, Any]]:
+        value = direction.value if hasattr(direction, "value") else str(direction)
+        rows = self.conn.execute(
+            """SELECT ar.*,rm.display_name,rm.avatar_url,rm.profile_observed_at
+               FROM account_relationships ar JOIN relationship_members rm
+                 ON rm.instagram_profile_id=ar.instagram_profile_id
+               WHERE ar.account_id=? AND ar.direction=? AND ar.active=1 ORDER BY ar.username""",
+            (account_id, value),
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    def relationship_history(self, account_id: int) -> list[dict[str, Any]]:
+        return [dict(row) for row in self.conn.execute(
+            "SELECT * FROM relationship_history WHERE account_id=? ORDER BY id", (account_id,)
+        )]
+
+    def set_verified_identity(self, account_id: int, profile_id: str, observed_at: str) -> None:
+        self.conn.execute(
+            """UPDATE accounts SET instagram_profile_id=?,identity_verified_source='instagrapi',
+               identity_verified_at=?,identity_conflict_json=NULL,updated_at=? WHERE id=?""",
+            (profile_id, observed_at, observed_at, account_id),
+        )
+        self.conn.commit()
+
+    def record_identity_conflict(self, account_id: int, observed_profile_id: str, observed_at: str) -> None:
+        account = self.get_account_by_id(account_id)
+        payload = {
+            "stored_profile_id": account.get("instagram_profile_id") if account else None,
+            "observed_profile_id": observed_profile_id,
+            "observed_at": observed_at,
+        }
+        with self.transaction() as con:
+            con.execute(
+                "UPDATE accounts SET identity_conflict_json=?,relationship_status='identity_conflict',updated_at=? WHERE id=?",
+                (json.dumps(payload), observed_at, account_id),
+            )
+            con.execute(
+                """INSERT OR IGNORE INTO events(event_key,account_id,kind,payload_json,created_at)
+                   VALUES(?,?,?,?,?)""",
+                (f"identity-conflict:{account_id}:{observed_at}", account_id, "identity_conflict", json.dumps(payload), observed_at),
+            )
+
+    def member_enrichment_count_for_taipei_day(self, now: datetime) -> int:
+        local_day = now.astimezone(timezone(timedelta(hours=8))).date().isoformat()
+        row = self.conn.execute(
+            """SELECT COUNT(*) FROM member_enrichment_attempts
+               WHERE date(datetime(attempted_at), '+8 hours')=?""", (local_day,)
+        ).fetchone()
+        return int(row[0])
+
+    def last_member_enrichment_attempt(self) -> str | None:
+        row = self.conn.execute(
+            "SELECT attempted_at FROM member_enrichment_attempts ORDER BY attempted_at DESC,id DESC LIMIT 1"
+        ).fetchone()
+        return row[0] if row else None
+
+    def claim_member_enrichment_job(self, now: str) -> dict[str, Any] | None:
+        lease_until = (datetime.fromisoformat(now) + timedelta(minutes=10)).isoformat(timespec="seconds")
+        with self.transaction() as con:
+            con.execute(
+                """UPDATE member_enrichment_jobs SET status='pending',lease_until=NULL,updated_at=?
+                   WHERE status='leased' AND lease_until<?""", (now, now)
+            )
+            row = con.execute(
+                """SELECT * FROM member_enrichment_jobs WHERE status='pending' AND available_at<=?
+                   ORDER BY CASE reason WHEN 'manual' THEN 0 WHEN 'renamed' THEN 1 ELSE 2 END,id LIMIT 1""",
+                (now,),
+            ).fetchone()
+            if not row:
+                return None
+            con.execute(
+                """UPDATE member_enrichment_jobs SET status='leased',lease_until=?,attempts=attempts+1,
+                   updated_at=? WHERE id=?""", (lease_until, now, row["id"])
+            )
+            con.execute(
+                """INSERT INTO member_enrichment_attempts(instagram_profile_id,status,attempted_at)
+                   VALUES(?,'started',?)""", (row["instagram_profile_id"], now)
+            )
+            result = dict(row)
+            result["status"] = "leased"
+            return result
+
+    def relationship_member(self, profile_id: str) -> dict[str, Any] | None:
+        row = self.conn.execute(
+            "SELECT * FROM relationship_members WHERE instagram_profile_id=?", (profile_id,)
+        ).fetchone()
+        return dict(row) if row else None
+
+    def enqueue_member_enrichment(self, profile_id: str, reason: str, available_at: str) -> bool:
+        now = utc_now()
+        try:
+            cursor = self.conn.execute(
+                """INSERT INTO member_enrichment_jobs(
+                     instagram_profile_id,reason,status,available_at,created_at,updated_at
+                   ) VALUES(?,?,'pending',?,?,?)""",
+                (profile_id, reason, available_at, now, now),
+            )
+            self.conn.commit()
+            return cursor.rowcount == 1
+        except sqlite3.IntegrityError:
+            return False
+
+    def finish_member_enrichment_job(self, job_id: int, status: str, error: str | None = None) -> None:
+        with self.transaction() as con:
+            job = con.execute("SELECT * FROM member_enrichment_jobs WHERE id=?", (job_id,)).fetchone()
+            con.execute(
+                """UPDATE member_enrichment_jobs SET status=?,lease_until=NULL,last_error=?,updated_at=?
+                   WHERE id=?""", (status, error, utc_now(), job_id)
+            )
+            if job:
+                con.execute(
+                    """UPDATE member_enrichment_attempts SET status=?,error=?
+                       WHERE id=(SELECT MAX(id) FROM member_enrichment_attempts
+                                WHERE instagram_profile_id=?)""",
+                    (status, error, job["instagram_profile_id"]),
+                )
+
+    def retry_member_enrichment_job(self, job_id: int, available_at: str, error: str) -> None:
+        with self.transaction() as con:
+            job = con.execute("SELECT * FROM member_enrichment_jobs WHERE id=?", (job_id,)).fetchone()
+            con.execute(
+                """UPDATE member_enrichment_jobs SET status='pending',available_at=?,lease_until=NULL,
+                   last_error=?,updated_at=? WHERE id=?""", (available_at, error, utc_now(), job_id)
+            )
+            if job:
+                con.execute(
+                    """UPDATE member_enrichment_attempts SET status='failed',error=?
+                       WHERE id=(SELECT MAX(id) FROM member_enrichment_attempts
+                                WHERE instagram_profile_id=?)""",
+                    (error, job["instagram_profile_id"]),
+                )
+
+    def apply_member_profile(self, job: dict[str, Any], snapshot: ProfileSnapshot, observed_at: str) -> None:
+        profile_id = job["instagram_profile_id"]
+        current = self.relationship_member(profile_id)
+        old_username = current["username"] if current else None
+        with self.transaction() as con:
+            con.execute(
+                """UPDATE relationship_members SET username=?,display_name=?,avatar_url=?,posts=?,
+                   followers=?,following=?,bio=?,privacy=?,profile_observed_at=?,
+                   username_observed_at=?,updated_at=? WHERE instagram_profile_id=?""",
+                (
+                    snapshot.username, snapshot.display_name, snapshot.avatar_url, snapshot.posts,
+                    snapshot.followers, snapshot.following, snapshot.bio, snapshot.privacy.value,
+                    observed_at, observed_at, observed_at, profile_id,
+                ),
+            )
+            con.execute(
+                "UPDATE account_relationships SET username=? WHERE instagram_profile_id=?",
+                (snapshot.username, profile_id),
+            )
+            con.execute(
+                """UPDATE member_enrichment_jobs SET status='completed',lease_until=NULL,last_error=NULL,
+                   updated_at=? WHERE id=?""", (observed_at, job["id"])
+            )
+            con.execute(
+                """UPDATE member_enrichment_attempts SET status='completed'
+                   WHERE id=(SELECT MAX(id) FROM member_enrichment_attempts
+                            WHERE instagram_profile_id=?)""", (profile_id,)
+            )
+            if old_username and old_username.casefold() != snapshot.username.casefold():
+                con.execute(
+                    """INSERT INTO relationship_history(
+                         account_id,direction,change_kind,instagram_profile_id,username,observed_at)
+                       SELECT DISTINCT account_id,'profile','renamed',?,?,? FROM account_relationships
+                       WHERE instagram_profile_id=?""",
+                    (profile_id, f"{old_username} -> {snapshot.username}", observed_at, profile_id),
+                )
 
     def apify_reserved_total(self, cycle_key: str) -> float:
         row = self.conn.execute("SELECT COALESCE(SUM(reservation_usd),0) FROM apify_usage WHERE cycle_key=?", (cycle_key,)).fetchone()

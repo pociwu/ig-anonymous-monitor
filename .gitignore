@@ -1,4 +1,5 @@
 .env
+collector-secrets/
 config.yaml
 .pytest_cache/
 __pycache__/

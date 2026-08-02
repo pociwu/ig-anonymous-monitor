@@ -92,6 +92,24 @@ class AccountRegistry:
             self._write_raw(raw)
             self._sync_database()
 
+    def set_relationship_tracking(self, account_id: int, enabled: bool) -> None:
+        with self._lock:
+            db = Database(self.db_path)
+            try:
+                row = db.get_account_by_id(account_id)
+            finally:
+                db.close()
+            if row is None:
+                raise ValueError("找不到監控帳號")
+            raw = self._read_raw()
+            for item in raw.get("accounts", []):
+                if normalize_account_url(item.get("url", "")) == row["url"]:
+                    item["relationship_tracking"] = bool(enabled)
+                    self._write_raw(raw)
+                    self._sync_database()
+                    return
+            raise ValueError("找不到監控帳號")
+
     def _read_raw(self) -> dict:
         raw = yaml.safe_load(self.config_path.read_text(encoding="utf-8")) or {}
         if not isinstance(raw, dict):

@@ -7,8 +7,6 @@ x-runtime: &runtime
   init: true
   user: "${PUID:-1000}:${PGID:-1000}"
   working_dir: /srv/ig-monitor
-  env_file:
-    - .env
   environment:
     HOME: /tmp
     IG_MONITOR_RUNTIME: docker
@@ -27,6 +25,16 @@ services:
       - --config
       - /srv/ig-monitor/config.yaml
     ipc: host
+    environment:
+      HOME: /tmp
+      IG_MONITOR_RUNTIME: docker
+      PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
+      PYTHONUNBUFFERED: "1"
+      TZ: Asia/Taipei
+      TELEGRAM_BOT_TOKEN: "${TELEGRAM_BOT_TOKEN:-}"
+      TELEGRAM_CHAT_ID: "${TELEGRAM_CHAT_ID:-}"
+      TELEGRAM_MESSAGE_THREAD_ID: "${TELEGRAM_MESSAGE_THREAD_ID:-}"
+      APIFY_API_TOKEN: "${APIFY_API_TOKEN:-}"
     volumes:
       - ./config.yaml:/srv/ig-monitor/config.yaml:ro
       - ./data:/srv/ig-monitor/data
@@ -35,6 +43,54 @@ services:
     tmpfs:
       - /tmp
     stop_grace_period: 5m
+
+  relationship-worker:
+    <<: *runtime
+    command:
+      - python
+      - -m
+      - ig_monitor.relationship_worker
+      - --config
+      - /srv/ig-monitor/config.yaml
+      - --session
+      - /srv/ig-monitor/collector-secrets/session.json
+    environment:
+      HOME: /tmp
+      IG_MONITOR_RUNTIME: docker
+      PYTHONUNBUFFERED: "1"
+      TZ: Asia/Taipei
+      IG_COLLECTOR_USERNAME: "${IG_COLLECTOR_USERNAME:-}"
+      IG_COLLECTOR_PASSWORD: "${IG_COLLECTOR_PASSWORD:-}"
+      IG_COLLECTOR_TOTP_SECRET: "${IG_COLLECTOR_TOTP_SECRET:-}"
+    depends_on:
+      monitor:
+        condition: service_started
+    volumes:
+      - ./config.yaml:/srv/ig-monitor/config.yaml:ro
+      - ./data:/srv/ig-monitor/data
+      - ./collector-secrets:/srv/ig-monitor/collector-secrets
+    read_only: true
+    tmpfs:
+      - /tmp
+
+  member-enrichment-worker:
+    <<: *runtime
+    command:
+      - python
+      - -m
+      - ig_monitor.member_worker
+      - --config
+      - /srv/ig-monitor/config.yaml
+    depends_on:
+      monitor:
+        condition: service_started
+    ipc: host
+    volumes:
+      - ./config.yaml:/srv/ig-monitor/config.yaml:ro
+      - ./data:/srv/ig-monitor/data
+    read_only: true
+    tmpfs:
+      - /tmp
 
   dashboard:
     <<: *runtime

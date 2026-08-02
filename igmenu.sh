@@ -189,6 +189,54 @@ PY
   pause_menu
 }
 
+collector_command() {
+  clear
+  printf '%s\n' "========================================"
+  printf ' IG Monitor｜Collector %s\n' "$1"
+  printf '%s\n' "========================================"
+  shift
+  compose run --rm --no-deps relationship-worker \
+    python -m ig_monitor --config "${CONTAINER_CONFIG}" \
+    --collector-session /srv/ig-monitor/collector-secrets/session.json "$@"
+  pause_menu
+}
+
+approve_canary() {
+  clear
+  read -r -p "請輸入 canary 帳號的 username、URL 或資料庫 ID：" account
+  if [[ -n "${account}" ]]; then
+    collector_command "核准 canary" --collector-approve "${account}"
+  fi
+}
+
+show_relationship_queues() {
+  clear
+  printf '%s\n' "========================================"
+  printf '%s\n' " IG Monitor｜名單巡檢佇列"
+  printf '%s\n' "========================================"
+  compose exec -T dashboard python - "${CONTAINER_DB}" <<'PY'
+import sqlite3, sys
+from pathlib import Path
+path = Path(sys.argv[1])
+if not path.is_file():
+    print("尚無狀態資料庫")
+    raise SystemExit
+con = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+con.row_factory = sqlite3.Row
+state = con.execute("SELECT state,observed_since,canary_account_id,risk_reason FROM collector_state WHERE id=1").fetchone()
+print("Collector：", dict(state) if state else "unconfigured")
+for table in ("relationship_jobs", "member_enrichment_jobs"):
+    print(f"\n{table}：")
+    for row in con.execute(f"SELECT status,COUNT(*) count FROM {table} GROUP BY status ORDER BY status"):
+        print(f"  {row['status']}: {row['count']}")
+print("\n帳號摘要：")
+for row in con.execute("SELECT label,relationship_status,followers_baseline_at,following_baseline_at FROM accounts WHERE enabled=1 ORDER BY sort_order,id"):
+    print(f"  {row['label']}: {row['relationship_status']} | followers={row['followers_baseline_at'] or '-'} | following={row['following_baseline_at'] or '-'}")
+con.close()
+PY
+  pause_menu
+}
+
 while true; do
   clear
   printf '%s\n' "========================================"
@@ -196,14 +244,24 @@ while true; do
   printf '%s\n' "========================================"
   printf '%s\n' " 1. 巡檢帳號／摘要內容"
   printf '%s\n' " 2. 排程時間"
+  printf '%s\n' " 3. Collector 狀態"
+  printf '%s\n' " 4. Collector 登入／開始 72 小時觀察"
+  printf '%s\n' " 5. 核准 7 天 canary"
+  printf '%s\n' " 6. Collector 風控恢復"
+  printf '%s\n' " 7. 名單巡檢佇列／摘要"
   printf '%s\n' " 0. 離開"
   printf '%s\n' "----------------------------------------"
-  read -r -p "請輸入選項 [0-2]：" choice
+  read -r -p "請輸入選項 [0-7]：" choice
 
   case "${choice}" in
     1) show_account_summary ;;
     2) show_schedule ;;
+    3) collector_command "狀態" --collector-status ;;
+    4) collector_command "登入" --collector-login ;;
+    5) approve_canary ;;
+    6) collector_command "恢復" --collector-recovery ;;
+    7) show_relationship_queues ;;
     0) printf '%s\n' "已離開。"; exit 0 ;;
-    *) printf '%s\n' "選項錯誤，請輸入 0、1 或 2。"; sleep 1 ;;
+    *) printf '%s\n' "選項錯誤，請輸入 0～7。"; sleep 1 ;;
   esac
 done

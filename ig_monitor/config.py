@@ -17,6 +17,7 @@ class AccountConfig:
     url: str
     enabled: bool
     label: str
+    relationship_tracking: bool = True
 
     @property
     def key(self) -> str:
@@ -90,6 +91,27 @@ class DedupConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class InstagramEnrichmentConfig:
+    enabled: bool
+    member_limit_per_direction: int
+    page_size: int
+    page_delay_min_seconds: int
+    page_delay_max_seconds: int
+    direction_delay_min_seconds: int
+    direction_delay_max_seconds: int
+    daily_relationship_jobs: int
+    minimum_job_interval_minutes: int
+    reconciliation_days: int
+    observation_hours: int
+    canary_days: int
+    daily_member_enrichments: int
+    member_delay_min_seconds: int
+    member_delay_max_seconds: int
+    member_retry_min_hours: int
+    member_stale_days: int
+
+
+@dataclass(frozen=True, slots=True)
 class AppConfig:
     accounts: tuple[AccountConfig, ...]
     paths: PathsConfig
@@ -100,6 +122,7 @@ class AppConfig:
     telegram: TelegramConfig
     apify: ApifyConfig
     dedup: DedupConfig
+    instagram_enrichment: InstagramEnrichmentConfig
     config_path: Path
 
 
@@ -148,7 +171,12 @@ def load_config(path: str | Path, require_telegram: bool = True) -> AppConfig:
             raise ValueError(f"重複網址：{url}")
         seen.add(url)
         key = url.rstrip("/").rsplit("/", 1)[-1]
-        accounts.append(AccountConfig(url, bool(item.get("enabled", True)), str(item.get("label") or key)))
+        accounts.append(AccountConfig(
+            url,
+            bool(item.get("enabled", True)),
+            str(item.get("label") or key),
+            bool(item.get("relationship_tracking", True)),
+        ))
 
     base = config_path.parent
     paths = _section(raw, "paths")
@@ -236,5 +264,56 @@ def load_config(path: str | Path, require_telegram: bool = True) -> AppConfig:
         video_duration_tolerance_percent=duration_percent,
     )
 
+    instagram = _section(raw, "instagram_enrichment")
+    instagram_cfg = InstagramEnrichmentConfig(
+        enabled=bool(instagram.get("enabled", False)),
+        member_limit_per_direction=int(instagram.get("member_limit_per_direction", 1000)),
+        page_size=int(instagram.get("page_size", 200)),
+        page_delay_min_seconds=int(instagram.get("page_delay_min_seconds", 10)),
+        page_delay_max_seconds=int(instagram.get("page_delay_max_seconds", 20)),
+        direction_delay_min_seconds=int(instagram.get("direction_delay_min_seconds", 120)),
+        direction_delay_max_seconds=int(instagram.get("direction_delay_max_seconds", 300)),
+        daily_relationship_jobs=int(instagram.get("daily_relationship_jobs", 6)),
+        minimum_job_interval_minutes=int(instagram.get("minimum_job_interval_minutes", 240)),
+        reconciliation_days=int(instagram.get("reconciliation_days", 30)),
+        observation_hours=int(instagram.get("observation_hours", 72)),
+        canary_days=int(instagram.get("canary_days", 7)),
+        daily_member_enrichments=int(instagram.get("daily_member_enrichments", 66)),
+        member_delay_min_seconds=int(instagram.get("member_delay_min_seconds", 30)),
+        member_delay_max_seconds=int(instagram.get("member_delay_max_seconds", 90)),
+        member_retry_min_hours=int(instagram.get("member_retry_min_hours", 6)),
+        member_stale_days=int(instagram.get("member_stale_days", 30)),
+    )
+    safe_maximums = {
+        "member_limit_per_direction": 1000,
+        "page_size": 200,
+        "daily_relationship_jobs": 6,
+        "daily_member_enrichments": 66,
+    }
+    safe_minimums = {
+        "page_delay_min_seconds": 10,
+        "direction_delay_min_seconds": 120,
+        "minimum_job_interval_minutes": 240,
+        "reconciliation_days": 30,
+        "observation_hours": 72,
+        "canary_days": 7,
+        "member_delay_min_seconds": 30,
+        "member_retry_min_hours": 6,
+        "member_stale_days": 30,
+    }
+    for name, maximum in safe_maximums.items():
+        value = getattr(instagram_cfg, name)
+        if value < 1 or value > maximum:
+            raise ValueError(f"instagram_enrichment.{name} must be between 1 and {maximum}")
+    for name, minimum in safe_minimums.items():
+        if getattr(instagram_cfg, name) < minimum:
+            raise ValueError(f"instagram_enrichment.{name} must be at least {minimum}")
+    if instagram_cfg.page_delay_max_seconds < instagram_cfg.page_delay_min_seconds:
+        raise ValueError("instagram_enrichment.page_delay_max_seconds must be at least page_delay_min_seconds")
+    if instagram_cfg.direction_delay_max_seconds < instagram_cfg.direction_delay_min_seconds:
+        raise ValueError("instagram_enrichment.direction_delay_max_seconds must be at least direction_delay_min_seconds")
+    if instagram_cfg.member_delay_max_seconds < instagram_cfg.member_delay_min_seconds:
+        raise ValueError("instagram_enrichment.member_delay_max_seconds must be at least member_delay_min_seconds")
+
     return AppConfig(tuple(accounts), path_cfg, browser_cfg, schedule_cfg, heartbeat_cfg,
-                     retention_cfg, telegram_cfg, apify_cfg, dedup_cfg, config_path)
+                     retention_cfg, telegram_cfg, apify_cfg, dedup_cfg, instagram_cfg, config_path)

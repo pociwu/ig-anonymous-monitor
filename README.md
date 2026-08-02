@@ -20,6 +20,61 @@ docker compose ps
 - `config.yaml` 對監控容器唯讀、對 Dashboard 可寫；`data/` 和 `downloads/` 持久化於主機。
 - Telegram、Apify 金鑰只由 `.env` 注入，且不會被加入映像。
 
+## 公開帳號 Followers／Following 巡檢
+
+此功能預設關閉，使用獨立的 `relationship-worker` 與固定 collector session；匿名的
+`member-enrichment-worker` 只讀成員個人頁欄位，不會展開貼文或 Stories。限制如下：
+
+- 僅處理公開監控帳號，每方向最多 1,000 位；超過時只顯示 `scope_exceeded`。
+- 匿名巡檢發現 Followers／Following 數量變更後，只排入有變化的方向。
+- 每日最多開始 6 個帳號工作，起始至少間隔 4 小時；頁面間隔 10～20 秒。
+- 不完整名單不會取代完整基準，也不會產生誤判的退出事件。
+- 成員補資料每日最多 66 位、每位間隔 30～90 秒；失敗至少 6 小時後再試。
+- 登入後強制觀察 72 小時，再人工核准一個帳號進行 7 天 canary；沒有略過選項。
+
+在 `/srv/ig-monitor/.env` 設定 collector，並建立只掛載給 relationship worker 的目錄：
+
+```env
+IG_COLLECTOR_USERNAME=collector_username
+IG_COLLECTOR_PASSWORD=collector_password
+IG_COLLECTOR_TOTP_SECRET=
+```
+
+```bash
+cd /srv/ig-monitor
+mkdir -p collector-secrets
+chmod 700 collector-secrets
+chmod 600 .env
+docker compose build
+docker compose up -d
+
+docker compose run --rm --no-deps relationship-worker \
+  python -m ig_monitor --config /srv/ig-monitor/config.yaml \
+  --collector-session /srv/ig-monitor/collector-secrets/session.json \
+  --collector-login
+```
+
+72 小時後檢查狀態並核准單一 canary：
+
+```bash
+docker compose run --rm --no-deps relationship-worker \
+  python -m ig_monitor --config /srv/ig-monitor/config.yaml \
+  --collector-session /srv/ig-monitor/collector-secrets/session.json \
+  --collector-status
+
+docker compose run --rm --no-deps relationship-worker \
+  python -m ig_monitor --config /srv/ig-monitor/config.yaml \
+  --collector-session /srv/ig-monitor/collector-secrets/session.json \
+  --collector-approve sin_9311
+```
+
+核准後才把 `config.yaml` 的 `instagram_enrichment.enabled` 改成 `true`，再執行
+`docker compose up -d`。canary 成功運作滿 7 天並完成最後一次雙向巡檢後，程式才會自動轉成
+`active`。發生 challenge、checkpoint、rate limit 等 collector-fatal 訊號會立即進入
+`risk_hold`；人工處理 Instagram 後使用 `--collector-recovery`，重新開始 72 小時觀察。
+
+Dashboard 的帳號詳情頁提供 Followers、Following、共同名單與 History，每頁 50 筆；首頁可逐帳號關閉名單巡檢。collector 登入、核准與恢復只允許 CLI／`igmenu.sh`，不提供網頁操作。
+
 既有 systemd/Miniconda 主機請依照
 [Ubuntu Docker 遷移指南](docs/docker-migration.md) 停止舊排程、備份 SQLite，再啟動容器。
 

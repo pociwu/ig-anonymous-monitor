@@ -67,6 +67,40 @@ class ProfileScraper:
         assert last is not None
         raise last
 
+    async def scrape_profile_only(self, url: str) -> ProfileSnapshot:
+        """Read profile metadata without activating or expanding any media tab."""
+        if not self._context:
+            raise RuntimeError("scraper is not started")
+        page = await self._context.new_page()
+        page.set_default_timeout(min(10_000, self.config.timeout_seconds * 1000))
+        deadline = time.monotonic() + self.config.timeout_seconds
+        try:
+            await page.goto(url, wait_until="domcontentloaded", timeout=self.config.timeout_seconds * 1000)
+            await page.locator(".profile__nickname").wait_for(
+                state="visible", timeout=self._remaining_ms(deadline)
+            )
+            await page.locator(".profile__stats").wait_for(
+                state="visible", timeout=self._remaining_ms(deadline)
+            )
+            await page.wait_for_function(
+                """() => { const i=document.querySelector('.profile__avatar-pic');
+                return !!i && i.complete && i.naturalWidth > 0; }""",
+                timeout=self._remaining_ms(deadline),
+            )
+            profile = await self._profile_data(page)
+            self._validate_profile(profile)
+            private = await page.get_by_text("This account is private", exact=False).count() > 0
+            return ProfileSnapshot(
+                username=profile["username"], display_name=profile.get("display_name"),
+                posts=profile["posts"], followers=profile["followers"],
+                following=profile["following"], bio=normalize_text(profile.get("bio")),
+                privacy=PrivacyState.PRIVATE if private else PrivacyState.PUBLIC,
+                avatar_url=profile["avatar_url"],
+                observed_at=datetime.now(UTC).isoformat(timespec="seconds"),
+            )
+        finally:
+            await page.close()
+
     async def _scrape_once(self, url: str) -> ScrapeResult:
         if not self._context:
             raise RuntimeError("scraper 尚未啟動")

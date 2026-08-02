@@ -3,6 +3,8 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
+import json
+from datetime import UTC, datetime
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
@@ -10,6 +12,8 @@ from .config import load_config
 from .db import Database
 from .dedup import deduplicate_existing_media
 from .monitor import Monitor, check_accounts
+from .instagram_source import InstagrapiRelationshipSource
+from .relationships import CollectorAdministration
 from .telegram import TelegramSender
 from .utils import process_lock
 
@@ -22,6 +26,11 @@ def build_parser() -> argparse.ArgumentParser:
     group.add_argument("--send-test", action="store_true", help="傳送 Telegram 測試訊息")
     group.add_argument("--reset-account", metavar="URL_OR_USERNAME", help="清除單一帳號監控基準")
     group.add_argument("--dedupe-media", action="store_true", help="Analyze and deduplicate downloaded media")
+    group.add_argument("--collector-status", action="store_true", help="Show non-secret collector state")
+    group.add_argument("--collector-login", action="store_true", help="Login and begin the 72-hour observation")
+    group.add_argument("--collector-approve", metavar="ACCOUNT", help="Approve one account as the seven-day canary")
+    group.add_argument("--collector-recovery", action="store_true", help="Begin a new observation after risk_hold")
+    parser.add_argument("--collector-session", default="collector-secrets/session.json")
     apply_group = parser.add_mutually_exclusive_group()
     apply_group.add_argument("--dry-run", action="store_true", help="Preview media deduplication")
     apply_group.add_argument("--apply", action="store_true", help="Apply media deduplication")
@@ -47,7 +56,10 @@ def setup_logging(data_dir: Path, verbose: bool = False, write_file: bool = True
 async def _async_main(args: argparse.Namespace) -> int:
     if (args.dry_run or args.apply) and not args.dedupe_media:
         raise ValueError("--dry-run/--apply can only be used with --dedupe-media")
-    config = load_config(args.config, require_telegram=not (args.check or args.dedupe_media))
+    collector_command = any((args.collector_status, args.collector_login, args.collector_approve, args.collector_recovery))
+    config = load_config(
+        args.config, require_telegram=not (args.check or args.dedupe_media or collector_command)
+    )
     setup_logging(config.paths.data_dir, write_file=not (args.check or args.dedupe_media))
     if args.check:
         return await check_accounts(config)
@@ -61,6 +73,30 @@ async def _async_main(args: argparse.Namespace) -> int:
     db = Database(config.paths.data_dir / "state.sqlite3")
     try:
         db.sync_accounts(config.accounts)
+        if collector_command:
+            source = InstagrapiRelationshipSource(Path(args.collector_session).expanduser().resolve())
+            admin = CollectorAdministration(db, source, config.instagram_enrichment)
+            now = datetime.now(UTC)
+            if args.collector_login:
+                status = admin.login(now)
+            elif args.collector_approve:
+                account = db.get_account(args.collector_approve)
+                if account is None and str(args.collector_approve).isdigit():
+                    account = db.get_account_by_id(int(args.collector_approve))
+                if account is None:
+                    raise ValueError(f"collector canary account not found: {args.collector_approve}")
+                status = admin.approve(account["id"], now)
+            elif args.collector_recovery:
+                status = admin.begin_recovery(now)
+            else:
+                status = admin.status(now)
+            print(json.dumps({
+                "state": status.state,
+                "observed_since": status.observed_since,
+                "canary_account_id": status.canary_account_id,
+                "risk_reason": status.risk_reason,
+            }, ensure_ascii=False, indent=2))
+            return 0
         if args.dedupe_media:
             if not args.dry_run and not args.apply:
                 raise ValueError("--dedupe-media requires --dry-run or --apply")

@@ -63,12 +63,13 @@ cp -a data/state.sqlite3 \
 cd /srv/ig-monitor
 git pull --ff-only origin main
 
-mkdir -p data downloads
+mkdir -p data downloads collector-secrets
 printf '\nPUID=%s\nPGID=%s\n' "$(id -u)" "$(id -g)" >> .env
-sudo chown -R "$(id -u):$(id -g)" data downloads
+sudo chown -R "$(id -u):$(id -g)" data downloads collector-secrets
 sudo chown "$(id -u):$(id -g)" config.yaml
 chmod 600 config.yaml
 chmod 600 .env
+chmod 700 collector-secrets
 ```
 
 Docker 內部仍使用 `/srv/ig-monitor`，因此 SQLite 既有的媒體絕對路徑仍然有效。
@@ -99,7 +100,9 @@ curl --fail http://127.0.0.1:8888/healthz
 - Dashboard 首頁可驗證、新增及移除監控帳號，因此 `config.yaml` 必須可由
   `PUID`/`PGID` 指定的使用者寫入。
 - 最多可監控 16 個帳號；拖曳首頁卡片後，顯示與巡檢順序會寫回 `config.yaml`。
-- 兩個容器共用 `data/` 與 `downloads/`。
+- `monitor`、`relationship-worker`、`member-enrichment-worker`、`dashboard` 共用 SQLite；只有
+  `relationship-worker` 會取得 collector 環境變數並掛載 `collector-secrets/`。
+- `monitor` 與 Dashboard 共用 `downloads/`；collector session 不在 `data/`，也不會掛載到其他容器。
 - Chromium、ffmpeg 及 ffprobe 已包含在映像，不再依賴 Miniconda。
 
 ## 5. 日常操作
@@ -110,6 +113,8 @@ cd /srv/ig-monitor
 docker compose ps
 docker compose logs -f monitor
 docker compose logs -f dashboard
+docker compose logs -f relationship-worker
+docker compose logs -f member-enrichment-worker
 docker compose restart monitor
 docker compose restart dashboard
 ```

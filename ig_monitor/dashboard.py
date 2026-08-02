@@ -86,6 +86,10 @@ CARD_PAGE = """<!doctype html>
   <div class="row"><span>媒體</span><span>{{ a.downloaded }} 已下載 / {{ a.pending }} 待處理</span></div>
 </a>
 {% if management_enabled %}
+<form class="remove-form" method="post" action="{{ url_for('toggle_relationship_tracking', account_id=a.id) }}">
+  <input type="hidden" name="enabled" value="{{ 0 if a.relationship_tracking else 1 }}">
+  <button type="submit">名單巡檢：{{ '開啟' if a.relationship_tracking else '關閉' }}</button>
+</form>
 <form class="remove-form" method="post" action="{{ url_for('remove_account', account_id=a.id) }}" onsubmit="return confirm('確定停止監控這個帳號？既有照片與影片會保留。')">
   <button type="submit">移除監控</button>
 </form>
@@ -135,7 +139,7 @@ DETAIL_PAGE = """<!doctype html>
 <div><h1>{{ account.display_name or account.label }}</h1><div class="muted">@{{ account.username or account.label }}</div>
 <div class="stats"><span><strong>{{ account.posts }}</strong>發文</span><span><strong>{{ account.followers }}</strong>跟隨者</span><span><strong>{{ account.following }}</strong>追蹤中</span></div></div>
 </section>
-<section class="meta"><div>Instagram Profile ID：{{ account.instagram_profile_id or '尚未建立' }}</div><div>有效網址：{{ account.effective_url }}</div>{% if account.bio %}<p>{{ account.bio }}</p>{% endif %}</section>
+<section class="meta"><div>Instagram Profile ID：{{ account.instagram_profile_id or '尚未建立' }}</div><div>有效網址：{{ account.effective_url }}</div>{% if account.bio %}<p>{{ account.bio }}</p>{% endif %}<p><a href="{{ url_for('account_relationships', account_id=account.id) }}">Followers／Following／共同名單／異動紀錄</a></p></section>
 <h2>照片與影片</h2>
 <nav class="tabs source-tabs">
 <button class="active" data-source="posts">貼文 {{ counts.posts.all }}</button>
@@ -181,6 +185,21 @@ document.querySelectorAll('[data-kind]').forEach(button=>button.addEventListener
 filterMedia();
 </script>
 </main></body></html>"""
+
+
+RELATIONSHIP_PAGE = """<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>{{ account.label }} 名單</title>
+<style>:root{color-scheme:dark}body{font-family:system-ui;background:#0b1120;color:#e5e7eb;margin:0;padding:24px}main{max-width:1100px;margin:auto}a{color:#c4b5fd;text-decoration:none}.tabs{display:flex;gap:8px;flex-wrap:wrap}.tabs a{padding:9px 14px;background:#172033;border-radius:999px}.tabs .active{background:#7c3aed;color:white}form{display:flex;gap:8px;margin:18px 0}input,select,button{padding:10px;border-radius:9px;border:1px solid #334155;background:#172033;color:#e5e7eb}table{width:100%;border-collapse:collapse;background:#172033;border-radius:12px;overflow:hidden}th,td{text-align:left;padding:10px;border-bottom:1px solid #334155}.avatar{width:42px;height:42px;object-fit:cover;border-radius:50%;background:#27344d}.muted{color:#94a3b8}.pager{display:flex;justify-content:space-between;margin-top:15px}@media(max-width:700px){body{padding:12px}table{font-size:.82rem}.optional{display:none}}</style></head><body><main>
+<p><a href="{{ url_for('account_detail', account_id=account.id) }}">← {{ account.label }}</a></p>
+<h1>關係名單</h1><p class="muted">整體：{{ account.relationship_status }}　Followers：{{ account.followers_state }}（{{ account.followers_baseline_at or '-' }}）　Following：{{ account.following_state }}（{{ account.following_baseline_at or '-' }}）</p>
+<nav class="tabs">{% for value,label in [('followers','Followers'),('following','Following'),('mutual','共同名單'),('history','異動紀錄')] %}<a class="{{ 'active' if tab==value else '' }}" href="{{ url_for('account_relationships',account_id=account.id,tab=value) }}">{{ label }}</a>{% endfor %}</nav>
+<form method="get"><input type="hidden" name="tab" value="{{ tab }}"><input name="q" value="{{ q }}" placeholder="搜尋 username／名稱"><select name="filter"><option value="current" {{ 'selected' if filter_value=='current' else '' }}>目前</option><option value="left" {{ 'selected' if filter_value=='left' else '' }}>已退出</option><option value="all" {{ 'selected' if filter_value=='all' else '' }}>全部</option></select><button>搜尋</button></form>
+<table><thead><tr><th>帳號</th><th class="optional">Profile ID</th><th>狀態／時間</th></tr></thead><tbody>{% for row in rows %}<tr><td>{% if row.avatar_url %}<img class="avatar" src="{{ row.avatar_url }}" loading="lazy">{% endif %} <a href="{{ url_for('relationship_member_detail',profile_id=row.instagram_profile_id) }}">@{{ row.username }}</a><br><span class="muted">{{ row.display_name or '' }}</span></td><td class="optional">{{ row.instagram_profile_id }}</td><td>{{ row.change_kind or ('目前' if row.active else '已退出') }}<br><span class="muted">{{ row.observed_at or row.last_seen_at or '-' }}</span></td></tr>{% else %}<tr><td colspan="3">目前沒有資料</td></tr>{% endfor %}</tbody></table>
+<div class="pager">{% if page>1 %}<a href="{{ url_for('account_relationships',account_id=account.id,tab=tab,q=q,filter=filter_value,page=page-1) }}">← 上一頁</a>{% else %}<span></span>{% endif %}<span>第 {{ page }} 頁</span>{% if has_next %}<a href="{{ url_for('account_relationships',account_id=account.id,tab=tab,q=q,filter=filter_value,page=page+1) }}">下一頁 →</a>{% endif %}</div>
+</main></body></html>"""
+
+
+MEMBER_PAGE = """<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>@{{ member.username }}</title><style>:root{color-scheme:dark}body{font-family:system-ui;background:#0b1120;color:#e5e7eb;padding:24px}main{max-width:800px;margin:auto}a{color:#c4b5fd}.card{background:#172033;border-radius:16px;padding:20px}.avatar{width:96px;height:96px;border-radius:50%;object-fit:cover}.muted{color:#94a3b8}</style></head><body><main><p><a href="javascript:history.back()">← 返回</a></p><section class="card">{% if member.avatar_url %}<img class="avatar" src="{{ member.avatar_url }}">{% endif %}<h1>@{{ member.username }}</h1><p>{{ member.display_name or '' }}</p><p>Profile ID：{{ member.instagram_profile_id }}</p><p>貼文 {{ member.posts or 0 }}　Followers {{ member.followers or 0 }}　Following {{ member.following or 0 }}</p><p>{{ member.bio or '' }}</p><p class="muted">最後補資料：{{ member.profile_observed_at or '尚未' }}　隱私：{{ member.privacy or 'unknown' }}</p></section></main></body></html>"""
 
 
 def _systemctl_status(command: list[str]) -> str:
@@ -229,7 +248,8 @@ def dashboard_data(db_path: Path, status_provider: Callable[[], dict[str, str]] 
         connection.row_factory = sqlite3.Row
         try:
             rows = connection.execute("""
-                SELECT id,label,url,effective_url,instagram_profile_id,snapshot_json,fail_count,last_error,last_success_at
+                SELECT id,label,url,effective_url,instagram_profile_id,snapshot_json,fail_count,last_error,
+                       last_success_at,relationship_tracking,relationship_status,relationship_reconciled_at
                 FROM accounts WHERE enabled=1 ORDER BY sort_order,id
             """).fetchall()
             summary["accounts"] = len(rows)
@@ -255,6 +275,9 @@ def dashboard_data(db_path: Path, status_provider: Callable[[], dict[str, str]] 
                     "effective_url": row["effective_url"] or row["url"], "last_success_at": row["last_success_at"],
                     "fail_count": int(row["fail_count"] or 0), "last_error": row["last_error"],
                     "downloaded": int(media.get("downloaded", 0)), "pending": pending,
+                    "relationship_tracking": bool(row["relationship_tracking"]),
+                    "relationship_status": row["relationship_status"],
+                    "relationship_reconciled_at": row["relationship_reconciled_at"],
                 })
         except sqlite3.Error:
             pass
@@ -274,7 +297,8 @@ def account_detail_data(
     connection.row_factory = sqlite3.Row
     try:
         row = connection.execute("""
-            SELECT id,label,url,effective_url,instagram_profile_id,snapshot_json
+            SELECT id,label,url,effective_url,instagram_profile_id,snapshot_json,
+                   relationship_status,followers_baseline_at,following_baseline_at
             FROM accounts WHERE id=? AND enabled=1
         """, (account_id,)).fetchone()
         if row is None:
@@ -286,6 +310,9 @@ def account_detail_data(
             "followers": snapshot.get("followers", 0), "following": snapshot.get("following", 0),
             "bio": snapshot.get("bio"), "instagram_profile_id": row["instagram_profile_id"],
             "effective_url": row["effective_url"] or row["url"],
+            "relationship_status": row["relationship_status"],
+            "followers_baseline_at": row["followers_baseline_at"],
+            "following_baseline_at": row["following_baseline_at"],
             "has_avatar": bool(snapshot.get("avatar_path") and Path(snapshot["avatar_path"]).is_file()),
         }
         media_rows = connection.execute("""
@@ -310,6 +337,95 @@ def account_detail_data(
                 counts[category]["all"] += 1
                 counts[category][item["kind"]] += 1
         return account, media, counts
+    finally:
+        connection.close()
+
+
+def relationship_page_data(
+    db_path: Path, account_id: int, tab: str, query: str, filter_value: str, page: int
+) -> tuple[dict[str, Any] | None, list[dict[str, Any]], bool]:
+    connection = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+    connection.row_factory = sqlite3.Row
+    try:
+        account_row = connection.execute(
+            """SELECT id,label,relationship_status,followers_baseline_at,following_baseline_at,snapshot_json
+               FROM accounts WHERE id=? AND enabled=1""", (account_id,)
+        ).fetchone()
+        if account_row is None:
+            return None, [], False
+        account = dict(account_row)
+        snapshot = json.loads(account.pop("snapshot_json")) if account.get("snapshot_json") else {}
+        for direction, count_field, baseline_field in (
+            ("followers", "followers", "followers_baseline_at"),
+            ("following", "following", "following_baseline_at"),
+        ):
+            latest = connection.execute(
+                """SELECT status FROM relationship_runs WHERE account_id=? AND direction=?
+                   ORDER BY id DESC LIMIT 1""", (account_id, direction)
+            ).fetchone()
+            if int(snapshot.get(count_field, 0)) > 1000:
+                state = "scope_exceeded"
+            elif latest:
+                state = latest["status"]
+            elif account.get(baseline_field):
+                state = "complete"
+            else:
+                state = "not_requested"
+            account[f"{direction}_state"] = state
+        pattern = f"%{query.strip()}%"
+        offset = (page - 1) * 50
+        if tab == "history":
+            rows = connection.execute(
+                """SELECT h.instagram_profile_id,h.username,h.change_kind,h.observed_at,
+                          NULL AS active,NULL AS last_seen_at,m.display_name,m.avatar_url
+                   FROM relationship_history h LEFT JOIN relationship_members m
+                     ON m.instagram_profile_id=h.instagram_profile_id
+                   WHERE h.account_id=? AND (h.username LIKE ? OR m.display_name LIKE ?)
+                   ORDER BY h.observed_at DESC,h.id DESC LIMIT 51 OFFSET ?""",
+                (account_id, pattern, pattern, offset),
+            ).fetchall()
+        elif tab == "mutual":
+            rows = connection.execute(
+                """SELECT f.instagram_profile_id,f.username,f.active,f.last_seen_at,
+                          NULL AS change_kind,NULL AS observed_at,m.display_name,m.avatar_url
+                   FROM account_relationships f JOIN account_relationships g
+                     ON g.account_id=f.account_id AND g.instagram_profile_id=f.instagram_profile_id
+                    AND g.direction='following' AND g.active=1
+                   JOIN relationship_members m ON m.instagram_profile_id=f.instagram_profile_id
+                   WHERE f.account_id=? AND f.direction='followers' AND f.active=1
+                     AND (f.username LIKE ? OR m.display_name LIKE ?)
+                   ORDER BY f.username LIMIT 51 OFFSET ?""",
+                (account_id, pattern, pattern, offset),
+            ).fetchall()
+        else:
+            active_clause = ""
+            if filter_value == "current":
+                active_clause = "AND ar.active=1"
+            elif filter_value == "left":
+                active_clause = "AND ar.active=0"
+            rows = connection.execute(
+                f"""SELECT ar.instagram_profile_id,ar.username,ar.active,ar.last_seen_at,
+                           NULL AS change_kind,NULL AS observed_at,m.display_name,m.avatar_url
+                    FROM account_relationships ar JOIN relationship_members m
+                      ON m.instagram_profile_id=ar.instagram_profile_id
+                    WHERE ar.account_id=? AND ar.direction=? {active_clause}
+                      AND (ar.username LIKE ? OR m.display_name LIKE ?)
+                    ORDER BY ar.username LIMIT 51 OFFSET ?""",
+                (account_id, tab, pattern, pattern, offset),
+            ).fetchall()
+        return account, [dict(row) for row in rows[:50]], len(rows) > 50
+    finally:
+        connection.close()
+
+
+def relationship_member_data(db_path: Path, profile_id: str) -> dict[str, Any] | None:
+    connection = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+    connection.row_factory = sqlite3.Row
+    try:
+        row = connection.execute(
+            "SELECT * FROM relationship_members WHERE instagram_profile_id=?", (profile_id,)
+        ).fetchone()
+        return dict(row) if row else None
     finally:
         connection.close()
 
@@ -428,6 +544,17 @@ def create_app(
             ), 400
         return redirect(url_for("index"), code=303)
 
+    @app.post("/accounts/<int:account_id>/relationship-tracking")
+    def toggle_relationship_tracking(account_id: int):
+        if registry is None:
+            abort(404)
+        _require_same_origin()
+        try:
+            registry.set_relationship_tracking(account_id, request.form.get("enabled") == "1")
+        except ValueError as exc:
+            return str(exc), 400
+        return redirect(url_for("index"), code=303)
+
     @app.post("/accounts/reorder")
     def reorder_accounts():
         if registry is None:
@@ -453,6 +580,53 @@ def create_app(
         if account is None:
             abort(404)
         return render_template_string(DETAIL_PAGE, account=account, media=media, counts=counts)
+
+    @app.get("/account/<int:account_id>/relationships")
+    def account_relationships(account_id: int):
+        tab = request.args.get("tab", "followers")
+        if tab not in {"followers", "following", "mutual", "history"}:
+            abort(400)
+        filter_value = request.args.get("filter", "current")
+        if filter_value not in {"current", "left", "all"}:
+            abort(400)
+        try:
+            page = max(1, int(request.args.get("page", "1")))
+        except ValueError:
+            abort(400)
+        query = request.args.get("q", "")[:100]
+        account, rows, has_next = relationship_page_data(
+            db_path, account_id, tab, query, filter_value, page
+        )
+        if account is None:
+            abort(404)
+        return render_template_string(
+            RELATIONSHIP_PAGE, account=account, rows=rows, has_next=has_next,
+            tab=tab, q=query, filter_value=filter_value, page=page,
+        )
+
+    @app.get("/relationship-member/<profile_id>")
+    def relationship_member_detail(profile_id: str):
+        member = relationship_member_data(db_path, profile_id)
+        if member is None:
+            abort(404)
+        if config_path is not None:
+            from datetime import UTC, datetime, timedelta
+            config = load_config(config_path, require_telegram=False)
+            observed = (
+                datetime.fromisoformat(member["profile_observed_at"])
+                if member.get("profile_observed_at") else None
+            )
+            now = datetime.now(UTC)
+            if observed is None or now - observed >= timedelta(
+                days=config.instagram_enrichment.member_stale_days
+            ):
+                from .db import Database
+                writable = Database(db_path)
+                try:
+                    writable.enqueue_member_enrichment(profile_id, "manual", now.isoformat(timespec="seconds"))
+                finally:
+                    writable.close()
+        return render_template_string(MEMBER_PAGE, member=member)
 
     @app.get("/account/<int:account_id>/avatar")
     def avatar_asset(account_id: int):

@@ -1,5 +1,6 @@
 import tempfile
 import unittest
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from ig_monitor.config import AccountConfig
@@ -71,6 +72,43 @@ class DatabaseTests(unittest.TestCase):
         self.db.mark_media_duplicate(rows["duplicate"]["id"], rows["downloaded"]["id"], "hash-1")
 
         self.assertEqual(self.db.summary()["pending"], 2)
+
+    def test_relationship_schema_and_account_switch_are_migrated(self):
+        self.assertEqual(self.row["relationship_tracking"], 1)
+        expected_tables = {
+            "collector_state", "relationship_jobs", "relationship_runs",
+            "relationship_run_members", "relationship_members",
+            "account_relationships", "relationship_history",
+            "member_enrichment_jobs", "member_enrichment_attempts",
+        }
+        actual = {
+            row[0] for row in self.db.conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            )
+        }
+        self.assertTrue(expected_tables <= actual)
+
+        disabled = AccountConfig(
+            "https://insta-stories-viewer.com/a/", True, "a", False
+        )
+        self.db.sync_accounts([disabled])
+        self.assertEqual(self.db.get_account("a")["relationship_tracking"], 0)
+
+    def test_stuck_relationship_queue_alert_is_enqueued_only_once(self):
+        now = datetime(2026, 8, 2, tzinfo=UTC)
+        job_id = self.db.enqueue_relationship_job(
+            self.row["id"], True, False, "count_change",
+            (now - timedelta(hours=25)).isoformat(),
+        )
+        self.db.conn.execute(
+            "UPDATE relationship_jobs SET created_at=? WHERE id=?",
+            ((now - timedelta(hours=25)).isoformat(), job_id),
+        )
+        self.db.conn.commit()
+        self.db.enqueue_relationship_watchdogs(now)
+        self.db.enqueue_relationship_watchdogs(now + timedelta(minutes=5))
+        events = [event for event in self.db.pending_events(20) if event["kind"] == "queue_stuck"]
+        self.assertEqual(len(events), 1)
 
 
 if __name__ == "__main__":
