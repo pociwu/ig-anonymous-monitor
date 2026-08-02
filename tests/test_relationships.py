@@ -10,6 +10,7 @@ from ig_monitor.member_enrichment import MemberEnrichmentWorker
 from ig_monitor.models import PrivacyState, ProfileSnapshot
 from ig_monitor.relationships import (
     CollectorAdministration,
+    CollectorFatalError,
     CollectorIdentity,
     Direction,
     MemberIdentity,
@@ -127,6 +128,11 @@ class FakeRelationshipSource:
         yield from self.pages.get(direction, [])
 
 
+class FatalLoginSource(FakeRelationshipSource):
+    def login_or_validate_saved_session(self):
+        raise CollectorFatalError("TwoFactorRequired")
+
+
 class RelationshipWorkerTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -151,6 +157,13 @@ class RelationshipWorkerTests(unittest.TestCase):
         approved = admin.approve(self.account["id"], self.now + timedelta(hours=72))
         self.assertEqual(approved.state, "canary")
         self.assertEqual(approved.canary_account_id, self.account["id"])
+
+    def test_login_preserves_sanitized_collector_fatal_reason(self):
+        status = CollectorAdministration(
+            self.db, FatalLoginSource(), enrichment()
+        ).login(self.now)
+        self.assertEqual(status.state, "risk_hold")
+        self.assertEqual(status.risk_reason, "TwoFactorRequired")
 
     def test_complete_baseline_then_change_creates_only_real_delta(self):
         source = FakeRelationshipSource({

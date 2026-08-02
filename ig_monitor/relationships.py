@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import random
+import re
 import time
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
@@ -84,6 +85,11 @@ class CollectorFatalError(RuntimeError):
 
 class TargetIneligibleError(RuntimeError):
     pass
+
+
+def _collector_fatal_reason(exc: CollectorFatalError) -> str:
+    reason = str(exc).strip()
+    return reason if re.fullmatch(r"[A-Za-z][A-Za-z0-9_-]{0,79}", reason) else "CollectorFatalError"
 
 
 class RelationshipTrigger:
@@ -171,7 +177,7 @@ class CollectorAdministration:
                     self.source.own_account_health()
                     self.db.update_collector_health(now.isoformat(timespec="seconds"))
                 except CollectorFatalError as exc:
-                    self.db.place_collector_risk_hold(type(exc).__name__)
+                    self.db.place_collector_risk_hold(_collector_fatal_reason(exc))
             if now - observed >= timedelta(hours=self.config.observation_hours):
                 latest = self.db.collector_state()
                 if latest["state"] == "observing":
@@ -182,7 +188,7 @@ class CollectorAdministration:
         try:
             identity = self.source.login_or_validate_saved_session()
         except CollectorFatalError as exc:
-            self.db.place_collector_risk_hold(type(exc).__name__)
+            self.db.place_collector_risk_hold(_collector_fatal_reason(exc))
             return self._status()
         if not identity.profile_id:
             raise ValueError("collector identity is missing")
@@ -215,7 +221,7 @@ class CollectorAdministration:
         try:
             self.source.own_account_health()
         except CollectorFatalError as exc:
-            self.db.place_collector_risk_hold(type(exc).__name__)
+            self.db.place_collector_risk_hold(_collector_fatal_reason(exc))
             return self._status()
         self.db.begin_collector_observation(now.isoformat(timespec="seconds"))
         return self._status()
@@ -334,9 +340,10 @@ class RelationshipWorker:
                 self.db.set_collector_state("active", now.isoformat(timespec="seconds"))
             return WorkOutcome(overall, job["id"])
         except CollectorFatalError as exc:
-            self.db.place_collector_risk_hold(type(exc).__name__)
-            self.db.finish_relationship_job(job["id"], "failed", type(exc).__name__)
-            return WorkOutcome("risk_hold", job["id"], type(exc).__name__)
+            reason = _collector_fatal_reason(exc)
+            self.db.place_collector_risk_hold(reason)
+            self.db.finish_relationship_job(job["id"], "failed", reason)
+            return WorkOutcome("risk_hold", job["id"], reason)
         except TargetIneligibleError:
             self.db.freeze_relationships(account["id"], now.isoformat(timespec="seconds"))
             self.db.finish_relationship_job(job["id"], "cancelled", "target ineligible")
