@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import math
 import os
 import sqlite3
 import subprocess
@@ -194,9 +195,10 @@ document.querySelectorAll('[data-kind]').forEach(button=>button.addEventListener
 }));
 filterMedia();
 const profileHistory={{ account.history|tojson }};
+const chartAxes={{ account.chart_axes|tojson }};
 const chartConfigs=[
- {canvasId:'posts-history-chart',tooltipId:'posts-history-tooltip',series:[{key:'posts',label:'貼文',color:'#a78bfa'}],points:[],hoveredIndex:null},
- {canvasId:'relationships-history-chart',tooltipId:'relationships-history-tooltip',series:[{key:'followers',label:'跟隨者',color:'#4ade80'},{key:'following',label:'追蹤中',color:'#38bdf8'}],points:[],hoveredIndex:null}
+ {canvasId:'posts-history-chart',tooltipId:'posts-history-tooltip',axis:chartAxes.posts,series:[{key:'posts',label:'貼文',color:'#a78bfa'}],points:[],hoveredIndex:null},
+ {canvasId:'relationships-history-chart',tooltipId:'relationships-history-tooltip',axis:chartAxes.relationships,series:[{key:'followers',label:'跟隨者',color:'#4ade80'},{key:'following',label:'追蹤中',color:'#38bdf8'}],points:[],hoveredIndex:null}
 ];
 function drawProfileHistory(config){
  const canvas=document.getElementById(config.canvasId);
@@ -206,13 +208,11 @@ function drawProfileHistory(config){
  canvas.width=Math.round(width*ratio);canvas.height=Math.round(height*ratio);
  const ctx=canvas.getContext('2d');ctx.setTransform(ratio,0,0,ratio,0,0);ctx.clearRect(0,0,width,height);
  const pad={left:60,right:18,top:18,bottom:48},plotW=width-pad.left-pad.right,plotH=height-pad.top-pad.bottom;
- const values=profileHistory.flatMap(point=>config.series.map(series=>Number(point[series.key])));
- let min=Math.min(...values),max=Math.max(...values);
- if(min===max){min=Math.max(0,min-1);max+=1}else{const margin=(max-min)*.08;min=Math.max(0,Math.floor(min-margin));max=Math.ceil(max+margin)}
+ const min=config.axis.min,max=config.axis.max;
  const x=index=>pad.left+(profileHistory.length===1?plotW/2:index*plotW/(profileHistory.length-1));
  const y=value=>pad.top+(max-value)*plotH/(max-min);
  ctx.font='12px system-ui';ctx.textBaseline='middle';ctx.fillStyle='#94a3b8';ctx.strokeStyle='#334155';ctx.lineWidth=1;
- for(let index=0;index<=4;index++){const value=min+(max-min)*(4-index)/4,yy=pad.top+index*plotH;ctx.beginPath();ctx.moveTo(pad.left,yy);ctx.lineTo(width-pad.right,yy);ctx.stroke();ctx.textAlign='right';ctx.fillText(Math.round(value).toLocaleString(),pad.left-8,yy)}
+ config.axis.ticks.slice().reverse().forEach(value=>{const yy=y(value);ctx.beginPath();ctx.moveTo(pad.left,yy);ctx.lineTo(width-pad.right,yy);ctx.stroke();ctx.textAlign='right';ctx.fillText(value.toLocaleString(),pad.left-8,yy)});
  const labelStep=Math.max(1,Math.ceil(profileHistory.length/6));ctx.textAlign='center';ctx.textBaseline='top';
  profileHistory.forEach((point,index)=>{if(index%labelStep===0||index===profileHistory.length-1)ctx.fillText(point.date.slice(5),x(index),height-pad.bottom+10)});
  config.points=profileHistory.map((point,index)=>({x:x(index),point,values:config.series.map(series=>({series,value:Number(point[series.key]),y:y(Number(point[series.key]))}))}));
@@ -356,6 +356,7 @@ def account_detail_data(
             return None, [], _empty_collection_counts()
         snapshot = json.loads(row["snapshot_json"]) if row["snapshot_json"] else {}
         deltas = _latest_profile_deltas(connection, account_id)
+        history = _daily_profile_history(connection, account_id)
         account = {
             "id": row["id"], "label": row["label"], "username": snapshot.get("username"),
             "display_name": snapshot.get("display_name"), "posts": snapshot.get("posts", 0),
@@ -363,7 +364,14 @@ def account_detail_data(
             "posts_delta": deltas["posts"],
             "followers_delta": deltas["followers"],
             "following_delta": deltas["following"],
-            "history": _daily_profile_history(connection, account_id),
+            "history": history,
+            "chart_axes": {
+                "posts": _chart_axis([point["posts"] for point in history]),
+                "relationships": _chart_axis([
+                    value for point in history
+                    for value in (point["followers"], point["following"])
+                ]),
+            },
             "bio": snapshot.get("bio"), "instagram_profile_id": row["instagram_profile_id"],
             "effective_url": row["effective_url"] or row["url"],
             "relationship_status": row["relationship_status"],
@@ -395,6 +403,28 @@ def account_detail_data(
         return account, media, counts
     finally:
         connection.close()
+
+
+def _chart_axis(values: list[int]) -> dict[str, Any]:
+    if not values:
+        return {"min": 0, "max": 4, "ticks": [0, 1, 2, 3, 4]}
+    data_min, data_max = min(values), max(values)
+    span = data_max - data_min
+    if span < 4:
+        missing = 4 - span
+        lower = max(0, data_min - math.ceil(missing / 2))
+        upper = max(data_max, lower + 4)
+        lower = max(0, upper - 4)
+        return {"min": lower, "max": upper, "ticks": list(range(lower, upper + 1))}
+    rough_step = span / 4
+    magnitude = 10 ** math.floor(math.log10(rough_step))
+    normalized = rough_step / magnitude
+    multiplier = 1 if normalized <= 1 else 2 if normalized <= 2 else 5 if normalized <= 5 else 10
+    step = max(1, int(multiplier * magnitude))
+    lower = max(0, math.floor(data_min / step) * step)
+    upper = math.ceil(data_max / step) * step
+    ticks = list(range(lower, upper + step, step))
+    return {"min": lower, "max": upper, "ticks": ticks}
 
 
 def _latest_profile_deltas(connection: sqlite3.Connection, account_id: int) -> dict[str, int]:

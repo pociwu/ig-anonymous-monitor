@@ -4,12 +4,17 @@ from unittest.mock import patch
 from pathlib import Path
 
 from ig_monitor.config import AccountConfig, load_config
-from ig_monitor.dashboard import create_app, system_status
+from ig_monitor.dashboard import _chart_axis, create_app, system_status
 from ig_monitor.db import Database
 from ig_monitor.models import MediaCandidate, PrivacyState, ProfileSnapshot
 
 
 class DashboardTests(unittest.TestCase):
+    def test_constant_integer_chart_uses_distinct_lower_and_upper_ticks(self):
+        axis = _chart_axis([25, 25, 25])
+
+        self.assertEqual(axis, {"min": 23, "max": 27, "ticks": [23, 24, 25, 26, 27]})
+
     def test_dashboard_shows_latest_deltas_and_profile_history_chart(self):
         with tempfile.TemporaryDirectory() as tmp:
             db_path = Path(tmp) / "state.sqlite3"
