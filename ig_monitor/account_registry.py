@@ -26,7 +26,7 @@ class AccountRegistry:
     def add(self, url: str, label: str | None = None) -> None:
         normalized = normalize_account_url(url)
         with self._lock:
-            config = load_config(self.config_path, require_telegram=False)
+            config = load_config(self.config_path, require_telegram=False, require_apify=False)
             if any(account.url == normalized for account in config.accounts):
                 raise ValueError("此帳號已在監控清單中")
             if len(config.accounts) >= MAX_ACCOUNTS:
@@ -45,7 +45,7 @@ class AccountRegistry:
 
     def remove(self, account_id: int) -> None:
         with self._lock:
-            config = load_config(self.config_path, require_telegram=False)
+            config = load_config(self.config_path, require_telegram=False, require_apify=False)
             if len(config.accounts) <= 1:
                 raise ValueError("至少需要保留一個監控帳號")
             db = Database(self.db_path)
@@ -123,7 +123,7 @@ class AccountRegistry:
             os.fsync(handle.fileno())
 
     def _sync_database(self) -> None:
-        config = load_config(self.config_path, require_telegram=False)
+        config = load_config(self.config_path, require_telegram=False, require_apify=False)
         db = Database(self.db_path)
         try:
             db.sync_accounts(config.accounts)

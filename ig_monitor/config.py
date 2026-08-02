@@ -147,7 +147,11 @@ def normalize_account_url(value: object) -> str:
     return f"https://insta-stories-viewer.com/{parts[0]}/"
 
 
-def load_config(path: str | Path, require_telegram: bool = True) -> AppConfig:
+def load_config(
+    path: str | Path,
+    require_telegram: bool = True,
+    require_apify: bool = True,
+) -> AppConfig:
     config_path = Path(path).expanduser().resolve()
     if not config_path.exists():
         raise FileNotFoundError(f"找不到設定檔：{config_path}")
@@ -242,7 +246,7 @@ def load_config(path: str | Path, require_telegram: bool = True) -> AppConfig:
         request_timeout_seconds=max(30, int(apify.get("request_timeout_seconds", 180))),
         token=os.getenv("APIFY_API_TOKEN") or None,
     )
-    if apify_cfg.enabled and not apify_cfg.token:
+    if require_apify and apify_cfg.enabled and not apify_cfg.token:
         raise ValueError("APIFY_API_TOKEN is required when apify.enabled is true")
 
     dedup = _section(raw, "media_dedup")

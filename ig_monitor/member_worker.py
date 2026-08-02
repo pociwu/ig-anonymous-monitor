@@ -13,7 +13,7 @@ from .member_enrichment import MemberEnrichmentWorker, PlaywrightMemberProfileSo
 
 
 def run(config_path: Path, poll_seconds: int) -> None:
-    config = load_config(config_path, require_telegram=False)
+    config = load_config(config_path, require_telegram=False, require_apify=False)
     db = Database(config.paths.data_dir / "state.sqlite3")
     stopped = False
 

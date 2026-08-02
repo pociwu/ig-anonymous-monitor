@@ -57,8 +57,13 @@ async def _async_main(args: argparse.Namespace) -> int:
     if (args.dry_run or args.apply) and not args.dedupe_media:
         raise ValueError("--dry-run/--apply can only be used with --dedupe-media")
     collector_command = any((args.collector_status, args.collector_login, args.collector_approve, args.collector_recovery))
+    utility_command = any((
+        args.check, args.send_test, args.reset_account, args.dedupe_media, collector_command,
+    ))
     config = load_config(
-        args.config, require_telegram=not (args.check or args.dedupe_media or collector_command)
+        args.config,
+        require_telegram=not (args.check or args.dedupe_media or collector_command),
+        require_apify=not utility_command,
     )
     setup_logging(config.paths.data_dir, write_file=not (args.check or args.dedupe_media))
     if args.check:

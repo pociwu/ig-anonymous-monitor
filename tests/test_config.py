@@ -1,6 +1,7 @@
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from ig_monitor.config import load_config
 
@@ -147,6 +148,24 @@ apify:
 """, encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "APIFY_API_TOKEN"):
                 load_config(path, require_telegram=False)
+
+    def test_non_apify_service_can_load_enabled_apify_without_token(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "config.yaml"
+            path.write_text("""
+accounts:
+  - url: https://insta-stories-viewer.com/a/
+telegram:
+  enabled: false
+apify:
+  enabled: true
+""", encoding="utf-8")
+            with patch.dict("os.environ", {}, clear=True):
+                config = load_config(
+                    path, require_telegram=False, require_apify=False
+                )
+            self.assertTrue(config.apify.enabled)
+            self.assertIsNone(config.apify.token)
 
     def test_schedule_interval_must_be_positive(self):
         with tempfile.TemporaryDirectory() as tmp:

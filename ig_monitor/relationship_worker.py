@@ -17,7 +17,7 @@ LOG = logging.getLogger("ig_monitor.relationship_worker")
 
 
 def run(config_path: Path, session_path: Path, poll_seconds: int = 60) -> None:
-    config = load_config(config_path, require_telegram=False)
+    config = load_config(config_path, require_telegram=False, require_apify=False)
     db = Database(config.paths.data_dir / "state.sqlite3")
     source = InstagrapiRelationshipSource(session_path)
     worker = RelationshipWorker(db, config.instagram_enrichment, source)

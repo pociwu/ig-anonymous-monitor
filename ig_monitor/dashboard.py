@@ -230,7 +230,7 @@ def validate_account_page(config_path: Path, url: str) -> None:
     async def validate() -> None:
         from .scraper import ProfileScraper
 
-        config = load_config(config_path, require_telegram=False)
+        config = load_config(config_path, require_telegram=False, require_apify=False)
         async with ProfileScraper(config.browser) as scraper:
             await scraper.scrape(url)
 
@@ -611,7 +611,7 @@ def create_app(
             abort(404)
         if config_path is not None:
             from datetime import UTC, datetime, timedelta
-            config = load_config(config_path, require_telegram=False)
+            config = load_config(config_path, require_telegram=False, require_apify=False)
             observed = (
                 datetime.fromisoformat(member["profile_observed_at"])
                 if member.get("profile_observed_at") else None
