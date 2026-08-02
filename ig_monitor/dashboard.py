@@ -131,7 +131,7 @@ DETAIL_PAGE = """<!doctype html>
 <html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{{ account.display_name or account.label }} · IG Monitor</title>
 <style>
-:root{color-scheme:dark}*{box-sizing:border-box}body{font-family:system-ui,-apple-system,sans-serif;background:#0b1120;color:#e5e7eb;margin:0;padding:24px}main{max-width:1200px;margin:auto}a{color:#c4b5fd;text-decoration:none}.profile{display:flex;gap:18px;align-items:center;background:#172033;border:1px solid #27344d;border-radius:16px;padding:20px}.avatar{width:96px;height:96px;border-radius:50%;object-fit:cover;background:#27344d}.avatar-fallback{display:grid;place-items:center;font-size:2rem;font-weight:700}.muted{color:#94a3b8}.stats{display:flex;gap:18px;flex-wrap:wrap;margin-top:10px}.stats strong{display:block;font-size:1.25rem}.delta{margin-left:4px;font-size:.8em}.delta-up{color:#4ade80}.delta-down{color:#fb7185}.meta,.trend{background:#172033;border-radius:12px;padding:16px;margin:16px 0;overflow-wrap:anywhere}.trend h2{margin-top:0}.chart-wrap{position:relative;width:100%;height:360px}.chart-wrap canvas{display:block;width:100%;height:360px}.chart-legend{display:flex;gap:18px;flex-wrap:wrap;margin-top:10px;color:#cbd5e1}.legend-key:before{content:'';display:inline-block;width:12px;height:3px;margin-right:6px;vertical-align:middle;background:var(--legend-color)}.tabs{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}.tabs button{border:1px solid #334155;background:#172033;color:#cbd5e1;border-radius:999px;padding:9px 14px;cursor:pointer}.tabs button.active{background:#7c3aed;border-color:#8b5cf6;color:white}.gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px}.media{background:#172033;border-radius:14px;overflow:hidden;border:1px solid #27344d}.media[hidden]{display:none}.media img,.media video{width:100%;aspect-ratio:1/1;display:block;object-fit:cover;background:#020617}.caption{padding:10px;font-size:.85rem;color:#94a3b8}@media(max-width:600px){body{padding:14px}.profile{align-items:flex-start}.avatar{width:72px;height:72px}.gallery{grid-template-columns:repeat(2,minmax(0,1fr))}.chart-wrap,.chart-wrap canvas{height:300px}}\n</style></head><body><main>
+:root{color-scheme:dark}*{box-sizing:border-box}body{font-family:system-ui,-apple-system,sans-serif;background:#0b1120;color:#e5e7eb;margin:0;padding:24px}main{max-width:1200px;margin:auto}a{color:#c4b5fd;text-decoration:none}.profile{display:flex;gap:18px;align-items:center;background:#172033;border:1px solid #27344d;border-radius:16px;padding:20px}.avatar{width:96px;height:96px;border-radius:50%;object-fit:cover;background:#27344d}.avatar-fallback{display:grid;place-items:center;font-size:2rem;font-weight:700}.muted{color:#94a3b8}.stats{display:flex;gap:18px;flex-wrap:wrap;margin-top:10px}.stats strong{display:block;font-size:1.25rem}.delta{margin-left:4px;font-size:.8em}.delta-up{color:#4ade80}.delta-down{color:#fb7185}.meta,.trend{background:#172033;border-radius:12px;padding:16px;margin:16px 0;overflow-wrap:anywhere}.trend-header{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}.trend h2{margin:0}.metric-picker{display:flex;align-items:center;gap:8px;color:#cbd5e1}.metric-picker select{border:1px solid #475569;border-radius:9px;background:#0f172a;color:#e5e7eb;padding:8px 34px 8px 11px;font:inherit}.chart-wrap{position:relative;width:100%;height:360px}.chart-wrap canvas{display:block;width:100%;height:360px;touch-action:pan-y}.chart-tooltip{position:absolute;z-index:2;pointer-events:none;transform:translate(-50%,-100%);padding:7px 10px;border:1px solid #64748b;border-radius:8px;background:#020617;color:#f8fafc;white-space:nowrap;font-size:.88rem;box-shadow:0 6px 18px #0008}.chart-tooltip[hidden]{display:none}.tabs{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}.tabs button{border:1px solid #334155;background:#172033;color:#cbd5e1;border-radius:999px;padding:9px 14px;cursor:pointer}.tabs button.active{background:#7c3aed;border-color:#8b5cf6;color:white}.gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px}.media{background:#172033;border-radius:14px;overflow:hidden;border:1px solid #27344d}.media[hidden]{display:none}.media img,.media video{width:100%;aspect-ratio:1/1;display:block;object-fit:cover;background:#020617}.caption{padding:10px;font-size:.85rem;color:#94a3b8}@media(max-width:600px){body{padding:14px}.profile{align-items:flex-start}.avatar{width:72px;height:72px}.gallery{grid-template-columns:repeat(2,minmax(0,1fr))}.chart-wrap,.chart-wrap canvas{height:300px}}\n</style></head><body><main>
 <p><a href="{{ url_for('index') }}">← 返回帳號列表</a></p>
 <section class="profile">
 {% if account.has_avatar %}<img class="avatar" src="{{ url_for('avatar_asset', account_id=account.id) }}" alt="{{ account.label }}">
@@ -145,10 +145,9 @@ DETAIL_PAGE = """<!doctype html>
 </section>
 <section class="meta"><div>Instagram Profile ID：{{ account.instagram_profile_id or '尚未建立' }}</div><div>有效網址：{{ account.effective_url }}</div>{% if account.bio %}<p>{{ account.bio }}</p>{% endif %}<p><a href="{{ url_for('account_relationships', account_id=account.id) }}">Followers／Following／共同名單／異動紀錄</a></p></section>
 <section class="trend">
-<h2>數量趨勢</h2>
+<div class="trend-header"><h2>數量趨勢</h2><label class="metric-picker">圖表項目<select id="profile-metric-select"><option value="posts">貼文</option><option value="followers">跟隨者</option><option value="following">追蹤中</option></select></label></div>
 <p class="muted">最近 90 個台灣日期；X 軸為日期，Y 軸為數量。</p>
-<div class="chart-wrap"><canvas id="profile-history-chart" role="img" aria-label="貼文、跟隨者與追蹤中數量趨勢圖"></canvas></div>
-<div class="chart-legend"><span class="legend-key" style="--legend-color:#a78bfa">貼文</span><span class="legend-key" style="--legend-color:#4ade80">跟隨者</span><span class="legend-key" style="--legend-color:#38bdf8">追蹤中</span></div>
+<div class="chart-wrap"><canvas id="profile-history-chart" role="img" aria-label="IG 帳號數量趨勢圖"></canvas><div id="profile-history-tooltip" class="chart-tooltip" role="status" hidden></div></div>
 </section>
 <h2>照片與影片</h2>
 <nav class="tabs source-tabs">
@@ -194,20 +193,19 @@ document.querySelectorAll('[data-kind]').forEach(button=>button.addEventListener
 }));
 filterMedia();
 const profileHistory={{ account.history|tojson }};
-const chartSeries=[
- {key:'posts',color:'#a78bfa'},
- {key:'followers',color:'#4ade80'},
- {key:'following',color:'#38bdf8'}
-];
+const chartSeries={posts:{label:'貼文',color:'#a78bfa'},followers:{label:'跟隨者',color:'#4ade80'},following:{label:'追蹤中',color:'#38bdf8'}};
+const metricSelect=document.getElementById('profile-metric-select'),chartTooltip=document.getElementById('profile-history-tooltip');
+let chartPoints=[],hoveredIndex=null;
 function drawProfileHistory(){
  const canvas=document.getElementById('profile-history-chart');
  if(!canvas||!profileHistory.length)return;
+ const series=chartSeries[metricSelect.value];
  const rect=canvas.getBoundingClientRect(),ratio=window.devicePixelRatio||1;
  const width=Math.max(320,rect.width),height=rect.height||360;
  canvas.width=Math.round(width*ratio);canvas.height=Math.round(height*ratio);
  const ctx=canvas.getContext('2d');ctx.setTransform(ratio,0,0,ratio,0,0);ctx.clearRect(0,0,width,height);
  const pad={left:60,right:18,top:18,bottom:48},plotW=width-pad.left-pad.right,plotH=height-pad.top-pad.bottom;
- const values=profileHistory.flatMap(point=>chartSeries.map(series=>Number(point[series.key])));
+ const values=profileHistory.map(point=>Number(point[metricSelect.value]));
  let min=Math.min(...values),max=Math.max(...values);
  if(min===max){min=Math.max(0,min-1);max+=1}else{const margin=(max-min)*.08;min=Math.max(0,Math.floor(min-margin));max=Math.ceil(max+margin)}
  const x=index=>pad.left+(profileHistory.length===1?plotW/2:index*plotW/(profileHistory.length-1));
@@ -216,9 +214,24 @@ function drawProfileHistory(){
  for(let index=0;index<=4;index++){const value=min+(max-min)*(4-index)/4,yy=pad.top+index*plotH;ctx.beginPath();ctx.moveTo(pad.left,yy);ctx.lineTo(width-pad.right,yy);ctx.stroke();ctx.textAlign='right';ctx.fillText(Math.round(value).toLocaleString(),pad.left-8,yy)}
  const labelStep=Math.max(1,Math.ceil(profileHistory.length/6));ctx.textAlign='center';ctx.textBaseline='top';
  profileHistory.forEach((point,index)=>{if(index%labelStep===0||index===profileHistory.length-1)ctx.fillText(point.date.slice(5),x(index),height-pad.bottom+10)});
- chartSeries.forEach(series=>{ctx.strokeStyle=series.color;ctx.fillStyle=series.color;ctx.lineWidth=2.5;ctx.beginPath();profileHistory.forEach((point,index)=>{const xx=x(index),yy=y(Number(point[series.key]));index?ctx.lineTo(xx,yy):ctx.moveTo(xx,yy)});ctx.stroke();profileHistory.forEach((point,index)=>{const xx=x(index),yy=y(Number(point[series.key]));ctx.beginPath();ctx.arc(xx,yy,profileHistory.length===1?4:2.5,0,Math.PI*2);ctx.fill()})});
+ chartPoints=profileHistory.map((point,index)=>({x:x(index),y:y(values[index]),point,value:values[index]}));
+ ctx.strokeStyle=series.color;ctx.fillStyle=series.color;ctx.lineWidth=2.5;ctx.beginPath();chartPoints.forEach((item,index)=>{index?ctx.lineTo(item.x,item.y):ctx.moveTo(item.x,item.y)});ctx.stroke();
+ chartPoints.forEach((item,index)=>{ctx.beginPath();ctx.arc(item.x,item.y,index===hoveredIndex?6:profileHistory.length===1?4:3,0,Math.PI*2);ctx.fill()});
 }
-drawProfileHistory();window.addEventListener('resize',drawProfileHistory);
+function hideChartPoint(){hoveredIndex=null;chartTooltip.hidden=true;drawProfileHistory()}
+function showChartPoint(event){
+ if(!chartPoints.length)return;
+ const canvas=event.currentTarget,rect=canvas.getBoundingClientRect(),pointerX=event.clientX-rect.left;
+ const index=chartPoints.reduce((best,item,current)=>Math.abs(item.x-pointerX)<Math.abs(chartPoints[best].x-pointerX)?current:best,0);
+ if(Math.abs(chartPoints[index].x-pointerX)>32){hideChartPoint();return}
+ hoveredIndex=index;drawProfileHistory();const item=chartPoints[index],series=chartSeries[metricSelect.value];
+ chartTooltip.textContent=`${item.point.date}　${series.label}：${item.value.toLocaleString()}`;
+ chartTooltip.style.left=`${item.x}px`;chartTooltip.style.top=`${Math.max(44,item.y-8)}px`;chartTooltip.hidden=false;
+}
+const historyCanvas=document.getElementById('profile-history-chart');
+historyCanvas.addEventListener('pointermove',showChartPoint);historyCanvas.addEventListener('pointerdown',showChartPoint);historyCanvas.addEventListener('pointerleave',hideChartPoint);
+metricSelect.addEventListener('change',()=>{hoveredIndex=null;chartTooltip.hidden=true;drawProfileHistory()});
+drawProfileHistory();window.addEventListener('resize',()=>{chartTooltip.hidden=true;hoveredIndex=null;drawProfileHistory()});
 </script>
 </main></body></html>"""
 

@@ -42,6 +42,12 @@ class DashboardTests(unittest.TestCase):
 
             detail = app.test_client().get(f"/account/{account['id']}").data.decode("utf-8")
             self.assertIn('id="profile-history-chart"', detail)
+            self.assertIn('id="profile-metric-select"', detail)
+            self.assertIn('<option value="posts">貼文</option>', detail)
+            self.assertIn('<option value="followers">跟隨者</option>', detail)
+            self.assertIn('<option value="following">追蹤中</option>', detail)
+            self.assertIn('id="profile-history-tooltip"', detail)
+            self.assertIn("showChartPoint", detail)
             self.assertIn('"date": "2026-08-01"', detail)
             self.assertIn('"posts": 12', detail)
 
