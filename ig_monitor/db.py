@@ -51,6 +51,17 @@ class Database:
           created_at TEXT NOT NULL, sent_at TEXT
         );
         CREATE INDEX IF NOT EXISTS idx_events_pending ON events(status, created_at);
+        CREATE TABLE IF NOT EXISTS profile_history (
+          id INTEGER PRIMARY KEY,
+          account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+          observed_at TEXT NOT NULL,
+          posts INTEGER NOT NULL,
+          followers INTEGER NOT NULL,
+          following INTEGER NOT NULL,
+          UNIQUE(account_id,observed_at)
+        );
+        CREATE INDEX IF NOT EXISTS idx_profile_history_account_time
+          ON profile_history(account_id,observed_at DESC,id DESC);
         CREATE TABLE IF NOT EXISTS media (
           id INTEGER PRIMARY KEY, account_id INTEGER NOT NULL REFERENCES accounts(id),
           media_key TEXT NOT NULL, logical_id TEXT, category TEXT NOT NULL, kind TEXT NOT NULL,
@@ -169,6 +180,23 @@ class Database:
         self._add_column_if_missing("media", "video_bitrate", "INTEGER")
         self.conn.execute("UPDATE accounts SET effective_url=url WHERE effective_url IS NULL")
         self.conn.execute("INSERT OR IGNORE INTO media_sources(media_id,category) SELECT id,category FROM media")
+        for row in self.conn.execute(
+            "SELECT id,snapshot_json,last_success_at,updated_at FROM accounts WHERE snapshot_json IS NOT NULL"
+        ).fetchall():
+            try:
+                snapshot = json.loads(row["snapshot_json"])
+                observed_at = snapshot.get("observed_at") or row["last_success_at"] or row["updated_at"]
+                self.conn.execute(
+                    """INSERT OR IGNORE INTO profile_history(
+                         account_id,observed_at,posts,followers,following
+                       ) VALUES(?,?,?,?,?)""",
+                    (
+                        row["id"], observed_at, int(snapshot.get("posts", 0)),
+                        int(snapshot.get("followers", 0)), int(snapshot.get("following", 0)),
+                    ),
+                )
+            except (TypeError, ValueError, json.JSONDecodeError):
+                continue
         self.conn.commit()
 
     def _add_column_if_missing(self, table: str, column: str, definition: str) -> None:
@@ -223,7 +251,18 @@ class Database:
         media: Iterable[MediaCandidate],
     ) -> None:
         now = utc_now()
+        observed_at = snapshot.observed_at or now
         with self.transaction() as con:
+            con.execute(
+                """INSERT OR IGNORE INTO profile_history(
+                     account_id,observed_at,posts,followers,following
+                   ) VALUES(?,?,?,?,?)""",
+                (account_id, observed_at, snapshot.posts, snapshot.followers, snapshot.following),
+            )
+            con.execute(
+                "DELETE FROM profile_history WHERE account_id=? AND observed_at<?",
+                (account_id, (datetime.now(UTC) - timedelta(days=365)).isoformat(timespec="seconds")),
+            )
             for event_key, kind, payload in events:
                 con.execute("""
                   INSERT OR IGNORE INTO events(event_key,account_id,kind,payload_json,created_at)
@@ -251,6 +290,21 @@ class Database:
               UPDATE accounts SET snapshot_json=?,fail_count=0,failure_notified=0,failure_since=NULL,
                 last_error=NULL,last_success_at=?,updated_at=? WHERE id=?
             """, (json.dumps(snapshot.to_dict(), ensure_ascii=False), now, now, account_id))
+
+    def profile_history(self, account_id: int, limit: int | None = None) -> list[dict[str, Any]]:
+        if limit is None:
+            rows = self.conn.execute(
+                """SELECT * FROM profile_history WHERE account_id=?
+                   ORDER BY observed_at,id""", (account_id,)
+            ).fetchall()
+        else:
+            rows = self.conn.execute(
+                """SELECT * FROM (
+                     SELECT * FROM profile_history WHERE account_id=?
+                     ORDER BY observed_at DESC,id DESC LIMIT ?
+                   ) ORDER BY observed_at,id""", (account_id, limit)
+            ).fetchall()
+        return [dict(row) for row in rows]
 
     def set_identity(self, account_id: int, profile_id: str, username: str | None = None) -> None:
         now = utc_now()

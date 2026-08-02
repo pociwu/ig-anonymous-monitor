@@ -44,7 +44,7 @@ CARD_PAGE = """<!doctype html>
 <html lang="zh-Hant"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1"><title>IG Monitor</title>
 <style>
-:root{color-scheme:dark}*{box-sizing:border-box}body{font-family:system-ui,-apple-system,sans-serif;background:#0b1120;color:#e5e7eb;margin:0;padding:24px}main{max-width:1200px;margin:auto}a{color:inherit;text-decoration:none}.summary,.accounts{display:grid;gap:14px}.summary{grid-template-columns:repeat(auto-fit,minmax(140px,1fr));margin-bottom:28px}.accounts{grid-template-columns:repeat(auto-fill,minmax(260px,1fr))}.metric,.account-card,.service,.manage{background:#172033;border:1px solid #27344d;border-radius:16px}.metric{padding:16px}.metric strong{display:block;font-size:1.65rem;margin-top:4px}.manage{padding:16px;margin:0 0 28px}.manage form{display:grid;grid-template-columns:minmax(260px,2fr) minmax(140px,1fr) auto;gap:10px}.manage input,.manage button{border:1px solid #334155;border-radius:10px;padding:11px 12px;font:inherit}.manage input{background:#0f172a;color:#e5e7eb}.manage button{background:#7c3aed;color:white;cursor:pointer}.error{color:#fecaca;background:#7f1d1d;padding:10px;border-radius:10px}.account-card{padding:18px;transition:.18s transform,.18s border-color}.account-card[draggable=true]{cursor:grab}.account-card.dragging{opacity:.45;transform:scale(.98)}.drag-handle{color:#94a3b8;text-align:right;font-size:.82rem;margin:-5px 0 8px;user-select:none}.account-card>a{display:block}.account-card:hover{transform:translateY(-3px);border-color:#8b5cf6}.remove-form{margin-top:14px;padding-top:12px;border-top:1px solid #334155}.remove-form button{width:100%;border:1px solid #7f1d1d;border-radius:9px;padding:9px;background:#3f1721;color:#fecaca;cursor:pointer}.identity{display:flex;gap:14px;align-items:center}.avatar{width:72px;height:72px;border-radius:50%;object-fit:cover;background:#27344d;border:2px solid #475569}.avatar-fallback{display:grid;place-items:center;font-size:1.5rem;font-weight:700}.name{font-size:1.15rem;font-weight:750}.handle,.muted{color:#94a3b8}.facts{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:16px 0}.fact{background:#0f172a;border-radius:10px;padding:9px;text-align:center}.fact strong{display:block}.row{display:flex;justify-content:space-between;gap:12px;margin-top:8px}.value{overflow-wrap:anywhere;text-align:right}.ok{color:#86efac}.bad{color:#fca5a5}.services{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}.service{padding:16px}@media(max-width:700px){body{padding:14px}.accounts{grid-template-columns:1fr}.manage form{grid-template-columns:1fr}}</style></head><body><main>
+:root{color-scheme:dark}*{box-sizing:border-box}body{font-family:system-ui,-apple-system,sans-serif;background:#0b1120;color:#e5e7eb;margin:0;padding:24px}main{max-width:1200px;margin:auto}a{color:inherit;text-decoration:none}.summary,.accounts{display:grid;gap:14px}.summary{grid-template-columns:repeat(auto-fit,minmax(140px,1fr));margin-bottom:28px}.accounts{grid-template-columns:repeat(auto-fill,minmax(260px,1fr))}.metric,.account-card,.service,.manage{background:#172033;border:1px solid #27344d;border-radius:16px}.metric{padding:16px}.metric strong{display:block;font-size:1.65rem;margin-top:4px}.manage{padding:16px;margin:0 0 28px}.manage form{display:grid;grid-template-columns:minmax(260px,2fr) minmax(140px,1fr) auto;gap:10px}.manage input,.manage button{border:1px solid #334155;border-radius:10px;padding:11px 12px;font:inherit}.manage input{background:#0f172a;color:#e5e7eb}.manage button{background:#7c3aed;color:white;cursor:pointer}.error{color:#fecaca;background:#7f1d1d;padding:10px;border-radius:10px}.account-card{padding:18px;transition:.18s transform,.18s border-color}.account-card[draggable=true]{cursor:grab}.account-card.dragging{opacity:.45;transform:scale(.98)}.drag-handle{color:#94a3b8;text-align:right;font-size:.82rem;margin:-5px 0 8px;user-select:none}.account-card>a{display:block}.account-card:hover{transform:translateY(-3px);border-color:#8b5cf6}.remove-form{margin-top:14px;padding-top:12px;border-top:1px solid #334155}.remove-form button{width:100%;border:1px solid #7f1d1d;border-radius:9px;padding:9px;background:#3f1721;color:#fecaca;cursor:pointer}.identity{display:flex;gap:14px;align-items:center}.avatar{width:72px;height:72px;border-radius:50%;object-fit:cover;background:#27344d;border:2px solid #475569}.avatar-fallback{display:grid;place-items:center;font-size:1.5rem;font-weight:700}.name{font-size:1.15rem;font-weight:750}.handle,.muted{color:#94a3b8}.facts{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:16px 0}.fact{background:#0f172a;border-radius:10px;padding:9px;text-align:center}.fact strong{display:block}.delta{font-size:.68em;margin-left:.2em}.delta-up{color:#4ade80}.delta-down{color:#fb7185}.row{display:flex;justify-content:space-between;gap:12px;margin-top:8px}.value{overflow-wrap:anywhere;text-align:right}.ok{color:#86efac}.bad{color:#fca5a5}.services{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}.service{padding:16px}@media(max-width:700px){body{padding:14px}.accounts{grid-template-columns:1fr}.manage form{grid-template-columns:1fr}}</style></head><body><main>
 <h1>IG Monitor</h1><p class="muted">監控管理頁面 · {{ data.generated_at }}</p>
 <section class="summary">
 <div class="metric">啟用帳號<strong>{{ data.summary.accounts }}</strong></div>
@@ -77,9 +77,9 @@ CARD_PAGE = """<!doctype html>
     <div><div class="name">{{ a.display_name or a.label }}</div><div class="handle">@{{ a.username or a.label }}</div></div>
   </div>
   <div class="facts">
-    <div class="fact"><strong>{{ a.posts }}</strong>發文</div>
-    <div class="fact"><strong>{{ a.followers }}</strong>跟隨者</div>
-    <div class="fact"><strong>{{ a.following }}</strong>追蹤中</div>
+    <div class="fact"><strong class="{{ 'delta-up' if a.posts_delta > 0 else 'delta-down' if a.posts_delta < 0 else '' }}">{{ a.posts }}{% if a.posts_delta %}<span class="delta">({{ '+' if a.posts_delta > 0 else '' }}{{ a.posts_delta }})</span>{% endif %}</strong>發文</div>
+    <div class="fact"><strong class="{{ 'delta-up' if a.followers_delta > 0 else 'delta-down' if a.followers_delta < 0 else '' }}">{{ a.followers }}{% if a.followers_delta %}<span class="delta">({{ '+' if a.followers_delta > 0 else '' }}{{ a.followers_delta }})</span>{% endif %}</strong>跟隨者</div>
+    <div class="fact"><strong class="{{ 'delta-up' if a.following_delta > 0 else 'delta-down' if a.following_delta < 0 else '' }}">{{ a.following }}{% if a.following_delta %}<span class="delta">({{ '+' if a.following_delta > 0 else '' }}{{ a.following_delta }})</span>{% endif %}</strong>追蹤中</div>
   </div>
   <div class="row"><span>狀態</span><span class="{{ 'bad' if a.fail_count >= 3 else 'ok' }}">{{ a.privacy }} / {{ a.fail_count }} 次失敗</span></div>
   <div class="row"><span>Profile ID</span><span class="value">{{ a.instagram_profile_id or '尚未建立' }}</span></div>
@@ -131,15 +131,25 @@ DETAIL_PAGE = """<!doctype html>
 <html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{{ account.display_name or account.label }} · IG Monitor</title>
 <style>
-:root{color-scheme:dark}*{box-sizing:border-box}body{font-family:system-ui,-apple-system,sans-serif;background:#0b1120;color:#e5e7eb;margin:0;padding:24px}main{max-width:1200px;margin:auto}a{color:#c4b5fd;text-decoration:none}.profile{display:flex;gap:18px;align-items:center;background:#172033;border:1px solid #27344d;border-radius:16px;padding:20px}.avatar{width:96px;height:96px;border-radius:50%;object-fit:cover;background:#27344d}.avatar-fallback{display:grid;place-items:center;font-size:2rem;font-weight:700}.muted{color:#94a3b8}.stats{display:flex;gap:18px;flex-wrap:wrap;margin-top:10px}.stats strong{display:block;font-size:1.25rem}.meta{background:#172033;border-radius:12px;padding:16px;margin:16px 0;overflow-wrap:anywhere}.tabs{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}.tabs button{border:1px solid #334155;background:#172033;color:#cbd5e1;border-radius:999px;padding:9px 14px;cursor:pointer}.tabs button.active{background:#7c3aed;border-color:#8b5cf6;color:white}.gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px}.media{background:#172033;border-radius:14px;overflow:hidden;border:1px solid #27344d}.media[hidden]{display:none}.media img,.media video{width:100%;aspect-ratio:1/1;display:block;object-fit:cover;background:#020617}.caption{padding:10px;font-size:.85rem;color:#94a3b8}@media(max-width:600px){body{padding:14px}.profile{align-items:flex-start}.avatar{width:72px;height:72px}.gallery{grid-template-columns:repeat(2,minmax(0,1fr))}}\n+</style></head><body><main>
+:root{color-scheme:dark}*{box-sizing:border-box}body{font-family:system-ui,-apple-system,sans-serif;background:#0b1120;color:#e5e7eb;margin:0;padding:24px}main{max-width:1200px;margin:auto}a{color:#c4b5fd;text-decoration:none}.profile{display:flex;gap:18px;align-items:center;background:#172033;border:1px solid #27344d;border-radius:16px;padding:20px}.avatar{width:96px;height:96px;border-radius:50%;object-fit:cover;background:#27344d}.avatar-fallback{display:grid;place-items:center;font-size:2rem;font-weight:700}.muted{color:#94a3b8}.stats{display:flex;gap:18px;flex-wrap:wrap;margin-top:10px}.stats strong{display:block;font-size:1.25rem}.delta{margin-left:4px;font-size:.8em}.delta-up{color:#4ade80}.delta-down{color:#fb7185}.meta,.trend{background:#172033;border-radius:12px;padding:16px;margin:16px 0;overflow-wrap:anywhere}.trend h2{margin-top:0}.chart-wrap{position:relative;width:100%;height:360px}.chart-wrap canvas{display:block;width:100%;height:360px}.chart-legend{display:flex;gap:18px;flex-wrap:wrap;margin-top:10px;color:#cbd5e1}.legend-key:before{content:'';display:inline-block;width:12px;height:3px;margin-right:6px;vertical-align:middle;background:var(--legend-color)}.tabs{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}.tabs button{border:1px solid #334155;background:#172033;color:#cbd5e1;border-radius:999px;padding:9px 14px;cursor:pointer}.tabs button.active{background:#7c3aed;border-color:#8b5cf6;color:white}.gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px}.media{background:#172033;border-radius:14px;overflow:hidden;border:1px solid #27344d}.media[hidden]{display:none}.media img,.media video{width:100%;aspect-ratio:1/1;display:block;object-fit:cover;background:#020617}.caption{padding:10px;font-size:.85rem;color:#94a3b8}@media(max-width:600px){body{padding:14px}.profile{align-items:flex-start}.avatar{width:72px;height:72px}.gallery{grid-template-columns:repeat(2,minmax(0,1fr))}.chart-wrap,.chart-wrap canvas{height:300px}}\n</style></head><body><main>
 <p><a href="{{ url_for('index') }}">← 返回帳號列表</a></p>
 <section class="profile">
 {% if account.has_avatar %}<img class="avatar" src="{{ url_for('avatar_asset', account_id=account.id) }}" alt="{{ account.label }}">
 {% else %}<div class="avatar avatar-fallback">{{ (account.username or account.label or '?')[0]|upper }}</div>{% endif %}
 <div><h1>{{ account.display_name or account.label }}</h1><div class="muted">@{{ account.username or account.label }}</div>
-<div class="stats"><span><strong>{{ account.posts }}</strong>發文</span><span><strong>{{ account.followers }}</strong>跟隨者</span><span><strong>{{ account.following }}</strong>追蹤中</span></div></div>
+<div class="stats">
+<span><strong class="{{ 'delta-up' if account.posts_delta > 0 else 'delta-down' if account.posts_delta < 0 else '' }}">{{ account.posts }}{% if account.posts_delta %}<span class="delta">({{ '+' if account.posts_delta > 0 else '' }}{{ account.posts_delta }})</span>{% endif %}</strong>發文</span>
+<span><strong class="{{ 'delta-up' if account.followers_delta > 0 else 'delta-down' if account.followers_delta < 0 else '' }}">{{ account.followers }}{% if account.followers_delta %}<span class="delta">({{ '+' if account.followers_delta > 0 else '' }}{{ account.followers_delta }})</span>{% endif %}</strong>跟隨者</span>
+<span><strong class="{{ 'delta-up' if account.following_delta > 0 else 'delta-down' if account.following_delta < 0 else '' }}">{{ account.following }}{% if account.following_delta %}<span class="delta">({{ '+' if account.following_delta > 0 else '' }}{{ account.following_delta }})</span>{% endif %}</strong>追蹤中</span>
+</div></div>
 </section>
 <section class="meta"><div>Instagram Profile ID：{{ account.instagram_profile_id or '尚未建立' }}</div><div>有效網址：{{ account.effective_url }}</div>{% if account.bio %}<p>{{ account.bio }}</p>{% endif %}<p><a href="{{ url_for('account_relationships', account_id=account.id) }}">Followers／Following／共同名單／異動紀錄</a></p></section>
+<section class="trend">
+<h2>數量趨勢</h2>
+<p class="muted">最近 90 個台灣日期；X 軸為日期，Y 軸為數量。</p>
+<div class="chart-wrap"><canvas id="profile-history-chart" role="img" aria-label="貼文、跟隨者與追蹤中數量趨勢圖"></canvas></div>
+<div class="chart-legend"><span class="legend-key" style="--legend-color:#a78bfa">貼文</span><span class="legend-key" style="--legend-color:#4ade80">跟隨者</span><span class="legend-key" style="--legend-color:#38bdf8">追蹤中</span></div>
+</section>
 <h2>照片與影片</h2>
 <nav class="tabs source-tabs">
 <button class="active" data-source="posts">貼文 {{ counts.posts.all }}</button>
@@ -183,6 +193,32 @@ document.querySelectorAll('[data-kind]').forEach(button=>button.addEventListener
  filterMedia();
 }));
 filterMedia();
+const profileHistory={{ account.history|tojson }};
+const chartSeries=[
+ {key:'posts',color:'#a78bfa'},
+ {key:'followers',color:'#4ade80'},
+ {key:'following',color:'#38bdf8'}
+];
+function drawProfileHistory(){
+ const canvas=document.getElementById('profile-history-chart');
+ if(!canvas||!profileHistory.length)return;
+ const rect=canvas.getBoundingClientRect(),ratio=window.devicePixelRatio||1;
+ const width=Math.max(320,rect.width),height=rect.height||360;
+ canvas.width=Math.round(width*ratio);canvas.height=Math.round(height*ratio);
+ const ctx=canvas.getContext('2d');ctx.setTransform(ratio,0,0,ratio,0,0);ctx.clearRect(0,0,width,height);
+ const pad={left:60,right:18,top:18,bottom:48},plotW=width-pad.left-pad.right,plotH=height-pad.top-pad.bottom;
+ const values=profileHistory.flatMap(point=>chartSeries.map(series=>Number(point[series.key])));
+ let min=Math.min(...values),max=Math.max(...values);
+ if(min===max){min=Math.max(0,min-1);max+=1}else{const margin=(max-min)*.08;min=Math.max(0,Math.floor(min-margin));max=Math.ceil(max+margin)}
+ const x=index=>pad.left+(profileHistory.length===1?plotW/2:index*plotW/(profileHistory.length-1));
+ const y=value=>pad.top+(max-value)*plotH/(max-min);
+ ctx.font='12px system-ui';ctx.textBaseline='middle';ctx.fillStyle='#94a3b8';ctx.strokeStyle='#334155';ctx.lineWidth=1;
+ for(let index=0;index<=4;index++){const value=min+(max-min)*(4-index)/4,yy=pad.top+index*plotH;ctx.beginPath();ctx.moveTo(pad.left,yy);ctx.lineTo(width-pad.right,yy);ctx.stroke();ctx.textAlign='right';ctx.fillText(Math.round(value).toLocaleString(),pad.left-8,yy)}
+ const labelStep=Math.max(1,Math.ceil(profileHistory.length/6));ctx.textAlign='center';ctx.textBaseline='top';
+ profileHistory.forEach((point,index)=>{if(index%labelStep===0||index===profileHistory.length-1)ctx.fillText(point.date.slice(5),x(index),height-pad.bottom+10)});
+ chartSeries.forEach(series=>{ctx.strokeStyle=series.color;ctx.fillStyle=series.color;ctx.lineWidth=2.5;ctx.beginPath();profileHistory.forEach((point,index)=>{const xx=x(index),yy=y(Number(point[series.key]));index?ctx.lineTo(xx,yy):ctx.moveTo(xx,yy)});ctx.stroke();profileHistory.forEach((point,index)=>{const xx=x(index),yy=y(Number(point[series.key]));ctx.beginPath();ctx.arc(xx,yy,profileHistory.length===1?4:2.5,0,Math.PI*2);ctx.fill()})});
+}
+drawProfileHistory();window.addEventListener('resize',drawProfileHistory);
 </script>
 </main></body></html>"""
 
@@ -254,6 +290,7 @@ def dashboard_data(db_path: Path, status_provider: Callable[[], dict[str, str]] 
             """).fetchall()
             summary["accounts"] = len(rows)
             for row in rows:
+                deltas = _latest_profile_deltas(connection, row["id"])
                 snapshot = json.loads(row["snapshot_json"]) if row["snapshot_json"] else {}
                 privacy = snapshot.get("privacy", "unknown")
                 if privacy in ("public", "private"):
@@ -270,6 +307,9 @@ def dashboard_data(db_path: Path, status_provider: Callable[[], dict[str, str]] 
                     "display_name": snapshot.get("display_name"), "privacy": privacy,
                     "posts": snapshot.get("posts", 0), "followers": snapshot.get("followers", 0),
                     "following": snapshot.get("following", 0),
+                    "posts_delta": deltas["posts"],
+                    "followers_delta": deltas["followers"],
+                    "following_delta": deltas["following"],
                     "has_avatar": bool(snapshot.get("avatar_path") and Path(snapshot["avatar_path"]).is_file()),
                     "instagram_profile_id": row["instagram_profile_id"],
                     "effective_url": row["effective_url"] or row["url"], "last_success_at": row["last_success_at"],
@@ -304,10 +344,15 @@ def account_detail_data(
         if row is None:
             return None, [], _empty_collection_counts()
         snapshot = json.loads(row["snapshot_json"]) if row["snapshot_json"] else {}
+        deltas = _latest_profile_deltas(connection, account_id)
         account = {
             "id": row["id"], "label": row["label"], "username": snapshot.get("username"),
             "display_name": snapshot.get("display_name"), "posts": snapshot.get("posts", 0),
             "followers": snapshot.get("followers", 0), "following": snapshot.get("following", 0),
+            "posts_delta": deltas["posts"],
+            "followers_delta": deltas["followers"],
+            "following_delta": deltas["following"],
+            "history": _daily_profile_history(connection, account_id),
             "bio": snapshot.get("bio"), "instagram_profile_id": row["instagram_profile_id"],
             "effective_url": row["effective_url"] or row["url"],
             "relationship_status": row["relationship_status"],
@@ -339,6 +384,48 @@ def account_detail_data(
         return account, media, counts
     finally:
         connection.close()
+
+
+def _latest_profile_deltas(connection: sqlite3.Connection, account_id: int) -> dict[str, int]:
+    rows = connection.execute(
+        """SELECT posts,followers,following FROM profile_history
+           WHERE account_id=? ORDER BY observed_at DESC,id DESC LIMIT 2""",
+        (account_id,),
+    ).fetchall()
+    if len(rows) < 2:
+        return {"posts": 0, "followers": 0, "following": 0}
+    return {
+        field: int(rows[0][field]) - int(rows[1][field])
+        for field in ("posts", "followers", "following")
+    }
+
+
+def _daily_profile_history(
+    connection: sqlite3.Connection, account_id: int, limit: int = 90
+) -> list[dict[str, Any]]:
+    rows = connection.execute(
+        """WITH ranked AS (
+             SELECT date(datetime(observed_at), '+8 hours') AS local_date,
+                    posts,followers,following,observed_at,id,
+                    ROW_NUMBER() OVER (
+                      PARTITION BY date(datetime(observed_at), '+8 hours')
+                      ORDER BY observed_at DESC,id DESC
+                    ) AS row_number
+             FROM profile_history WHERE account_id=?
+           )
+           SELECT local_date,posts,followers,following FROM (
+             SELECT local_date,posts,followers,following FROM ranked
+             WHERE row_number=1 ORDER BY local_date DESC LIMIT ?
+           ) ORDER BY local_date""",
+        (account_id, limit),
+    ).fetchall()
+    return [
+        {
+            "date": row["local_date"], "posts": row["posts"],
+            "followers": row["followers"], "following": row["following"],
+        }
+        for row in rows
+    ]
 
 
 def relationship_page_data(

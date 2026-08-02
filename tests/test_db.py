@@ -41,6 +41,25 @@ class DatabaseTests(unittest.TestCase):
         self.assertIsNone(self.db.snapshot_from_row(self.db.get_account("a")))
         self.assertEqual(self.db.pending_events(10), [])
 
+    def test_successful_observations_append_profile_count_history(self):
+        first = ProfileSnapshot(
+            "a", None, 10, 20, 30, "", PrivacyState.PUBLIC, "",
+            observed_at="2026-08-01T00:00:00+00:00",
+        )
+        second = ProfileSnapshot(
+            "a", None, 12, 25, 28, "", PrivacyState.PUBLIC, "",
+            observed_at="2026-08-02T00:00:00+00:00",
+        )
+        self.db.record_success(self.row["id"], first, [], [])
+        self.db.record_success(self.row["id"], second, [], [])
+
+        history = self.db.profile_history(self.row["id"])
+
+        self.assertEqual(
+            [(row["posts"], row["followers"], row["following"]) for row in history],
+            [(10, 20, 30), (12, 25, 28)],
+        )
+
 
     def test_identity_and_effective_url_survive_config_sync(self):
         self.db.set_identity(self.row["id"], "123", "renamed")

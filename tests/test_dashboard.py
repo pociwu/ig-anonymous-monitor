@@ -10,6 +10,41 @@ from ig_monitor.models import MediaCandidate, PrivacyState, ProfileSnapshot
 
 
 class DashboardTests(unittest.TestCase):
+    def test_dashboard_shows_latest_deltas_and_profile_history_chart(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "state.sqlite3"
+            db = Database(db_path)
+            try:
+                db.sync_accounts([
+                    AccountConfig("https://insta-stories-viewer.com/trend/", True, "trend")
+                ])
+                account = db.get_account("trend")
+                db.record_success(account["id"], ProfileSnapshot(
+                    "trend", None, 10, 20, 30, "", PrivacyState.PUBLIC, "",
+                    observed_at="2026-08-01T00:00:00+00:00",
+                ), [], [])
+                db.record_success(account["id"], ProfileSnapshot(
+                    "trend", None, 12, 25, 28, "", PrivacyState.PUBLIC, "",
+                    observed_at="2026-08-02T00:00:00+00:00",
+                ), [], [])
+            finally:
+                db.close()
+
+            app = create_app(db_path, lambda: {
+                "monitor": "active", "timer": "active", "next_run": "soon",
+            })
+            home = app.test_client().get("/").data.decode("utf-8")
+            self.assertIn("(+2)", home)
+            self.assertIn("(+5)", home)
+            self.assertIn("(-2)", home)
+            self.assertIn("delta-up", home)
+            self.assertIn("delta-down", home)
+
+            detail = app.test_client().get(f"/account/{account['id']}").data.decode("utf-8")
+            self.assertIn('id="profile-history-chart"', detail)
+            self.assertIn('"date": "2026-08-01"', detail)
+            self.assertIn('"posts": 12', detail)
+
     def test_docker_runtime_status_does_not_depend_on_systemd(self):
         with patch.dict("os.environ", {"IG_MONITOR_RUNTIME": "docker"}):
             self.assertEqual(system_status(), {
