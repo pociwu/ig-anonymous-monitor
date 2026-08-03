@@ -18,6 +18,8 @@ class AccountConfig:
     enabled: bool
     label: str
     relationship_tracking: bool = True
+    post_tracking: bool = True
+    full_post_backfill_on_reopen: bool = False
 
     @property
     def key(self) -> str:
@@ -112,6 +114,27 @@ class InstagramEnrichmentConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class InstagramPostsConfig:
+    enabled: bool
+    baseline_min: int
+    baseline_max: int
+    batch_size: int
+    jobs_per_day: int
+    reconcile_days: int
+    min_free_gb: float
+    min_free_percent: float
+    canary_account: str
+    phase_one_stable_days: int
+    canary_days: int
+    post_delay_min_seconds: int
+    post_delay_max_seconds: int
+    carousel_delay_min_seconds: int
+    carousel_delay_max_seconds: int
+    retry_delay_min_seconds: int
+    retry_delay_max_seconds: int
+
+
+@dataclass(frozen=True, slots=True)
 class AppConfig:
     accounts: tuple[AccountConfig, ...]
     paths: PathsConfig
@@ -123,6 +146,7 @@ class AppConfig:
     apify: ApifyConfig
     dedup: DedupConfig
     instagram_enrichment: InstagramEnrichmentConfig
+    instagram_posts: InstagramPostsConfig
     config_path: Path
 
 
@@ -180,7 +204,16 @@ def load_config(
             bool(item.get("enabled", True)),
             str(item.get("label") or key),
             bool(item.get("relationship_tracking", True)),
+            bool(item.get("post_tracking", True)),
+            bool(item.get("full_post_backfill_on_reopen", False)),
         ))
+
+    full_backfill_accounts = [
+        account for account in accounts
+        if account.enabled and account.full_post_backfill_on_reopen
+    ]
+    if len(full_backfill_accounts) > 1:
+        raise ValueError("only one enabled account may set full_post_backfill_on_reopen")
 
     base = config_path.parent
     paths = _section(raw, "paths")
@@ -319,5 +352,59 @@ def load_config(
     if instagram_cfg.member_delay_max_seconds < instagram_cfg.member_delay_min_seconds:
         raise ValueError("instagram_enrichment.member_delay_max_seconds must be at least member_delay_min_seconds")
 
+    posts = _section(raw, "instagram_posts")
+    posts_cfg = InstagramPostsConfig(
+        enabled=bool(posts.get("enabled", False)),
+        baseline_min=int(posts.get("baseline_min", 1)),
+        baseline_max=int(posts.get("baseline_max", 6)),
+        batch_size=int(posts.get("batch_size", 12)),
+        jobs_per_day=int(posts.get("jobs_per_day", 2)),
+        reconcile_days=int(posts.get("reconcile_days", 30)),
+        min_free_gb=float(posts.get("min_free_gb", 5)),
+        min_free_percent=float(posts.get("min_free_percent", 10)),
+        canary_account=str(posts.get("canary_account", "chaiyi_lili.cos")).strip(),
+        phase_one_stable_days=int(posts.get("phase_one_stable_days", 30)),
+        canary_days=int(posts.get("canary_days", 7)),
+        post_delay_min_seconds=int(posts.get("post_delay_min_seconds", 10)),
+        post_delay_max_seconds=int(posts.get("post_delay_max_seconds", 20)),
+        carousel_delay_min_seconds=int(posts.get("carousel_delay_min_seconds", 2)),
+        carousel_delay_max_seconds=int(posts.get("carousel_delay_max_seconds", 5)),
+        retry_delay_min_seconds=int(posts.get("retry_delay_min_seconds", 30)),
+        retry_delay_max_seconds=int(posts.get("retry_delay_max_seconds", 90)),
+    )
+    if not 1 <= posts_cfg.baseline_min <= posts_cfg.baseline_max <= 6:
+        raise ValueError("instagram_posts baseline must satisfy 1 <= min <= max <= 6")
+    if not 1 <= posts_cfg.batch_size <= 12:
+        raise ValueError("instagram_posts.batch_size must be between 1 and 12")
+    if not 1 <= posts_cfg.jobs_per_day <= 2:
+        raise ValueError("instagram_posts.jobs_per_day must be between 1 and 2")
+    posts_minimums = {
+        "reconcile_days": 30,
+        "min_free_gb": 5,
+        "min_free_percent": 10,
+        "phase_one_stable_days": 30,
+        "canary_days": 7,
+        "post_delay_min_seconds": 10,
+        "carousel_delay_min_seconds": 2,
+        "retry_delay_min_seconds": 30,
+    }
+    for name, minimum in posts_minimums.items():
+        if getattr(posts_cfg, name) < minimum:
+            raise ValueError(f"instagram_posts.{name} must be at least {minimum}")
+    if posts_cfg.min_free_percent > 100:
+        raise ValueError("instagram_posts.min_free_percent must be no more than 100")
+    for minimum_name, maximum_name in (
+        ("post_delay_min_seconds", "post_delay_max_seconds"),
+        ("carousel_delay_min_seconds", "carousel_delay_max_seconds"),
+        ("retry_delay_min_seconds", "retry_delay_max_seconds"),
+    ):
+        if getattr(posts_cfg, maximum_name) < getattr(posts_cfg, minimum_name):
+            raise ValueError(
+                f"instagram_posts.{maximum_name} must be at least {minimum_name}"
+            )
+    if posts_cfg.canary_account.casefold() != "chaiyi_lili.cos":
+        raise ValueError("instagram_posts.canary_account must be chaiyi_lili.cos")
+
     return AppConfig(tuple(accounts), path_cfg, browser_cfg, schedule_cfg, heartbeat_cfg,
-                     retention_cfg, telegram_cfg, apify_cfg, dedup_cfg, instagram_cfg, config_path)
+                     retention_cfg, telegram_cfg, apify_cfg, dedup_cfg, instagram_cfg,
+                     posts_cfg, config_path)

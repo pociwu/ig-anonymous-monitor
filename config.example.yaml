@@ -3,6 +3,9 @@ accounts:
     enabled: true
     label: sin_9311
     relationship_tracking: true
+    post_tracking: true
+    # Phase Two 尚未實作完成前請保持 false；全系統最多一個帳號可設 true。
+    full_post_backfill_on_reopen: false
 
 paths:
   data_dir: ./data
@@ -72,3 +75,23 @@ instagram_enrichment:
   member_delay_max_seconds: 90
   member_retry_min_hours: 6
   member_stale_days: 30
+
+# Phase Two 安全骨架；目前預設關閉，不會產生貼文 API 請求。
+instagram_posts:
+  enabled: false
+  baseline_min: 1
+  baseline_max: 6
+  batch_size: 12
+  jobs_per_day: 2
+  reconcile_days: 30
+  min_free_gb: 5
+  min_free_percent: 10
+  canary_account: chaiyi_lili.cos
+  phase_one_stable_days: 30
+  canary_days: 7
+  post_delay_min_seconds: 10
+  post_delay_max_seconds: 20
+  carousel_delay_min_seconds: 2
+  carousel_delay_max_seconds: 5
+  retry_delay_min_seconds: 30
+  retry_delay_max_seconds: 90

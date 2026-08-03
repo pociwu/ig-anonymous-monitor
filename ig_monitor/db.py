@@ -159,6 +159,74 @@ class Database:
           id INTEGER PRIMARY KEY, instagram_profile_id TEXT NOT NULL,
           status TEXT NOT NULL, error TEXT, attempted_at TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS authenticated_work_runs (
+          id INTEGER PRIMARY KEY, work_kind TEXT NOT NULL, work_ref_id INTEGER NOT NULL,
+          budget_day TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'running',
+          lease_until TEXT NOT NULL, started_at TEXT NOT NULL, finished_at TEXT,
+          outcome TEXT, error TEXT,
+          UNIQUE(work_kind,work_ref_id,started_at)
+        );
+        CREATE INDEX IF NOT EXISTS idx_authenticated_work_budget
+          ON authenticated_work_runs(budget_day,started_at);
+        CREATE INDEX IF NOT EXISTS idx_authenticated_work_active
+          ON authenticated_work_runs(status,lease_until);
+        CREATE TABLE IF NOT EXISTS post_feature_state (
+          id INTEGER PRIMARY KEY CHECK(id=1), state TEXT NOT NULL DEFAULT 'disabled',
+          phase_one_stable_since TEXT, canary_account_id INTEGER REFERENCES accounts(id),
+          canary_started_at TEXT, canary_completed_at TEXT, approved_at TEXT,
+          suspended_at TEXT, suspension_reason TEXT, updated_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS post_jobs (
+          id INTEGER PRIMARY KEY, account_id INTEGER NOT NULL REFERENCES accounts(id),
+          reason TEXT NOT NULL, mode TEXT NOT NULL, priority INTEGER NOT NULL DEFAULT 100,
+          status TEXT NOT NULL DEFAULT 'pending', available_at TEXT NOT NULL,
+          cursor TEXT, cursor_reset_at TEXT, baseline_target INTEGER,
+          lease_until TEXT, attempts INTEGER NOT NULL DEFAULT 0, last_error TEXT,
+          created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_post_jobs_ready
+          ON post_jobs(status,priority,available_at,id);
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_post_jobs_one_open
+          ON post_jobs(account_id) WHERE status IN ('pending','leased','paused');
+        CREATE TABLE IF NOT EXISTS post_runs (
+          id INTEGER PRIMARY KEY, job_id INTEGER REFERENCES post_jobs(id),
+          account_id INTEGER NOT NULL REFERENCES accounts(id),
+          authenticated_work_run_id INTEGER REFERENCES authenticated_work_runs(id),
+          reason TEXT NOT NULL, mode TEXT NOT NULL, status TEXT NOT NULL,
+          requested_count INTEGER, observed_count INTEGER NOT NULL DEFAULT 0,
+          cursor_in TEXT, cursor_out TEXT, complete INTEGER NOT NULL DEFAULT 0,
+          error TEXT, started_at TEXT NOT NULL, finished_at TEXT
+        );
+        CREATE TABLE IF NOT EXISTS posts (
+          id INTEGER PRIMARY KEY, account_id INTEGER NOT NULL REFERENCES accounts(id),
+          owner_profile_id TEXT NOT NULL, media_pk TEXT NOT NULL, shortcode TEXT,
+          original_url TEXT, taken_at TEXT, caption TEXT, media_type TEXT NOT NULL,
+          product_type TEXT, pinned INTEGER NOT NULL DEFAULT 0,
+          like_count INTEGER, comment_count INTEGER, source_flags TEXT NOT NULL DEFAULT '',
+          availability TEXT NOT NULL DEFAULT 'current', first_observed_at TEXT NOT NULL,
+          last_observed_at TEXT NOT NULL, last_complete_scan_at TEXT,
+          unavailable_since TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+          UNIQUE(owner_profile_id,media_pk)
+        );
+        CREATE INDEX IF NOT EXISTS idx_posts_account_time
+          ON posts(account_id,taken_at DESC,id DESC);
+        CREATE TABLE IF NOT EXISTS post_items (
+          id INTEGER PRIMARY KEY, post_id INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+          item_pk TEXT, position INTEGER NOT NULL, media_type TEXT NOT NULL,
+          width INTEGER, height INTEGER, duration REAL, candidate_url TEXT,
+          candidate_expires_at TEXT, canonical_media_id INTEGER REFERENCES media(id),
+          download_status TEXT NOT NULL DEFAULT 'pending', last_error TEXT,
+          created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+          UNIQUE(post_id,position)
+        );
+        CREATE TABLE IF NOT EXISTS post_change_history (
+          id INTEGER PRIMARY KEY, post_id INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+          run_id INTEGER REFERENCES post_runs(id), change_kind TEXT NOT NULL,
+          before_json TEXT, after_json TEXT, observed_at TEXT NOT NULL,
+          created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_post_change_history_post
+          ON post_change_history(post_id,observed_at DESC,id DESC);
         """)
         self._add_column_if_missing("accounts", "effective_url", "TEXT")
         self._add_column_if_missing("accounts", "instagram_profile_id", "TEXT")
@@ -172,6 +240,17 @@ class Database:
         self._add_column_if_missing("accounts", "identity_verified_source", "TEXT")
         self._add_column_if_missing("accounts", "identity_verified_at", "TEXT")
         self._add_column_if_missing("accounts", "identity_conflict_json", "TEXT")
+        self._add_column_if_missing("accounts", "post_tracking", "INTEGER NOT NULL DEFAULT 1")
+        self._add_column_if_missing(
+            "accounts", "full_post_backfill_on_reopen", "INTEGER NOT NULL DEFAULT 0"
+        )
+        self._add_column_if_missing("accounts", "post_baseline_target", "INTEGER")
+        self._add_column_if_missing(
+            "accounts", "post_status", "TEXT NOT NULL DEFAULT 'unavailable'"
+        )
+        self._add_column_if_missing("accounts", "post_last_run_at", "TEXT")
+        self._add_column_if_missing("accounts", "post_reconciled_at", "TEXT")
+        self._add_column_if_missing("accounts", "post_pause_reason", "TEXT")
         self._add_column_if_missing("relationship_jobs", "started_at", "TEXT")
         self._add_column_if_missing("media", "duplicate_of_id", "INTEGER")
         self._add_column_if_missing("media", "fingerprint_json", "TEXT")
@@ -179,9 +258,35 @@ class Database:
         self._add_column_if_missing("media", "video_duration", "REAL")
         self._add_column_if_missing("media", "video_bitrate", "INTEGER")
         self.conn.execute("UPDATE accounts SET effective_url=url WHERE effective_url IS NULL")
+        self.conn.execute(
+            """CREATE UNIQUE INDEX IF NOT EXISTS idx_accounts_one_full_post_backfill
+               ON accounts(full_post_backfill_on_reopen)
+               WHERE enabled=1 AND full_post_backfill_on_reopen=1"""
+        )
+        now = utc_now()
+        self.conn.execute(
+            """INSERT OR IGNORE INTO post_feature_state(id,state,updated_at)
+               VALUES(1,'disabled',?)""",
+            (now,),
+        )
         self.conn.execute("INSERT OR IGNORE INTO media_sources(media_id,category) SELECT id,category FROM media")
+        self._backfill_authenticated_work_runs()
         self._backfill_profile_history()
         self.conn.commit()
+
+    def _backfill_authenticated_work_runs(self) -> None:
+        self.conn.execute(
+            """INSERT OR IGNORE INTO authenticated_work_runs(
+                 work_kind,work_ref_id,budget_day,status,lease_until,started_at,
+                 finished_at,outcome,error
+               )
+               SELECT 'relationship',id,date(datetime(started_at),'+8 hours'),
+                 CASE WHEN status='leased' THEN 'abandoned' ELSE 'finished' END,
+                 COALESCE(lease_until,started_at),started_at,
+                 CASE WHEN status='leased' THEN started_at ELSE updated_at END,
+                 status,last_error
+               FROM relationship_jobs WHERE started_at IS NOT NULL"""
+        )
 
     def _backfill_profile_history(self) -> None:
         fields = ("posts", "followers", "following")
@@ -249,18 +354,28 @@ class Database:
             for sort_order, account in enumerate(accounts):
                 con.execute("""
                   INSERT INTO accounts(url,account_key,label,enabled,sort_order,effective_url,
-                    relationship_tracking,created_at,updated_at)
-                  VALUES(?,?,?,?,?,?,?,?,?)
+                    relationship_tracking,post_tracking,full_post_backfill_on_reopen,
+                    created_at,updated_at)
+                  VALUES(?,?,?,?,?,?,?,?,?,?,?)
                   ON CONFLICT(url) DO UPDATE SET account_key=excluded.account_key,
                     label=excluded.label,enabled=excluded.enabled,sort_order=excluded.sort_order,
                     relationship_tracking=excluded.relationship_tracking,
+                    post_tracking=excluded.post_tracking,
+                    full_post_backfill_on_reopen=excluded.full_post_backfill_on_reopen,
                     updated_at=excluded.updated_at
                 """, (account.url, account.key, account.label, int(account.enabled), sort_order,
-                      account.url, int(account.relationship_tracking), now, now))
+                      account.url, int(account.relationship_tracking), int(account.post_tracking),
+                      int(account.full_post_backfill_on_reopen), now, now))
             con.execute(
                 """UPDATE relationship_jobs SET status='cancelled',lease_until=NULL,updated_at=?
                    WHERE status IN ('pending','leased') AND account_id IN (
                      SELECT id FROM accounts WHERE enabled=0 OR relationship_tracking=0
+                   )""", (now,)
+            )
+            con.execute(
+                """UPDATE post_jobs SET status='cancelled',lease_until=NULL,updated_at=?
+                   WHERE status IN ('pending','leased','paused') AND account_id IN (
+                     SELECT id FROM accounts WHERE enabled=0 OR post_tracking=0
                    )""", (now,)
             )
 
@@ -614,6 +729,19 @@ class Database:
                 "UPDATE relationship_jobs SET status='pending',lease_until=NULL,updated_at=? WHERE status='leased'",
                 (now,),
             )
+            con.execute(
+                """UPDATE post_jobs SET status='paused',lease_until=NULL,last_error=?,updated_at=?
+                   WHERE status IN ('pending','leased')""",
+                (reason, now),
+            )
+            con.execute(
+                """UPDATE post_feature_state
+                   SET state=CASE WHEN state='disabled' THEN state ELSE 'suspended' END,
+                       suspended_at=CASE WHEN state='disabled' THEN suspended_at ELSE ? END,
+                       suspension_reason=CASE WHEN state='disabled' THEN suspension_reason ELSE ? END,
+                       updated_at=? WHERE id=1""",
+                (now, reason, now),
+            )
             if previous["state"] != "risk_hold":
                 con.execute(
                     """INSERT OR IGNORE INTO events(event_key,kind,payload_json,created_at)
@@ -623,50 +751,6 @@ class Database:
                         json.dumps({"old_state": previous["state"], "state": "risk_hold", "reason": reason}), now,
                     ),
                 )
-
-    def relationship_job_count_for_taipei_day(self, now: datetime) -> int:
-        local_day = now.astimezone(timezone(timedelta(hours=8))).date().isoformat()
-        row = self.conn.execute(
-            """SELECT COUNT(*) FROM relationship_jobs
-               WHERE started_at IS NOT NULL AND date(datetime(started_at), '+8 hours')=?""",
-            (local_day,),
-        ).fetchone()
-        return int(row[0])
-
-    def claim_relationship_job(self, now: str, canary_account_id: int | None = None) -> dict[str, Any] | None:
-        lease_until = (datetime.fromisoformat(now) + timedelta(minutes=30)).isoformat(timespec="seconds")
-        with self.transaction() as con:
-            con.execute(
-                """UPDATE relationship_jobs SET status='pending',lease_until=NULL,updated_at=?
-                   WHERE status='leased' AND lease_until<?""",
-                (now, now),
-            )
-            query = """SELECT j.* FROM relationship_jobs j JOIN accounts a ON a.id=j.account_id
-                       WHERE j.status='pending' AND j.available_at<=? AND a.enabled=1
-                         AND a.relationship_tracking=1"""
-            params: list[Any] = [now]
-            if canary_account_id is not None:
-                query += " AND j.account_id=?"
-                params.append(canary_account_id)
-            query += " ORDER BY CASE j.reason WHEN 'reopened' THEN 0 WHEN 'count_change' THEN 1 WHEN 'canary' THEN 2 ELSE 3 END,j.id LIMIT 1"
-            row = con.execute(query, params).fetchone()
-            if row is None:
-                return None
-            updated = con.execute(
-                """UPDATE relationship_jobs SET status='leased',lease_until=?,started_at=?,
-                   attempts=attempts+1,updated_at=?
-                   WHERE id=? AND status='pending'""",
-                (lease_until, now, now, row["id"]),
-            )
-            if updated.rowcount != 1:
-                return None
-            con.execute(
-                "UPDATE collector_state SET last_job_started_at=?,updated_at=? WHERE id=1", (now, now)
-            )
-            claimed = dict(row)
-            claimed["status"] = "leased"
-            claimed["lease_until"] = lease_until
-            return claimed
 
     def finish_relationship_job(self, job_id: int, status: str, error: str | None = None) -> None:
         self.conn.execute(

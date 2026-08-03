@@ -8,8 +8,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from typing import Protocol
-from zoneinfo import ZoneInfo
 
+from .authenticated_work import AuthenticatedWorkCoordinator
 from .config import InstagramEnrichmentConfig
 from .db import Database
 from .models import PrivacyState, ProfileSnapshot
@@ -241,12 +241,18 @@ class RelationshipWorker:
         source: InstagramRelationshipSource,
         sleeper: Callable[[float], None] = time.sleep,
         random_uniform: Callable[[float, float], float] = random.uniform,
+        coordinator: AuthenticatedWorkCoordinator | None = None,
     ):
         self.db = db
         self.config = config
         self.source = source
         self.sleeper = sleeper
         self.random_uniform = random_uniform
+        self.coordinator = coordinator or AuthenticatedWorkCoordinator(
+            db,
+            daily_start_limit=config.daily_relationship_jobs,
+            minimum_start_interval_minutes=config.minimum_job_interval_minutes,
+        )
 
     def run_once(self, now: datetime) -> WorkOutcome:
         self.db.prune_relationship_data(now)
@@ -269,37 +275,36 @@ class RelationshipWorker:
                     collector["canary_account_id"], True, True, "canary_final",
                     now.isoformat(timespec="seconds"),
                 )
-        if self.db.relationship_job_count_for_taipei_day(now) >= self.config.daily_relationship_jobs:
-            return WorkOutcome("daily_budget")
-        last_started = collector.get("last_job_started_at")
-        if last_started:
-            earliest = datetime.fromisoformat(last_started) + timedelta(
-                minutes=self.config.minimum_job_interval_minutes
-            )
-            if now < earliest:
-                return WorkOutcome("spacing")
-        job = self.db.claim_relationship_job(
-            now.isoformat(timespec="seconds"), collector.get("canary_account_id")
-            if collector["state"] == "canary" else None
+        decision = self.coordinator.claim_next(
+            now,
+            relationship_canary_account_id=(
+                collector.get("canary_account_id") if collector["state"] == "canary" else None
+            ),
         )
-        if not job:
-            return WorkOutcome("idle")
+        if decision.claim is None:
+            return WorkOutcome(decision.status)
+        claim = decision.claim
+        job = claim.payload
+
+        def completed(outcome: WorkOutcome) -> WorkOutcome:
+            self.coordinator.finish(claim, outcome.status, outcome.detail)
+            return outcome
 
         account = self.db.get_account_by_id(job["account_id"])
         if not account:
             self.db.finish_relationship_job(job["id"], "cancelled", "account missing")
-            return WorkOutcome("cancelled", job["id"])
+            return completed(WorkOutcome("cancelled", job["id"]))
         username = (account.get("effective_url") or account["url"]).rstrip("/").rsplit("/", 1)[-1]
         try:
             target = self.source.resolve_public_user(username)
             if not target.is_public:
                 self.db.freeze_relationships(account["id"], now.isoformat(timespec="seconds"))
                 self.db.finish_relationship_job(job["id"], "cancelled", "target ineligible")
-                return WorkOutcome("target_ineligible", job["id"])
+                return completed(WorkOutcome("target_ineligible", job["id"]))
             if account.get("instagram_profile_id") and account["instagram_profile_id"] != target.profile_id:
                 self.db.record_identity_conflict(account["id"], target.profile_id, now.isoformat(timespec="seconds"))
                 self.db.finish_relationship_job(job["id"], "failed", "identity conflict")
-                return WorkOutcome("identity_conflict", job["id"])
+                return completed(WorkOutcome("identity_conflict", job["id"]))
             if not account.get("instagram_profile_id"):
                 self.db.set_verified_identity(account["id"], target.profile_id, now.isoformat(timespec="seconds"))
             elif account.get("identity_verified_source") != "instagrapi":
@@ -322,7 +327,7 @@ class RelationshipWorker:
             if not requested:
                 self.db.set_relationship_status(account["id"], "scope_exceeded")
                 self.db.finish_relationship_job(job["id"], "completed")
-                return WorkOutcome("scope_exceeded", job["id"])
+                return completed(WorkOutcome("scope_exceeded", job["id"]))
             overall = "completed"
             for index, direction in enumerate(requested):
                 if index:
@@ -338,19 +343,19 @@ class RelationshipWorker:
                 self.db.finalize_relationship_account(account["id"], now.isoformat(timespec="seconds"))
             if overall == "completed" and canary_final and job["account_id"] == collector.get("canary_account_id"):
                 self.db.set_collector_state("active", now.isoformat(timespec="seconds"))
-            return WorkOutcome(overall, job["id"])
+            return completed(WorkOutcome(overall, job["id"]))
         except CollectorFatalError as exc:
             reason = _collector_fatal_reason(exc)
             self.db.place_collector_risk_hold(reason)
             self.db.finish_relationship_job(job["id"], "failed", reason)
-            return WorkOutcome("risk_hold", job["id"], reason)
+            return completed(WorkOutcome("risk_hold", job["id"], reason))
         except TargetIneligibleError:
             self.db.freeze_relationships(account["id"], now.isoformat(timespec="seconds"))
             self.db.finish_relationship_job(job["id"], "cancelled", "target ineligible")
-            return WorkOutcome("target_ineligible", job["id"])
+            return completed(WorkOutcome("target_ineligible", job["id"]))
         except Exception as exc:
             self.db.finish_relationship_job(job["id"], "failed", type(exc).__name__)
-            return WorkOutcome("incomplete", job["id"], type(exc).__name__)
+            return completed(WorkOutcome("incomplete", job["id"], type(exc).__name__))
 
     def _collect_direction(self, job, account, target, direction, now) -> str:
         run_id = self.db.start_relationship_run(job["id"], account["id"], direction.value, now.isoformat(timespec="seconds"))

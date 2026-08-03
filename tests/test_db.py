@@ -143,6 +143,8 @@ class DatabaseTests(unittest.TestCase):
             "relationship_run_members", "relationship_members",
             "account_relationships", "relationship_history",
             "member_enrichment_jobs", "member_enrichment_attempts",
+            "authenticated_work_runs", "post_feature_state", "post_jobs",
+            "post_runs", "posts", "post_items", "post_change_history",
         }
         actual = {
             row[0] for row in self.db.conn.execute(
@@ -150,6 +152,11 @@ class DatabaseTests(unittest.TestCase):
             )
         }
         self.assertTrue(expected_tables <= actual)
+        self.assertEqual(self.row["post_tracking"], 1)
+        self.assertEqual(self.row["full_post_backfill_on_reopen"], 0)
+        self.assertEqual(self.db.conn.execute(
+            "SELECT state FROM post_feature_state WHERE id=1"
+        ).fetchone()[0], "disabled")
 
         disabled = AccountConfig(
             "https://insta-stories-viewer.com/a/", True, "a", False
@@ -172,6 +179,29 @@ class DatabaseTests(unittest.TestCase):
         self.db.enqueue_relationship_watchdogs(now + timedelta(minutes=5))
         events = [event for event in self.db.pending_events(20) if event["kind"] == "queue_stuck"]
         self.assertEqual(len(events), 1)
+
+    def test_collector_risk_hold_suspends_enabled_post_state_and_jobs(self):
+        now = "2026-08-03T00:00:00+00:00"
+        self.db.conn.execute(
+            "UPDATE post_feature_state SET state='active',updated_at=? WHERE id=1", (now,)
+        )
+        self.db.conn.execute(
+            """INSERT INTO post_jobs(
+                 account_id,reason,mode,priority,status,available_at,created_at,updated_at
+               ) VALUES(?,'baseline','ordinary',100,'pending',?,?,?)""",
+            (self.row["id"], now, now, now),
+        )
+        self.db.conn.commit()
+
+        self.db.place_collector_risk_hold("PleaseWaitFewMinutes")
+
+        state = self.db.conn.execute(
+            "SELECT state,suspension_reason FROM post_feature_state WHERE id=1"
+        ).fetchone()
+        job = self.db.conn.execute("SELECT status FROM post_jobs").fetchone()
+        self.assertEqual((state["state"], state["suspension_reason"]),
+                         ("suspended", "PleaseWaitFewMinutes"))
+        self.assertEqual(job["status"], "paused")
 
 
 if __name__ == "__main__":

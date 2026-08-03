@@ -32,7 +32,9 @@ def run(config_path: Path, session_path: Path, poll_seconds: int = 60) -> None:
     try:
         while not stopped:
             outcome = worker.run_once(datetime.now(UTC))
-            if outcome.status not in ("idle", "spacing", "daily_budget", "disabled", "collector_unavailable"):
+            if outcome.status not in (
+                "idle", "busy", "spacing", "daily_budget", "disabled", "collector_unavailable"
+            ):
                 LOG.info("relationship work status=%s job=%s detail=%s", outcome.status, outcome.job_id, outcome.detail)
             for _ in range(max(1, poll_seconds)):
                 if stopped:

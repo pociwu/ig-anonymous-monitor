@@ -23,7 +23,98 @@ heartbeat:
             self.assertEqual(config.schedule.account_delay_max_seconds, 20)
             self.assertEqual(config.schedule.media_limit_per_account, 50)
             self.assertFalse(config.instagram_enrichment.enabled)
+            self.assertFalse(config.instagram_posts.enabled)
+            self.assertEqual(config.instagram_posts.baseline_max, 6)
+            self.assertEqual(config.instagram_posts.batch_size, 12)
             self.assertTrue(config.accounts[0].relationship_tracking)
+            self.assertTrue(config.accounts[0].post_tracking)
+            self.assertFalse(config.accounts[0].full_post_backfill_on_reopen)
+
+    def test_instagram_posts_safe_limits_are_loaded(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "config.yaml"
+            path.write_text("""
+accounts:
+  - url: https://insta-stories-viewer.com/sin_9311/
+    post_tracking: false
+    full_post_backfill_on_reopen: true
+telegram:
+  enabled: false
+instagram_posts:
+  baseline_min: 2
+  baseline_max: 5
+  batch_size: 10
+  jobs_per_day: 1
+  reconcile_days: 45
+  min_free_gb: 8
+  min_free_percent: 15
+""", encoding="utf-8")
+
+            config = load_config(path, require_telegram=False)
+
+            self.assertFalse(config.instagram_posts.enabled)
+            self.assertEqual(config.instagram_posts.baseline_min, 2)
+            self.assertEqual(config.instagram_posts.baseline_max, 5)
+            self.assertEqual(config.instagram_posts.jobs_per_day, 1)
+            self.assertFalse(config.accounts[0].post_tracking)
+            self.assertTrue(config.accounts[0].full_post_backfill_on_reopen)
+
+    def test_instagram_posts_rejects_less_safe_limits(self):
+        unsafe_values = {
+            "baseline_max": 7,
+            "batch_size": 13,
+            "jobs_per_day": 3,
+            "reconcile_days": 29,
+            "min_free_gb": 4.9,
+            "min_free_percent": 9,
+            "phase_one_stable_days": 29,
+            "canary_days": 6,
+            "post_delay_min_seconds": 9,
+            "carousel_delay_min_seconds": 1,
+            "retry_delay_min_seconds": 29,
+        }
+        for name, value in unsafe_values.items():
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as tmp:
+                path = Path(tmp) / "config.yaml"
+                path.write_text(f"""
+accounts:
+  - url: https://insta-stories-viewer.com/a/
+telegram:
+  enabled: false
+instagram_posts:
+  {name}: {value}
+""", encoding="utf-8")
+                with self.assertRaisesRegex(ValueError, "instagram_posts"):
+                    load_config(path, require_telegram=False)
+
+    def test_only_one_enabled_full_post_backfill_account_is_allowed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "config.yaml"
+            path.write_text("""
+accounts:
+  - url: https://insta-stories-viewer.com/a/
+    full_post_backfill_on_reopen: true
+  - url: https://insta-stories-viewer.com/b/
+    full_post_backfill_on_reopen: true
+telegram:
+  enabled: false
+""", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "only one"):
+                load_config(path, require_telegram=False)
+
+    def test_post_canary_account_is_fixed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "config.yaml"
+            path.write_text("""
+accounts:
+  - url: https://insta-stories-viewer.com/a/
+telegram:
+  enabled: false
+instagram_posts:
+  canary_account: another_account
+""", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "chaiyi_lili.cos"):
+                load_config(path, require_telegram=False)
 
     def test_instagram_enrichment_safe_limits_are_loaded(self):
         with tempfile.TemporaryDirectory() as tmp:

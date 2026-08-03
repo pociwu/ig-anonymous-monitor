@@ -83,6 +83,8 @@ Dashboard 的帳號詳情頁提供 Followers、Following、共同名單與 Histo
 
 Authenticated public feed-post monitoring is designed but remains disabled and is not yet implemented. The approved behavior, rollout gates, shared relationship/post budget, single full-backfill target, media handling, Dashboard requirements, and acceptance tests are defined in [Instagram Public Feed Post Monitoring — Phase Two Specification](docs/specs/instagram-public-post-monitoring-phase-two.md).
 
+The foundational safety slice is present: disabled-by-default configuration, additive post schema, and a durable authenticated-work coordinator now enforce the existing Relationship budget/spacing through one seam. No production post adapter, post trigger, post worker, or post download path is enabled yet, so this release makes no authenticated post requests.
+
 The design decisions are recorded in [ADR 014](docs/adr/014-share-one-authenticated-work-coordinator.md) and [ADR 015](docs/adr/015-guard-public-feed-post-backfill.md). Do not add `instagram_posts.enabled: true` to production until the implementation, migration tests, 30-day phase-one stability gate, and seven-day post canary are complete.
 
 ## Apify identity resolution and monthly cap
