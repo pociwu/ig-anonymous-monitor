@@ -152,6 +152,38 @@ _Avoid_: 移除監控帳號、全域 collector 開關
 **Directional relationship refresh**: 只有 Followers 或 Following 總數改變時，只重新取得該方向 Complete relationship snapshot，並使用另一方向最近完整基準重算 Mutual follow；首次基準、30 天校正、重新公開與人工診斷才強制更新雙向。
 _Avoid_: 每次雙向抓取、部分共同名單
 
+## Authenticated post monitoring
+
+**Post monitoring phase**: 第一階段穩定運作至少 30 天後，才可啟動的公開帳號貼文補充巡檢；它有獨立的 Canary、核准與暫停狀態。_Avoid_: Relationship monitoring、匿名媒體巡檢
+
+**Feed post**: 公開 Instagram 帳號個人頁動態中，以 Media PK 識別的一則照片、影片或輪播貼文；一般動態查詢自然回傳的 Reel 也屬此範圍。_Avoid_: Story、Highlight、專用 Reels 掃描
+
+**Carousel post**: 單一 Feed post 內按固定順序排列的多個照片或影片項目；子項目不是獨立貼文。_Avoid_: 相同時間的多則貼文
+
+**Post baseline**: 一般公開監控帳號首次固定抽取的最近 1 至 6 則 Feed post；抽取數量只決定一次並保存，不代表完整歷史。_Avoid_: Full post backfill
+
+**Full post backfill target**: 全系統唯一獲准在私人轉公開時完整回補 Feed post 的 Monitored Instagram account；資格綁定 Canonical Instagram Profile ID，預設為 `sin_9311`。_Avoid_: 依 username 永久綁定、所有公開帳號完整回補
+
+**Full post backfill**: 對 Full post backfill target 從最新貼文開始、分批且可續傳地巡檢，直到分頁游標耗盡；中途轉私人時保留進度。_Avoid_: 單次無上限下載、歷史 Reels 專用回補
+
+**Post canary**: Collector active 且第一階段穩定至少 30 天後，以 `chaiyi_lili.cos` 進行七天、每日最多一個貼文工作的獨立驗證期。_Avoid_: Collector canary、可略過的試跑
+
+**Authenticated work budget**: Relationship 與 Post 工作共用的全域限制：Asia/Taipei 每日最多六個工作，任兩個工作開始至少相隔四小時。_Avoid_: 各功能各自擁有六個工作額度
+
+**Post work budget**: Authenticated work budget 的子額度，Asia/Taipei 每日最多兩個 Post 工作；Canary 期間最多一個。_Avoid_: 額外於全域六個工作的獨立額度
+
+**Post reconciliation**: 一般公開帳號每 30 天檢視最近六則 Feed post 的低優先工作，用來發現貼文刪除與新增互相抵銷而總數不變的情況。_Avoid_: 完整歷史掃描、每次匿名巡檢都執行
+
+**Post media item**: Feed post 的一個有序媒體項目；單圖或單影片貼文有一個，Carousel post 可有多個。_Avoid_: Post record
+
+**Natural Reel inclusion**: 一般 Feed post 查詢自然回傳 Reel 時接受並分類為 Reels，但不呼叫專用 Reel 端點。_Avoid_: Reels 全量掃描
+
+**Possibly unavailable post**: 曾存在的貼文在一次具權威性的完整掃描中缺席，尚未由至少 24 小時後的另一個完整掃描確認。_Avoid_: 已確認刪除
+
+**Confirmed unavailable post**: Possibly unavailable post 在至少 24 小時後的另一個完整掃描仍缺席；資料與媒體保留，不自動刪除。_Avoid_: Instagram 已證實刪除
+
+**Post download pause**: 磁碟剩餘少於 5 GB 或 10% 時暫停新媒體下載，但仍保存已取得的貼文中繼資料與續傳進度。_Avoid_: Collector risk hold、自動刪檔
+
 ## Monitoring dashboard
 
 **Monitoring dashboard endpoint**: 供操作人員檢視巡檢帳號、摘要與排程狀態的 HTTP 服務端點；服務直接監聽 `0.0.0.0:8888`。

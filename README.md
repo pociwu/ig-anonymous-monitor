@@ -79,6 +79,12 @@ Dashboard 的帳號詳情頁提供 Followers、Following、共同名單與 Histo
 既有 systemd/Miniconda 主機請依照
 [Ubuntu Docker 遷移指南](docs/docker-migration.md) 停止舊排程、備份 SQLite，再啟動容器。
 
+## Phase-two post monitoring specification
+
+Authenticated public feed-post monitoring is designed but remains disabled and is not yet implemented. The approved behavior, rollout gates, shared relationship/post budget, single full-backfill target, media handling, Dashboard requirements, and acceptance tests are defined in [Instagram Public Feed Post Monitoring — Phase Two Specification](docs/specs/instagram-public-post-monitoring-phase-two.md).
+
+The design decisions are recorded in [ADR 014](docs/adr/014-share-one-authenticated-work-coordinator.md) and [ADR 015](docs/adr/015-guard-public-feed-post-backfill.md). Do not add `instagram_posts.enabled: true` to production until the implementation, migration tests, 30-day phase-one stability gate, and seven-day post canary are complete.
+
 ## Apify identity resolution and monthly cap
 
 Add the secret to `/srv/ig-monitor/.env`:

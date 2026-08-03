@@ -1,0 +1,3 @@
+# Add guarded public feed post backfill in phase two
+
+Phase two adds authenticated read-only collection only for public monitored accounts' feed photos, videos, carousels, and Reels naturally returned by the feed endpoint. It starts only after phase one has been Active and stable for at least 30 days, then passes a separate seven-day single-account post canary and manual CLI approval. Dedicated Reels endpoints, Stories, private-account collection, comments, liker/commenter lists, view/seen calls, and every Instagram write or interaction action remain excluded. Ordinary accounts receive a persisted random one-to-six-post baseline; only one Profile-ID-bound account may receive resumable full feed backfill after reopening.

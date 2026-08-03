@@ -1,0 +1,3 @@
+# Share one authenticated work coordinator
+
+Relationship membership and phase-two post listing must use the existing `relationship-worker`, one persisted collector session, and one durable authenticated-work coordinator. The coordinator atomically enforces the shared six-starts-per-Taipei-day budget, four-hour minimum spacing, priority, leases, and collector risk state across both workloads. Post metadata and signed media URLs may be queued there, but ordinary media downloading remains non-credentialed. No second authenticated service, concurrent collector client, or feature-local budget may bypass this coordinator.
