@@ -23,3 +23,4 @@ def test_compose_isolates_collector_and_application_secrets():
         not any("collector-secrets" in mount for mount in services[name].get("volumes", []))
         for name in ("monitor", "dashboard", "member-enrichment-worker")
     )
+    assert "./downloads:/srv/ig-monitor/downloads" in services["member-enrichment-worker"]["volumes"]
