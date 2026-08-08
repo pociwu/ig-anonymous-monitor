@@ -48,7 +48,7 @@ class InstagrapiRelationshipSource:
             raise ValueError("IG_COLLECTOR_USERNAME and IG_COLLECTOR_PASSWORD are required")
         try:
             if self.session_path.is_file():
-                self.client.set_settings(self.client.load_settings(self.session_path))
+                self._restore_session_settings()
             secret = os.getenv("IG_COLLECTOR_TOTP_SECRET", "").replace(" ", "")
             code = pyotp.TOTP(secret).now() if secret else ""
             self.client.login(username, password, verification_code=code)
@@ -105,9 +105,15 @@ class InstagrapiRelationshipSource:
         if not self.session_path.is_file():
             raise CollectorFatalError("SessionMissing")
         if not self.client.user_id:
-            self.client.set_settings(self.client.load_settings(self.session_path))
-            auth = self.client.get_settings().get("authorization_data") or {}
-            self.client.user_id = auth.get("ds_user_id")
+            self._restore_session_settings()
+        if not self.client.user_id:
+            raise CollectorFatalError("SessionInvalid")
+
+    def _restore_session_settings(self) -> None:
+        try:
+            self.client.load_settings(self.session_path)
+        except (OSError, KeyError, TypeError, ValueError) as exc:
+            raise CollectorFatalError("SessionInvalid") from exc
 
     def _save_session(self) -> None:
         self.session_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
