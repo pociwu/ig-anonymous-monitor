@@ -164,6 +164,33 @@ class DatabaseTests(unittest.TestCase):
         self.db.sync_accounts([disabled])
         self.assertEqual(self.db.get_account("a")["relationship_tracking"], 0)
 
+    def test_existing_active_members_without_cached_avatar_are_backfilled_on_startup(self):
+        now = "2026-08-08T00:00:00+00:00"
+        self.db.conn.execute(
+            """INSERT INTO relationship_members(
+                 instagram_profile_id,username,username_observed_at,created_at,updated_at
+               ) VALUES('member-1','alice',?,?,?)""",
+            (now, now, now),
+        )
+        self.db.conn.execute(
+            """INSERT INTO account_relationships(
+                 account_id,direction,instagram_profile_id,username,active,
+                 first_seen_at,last_seen_at
+               ) VALUES(?,'following','member-1','alice',1,?,?)""",
+            (self.row["id"], now, now),
+        )
+        self.db.conn.commit()
+        path = self.db.path
+        self.db.close()
+
+        self.db = Database(path)
+
+        job = self.db.conn.execute(
+            """SELECT reason,status FROM member_enrichment_jobs
+               WHERE instagram_profile_id='member-1'"""
+        ).fetchone()
+        self.assertEqual((job["reason"], job["status"]), ("avatar_cache_backfill", "pending"))
+
     def test_stuck_relationship_queue_alert_is_enqueued_only_once(self):
         now = datetime(2026, 8, 2, tzinfo=UTC)
         job_id = self.db.enqueue_relationship_job(

@@ -1,12 +1,14 @@
+import asyncio
 import tempfile
 import unittest
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from unittest.mock import AsyncMock, patch
 
 from ig_monitor.config import AccountConfig, InstagramEnrichmentConfig
 from ig_monitor.db import Database
 from ig_monitor.dashboard import create_app
-from ig_monitor.member_enrichment import MemberEnrichmentWorker
+from ig_monitor.member_enrichment import MemberEnrichmentWorker, PlaywrightMemberProfileSource
 from ig_monitor.models import PrivacyState, ProfileSnapshot
 from ig_monitor.relationships import (
     CollectorAdministration,
@@ -208,12 +210,21 @@ class RelationshipWorkerTests(unittest.TestCase):
         self.assertEqual(self.db.relationship_history(self.account["id"]), [])
 
     def test_dashboard_lists_relationships_with_server_pagination_route(self):
+        avatar = Path(self.tmp.name) / "member-avatar.jpg"
+        avatar.write_bytes(b"member-avatar")
         source = FakeRelationshipSource({
-            Direction.FOLLOWERS: [RelationshipPage((MemberIdentity("1", "alice", "Alice"),), True)],
+            Direction.FOLLOWERS: [RelationshipPage((MemberIdentity(
+                "1", "alice", "Alice", "https://instagram-cdn.example/alice.jpg"
+            ),), True)],
         })
         self.db.set_collector_state("active", self.now.isoformat())
         self.db.enqueue_relationship_job(self.account["id"], True, False, "baseline", self.now.isoformat())
         RelationshipWorker(self.db, enrichment(), source).run_once(self.now)
+        self.db.conn.execute(
+            "UPDATE relationship_members SET avatar_path=? WHERE instagram_profile_id='1'",
+            (str(avatar),),
+        )
+        self.db.conn.commit()
         app = create_app(Path(self.tmp.name) / "state.sqlite3")
         response = app.test_client().get(
             f"/account/{self.account['id']}/relationships?tab=followers&q=ali"
@@ -221,17 +232,57 @@ class RelationshipWorkerTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"@alice", response.data)
         self.assertIn(b"Followers", response.data)
+        self.assertIn(b'/relationship-member/1/avatar', response.data)
+        self.assertNotIn(b'instagram-cdn.example', response.data)
+        self.assertEqual(
+            app.test_client().get("/relationship-member/1/avatar").data,
+            b"member-avatar",
+        )
 
 
 class FakeMemberProfileSource:
-    async def fetch_profile(self, username):
+    async def fetch_profile(self, profile_id, username):
         return ProfileSnapshot(
             username, "Alice", 12, 34, 56, "bio", PrivacyState.PUBLIC,
             "https://cdn/avatar.jpg", observed_at="2026-08-02T00:00:00+00:00",
+            avatar_sha256="avatar-hash", avatar_path=f"/avatars/{profile_id}.jpg",
         )
 
 
 class MemberEnrichmentWorkerTests(unittest.TestCase):
+    def test_playwright_source_downloads_avatar_while_profile_session_is_open(self):
+        snapshot = ProfileSnapshot(
+            "alice", "Alice", 12, 34, 56, "bio", PrivacyState.PUBLIC,
+            "https://cdn/avatar.jpg", observed_at="2026-08-02T00:00:00+00:00",
+        )
+
+        class FakeScraper:
+            def __init__(self, _browser):
+                pass
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *_args):
+                return None
+
+            async def scrape_profile_only(self, _url):
+                return snapshot
+
+        save = AsyncMock(return_value=("avatar-hash", "/avatars/1.jpg"))
+        with patch("ig_monitor.scraper.ProfileScraper", FakeScraper), patch(
+            "ig_monitor.media.save_avatar", save
+        ):
+            result = asyncio.run(
+                PlaywrightMemberProfileSource(object(), Path("/avatars")).fetch_profile(
+                    "1", "alice"
+                )
+            )
+
+        self.assertEqual(result.avatar_sha256, "avatar-hash")
+        self.assertEqual(result.avatar_path, "/avatars/1.jpg")
+        save.assert_awaited_once()
+
     def test_profile_only_enrichment_updates_member_and_obeys_durable_delay(self):
         with tempfile.TemporaryDirectory() as tmp:
             db = Database(Path(tmp) / "state.sqlite3")
@@ -248,7 +299,10 @@ class MemberEnrichmentWorkerTests(unittest.TestCase):
                     db, enrichment(), FakeMemberProfileSource(), random_uniform=lambda _a, _b: 30
                 )
                 self.assertEqual(worker.run_once(now).status, "completed")
-                self.assertEqual(db.relationship_member("1")["followers"], 34)
+                member = db.relationship_member("1")
+                self.assertEqual(member["followers"], 34)
+                self.assertEqual(member["avatar_sha256"], "avatar-hash")
+                self.assertEqual(member["avatar_path"], "/avatars/1.jpg")
                 self.assertEqual(worker.run_once(now + timedelta(seconds=29)).status, "spacing")
             finally:
                 db.close()

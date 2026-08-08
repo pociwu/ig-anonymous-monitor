@@ -25,7 +25,10 @@ def run(config_path: Path, poll_seconds: int) -> None:
     signal.signal(signal.SIGINT, stop)
     try:
         worker = MemberEnrichmentWorker(
-            db, config.instagram_enrichment, PlaywrightMemberProfileSource(config.browser)
+            db, config.instagram_enrichment,
+            PlaywrightMemberProfileSource(
+                config.browser, config.paths.download_root / "relationship-members"
+            ),
         )
         while not stopped:
             outcome = worker.run_once(datetime.now(UTC))

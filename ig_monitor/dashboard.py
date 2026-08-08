@@ -242,17 +242,17 @@ window.addEventListener('resize',()=>{if(socialTrends.open)redrawSocialTrends()}
 
 RELATIONSHIP_PAGE = """<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>{{ account.label }} 名單</title>
-<style>:root{color-scheme:dark}body{font-family:system-ui;background:#0b1120;color:#e5e7eb;margin:0;padding:24px}main{max-width:1100px;margin:auto}a{color:#c4b5fd;text-decoration:none}.tabs{display:flex;gap:8px;flex-wrap:wrap}.tabs a{padding:9px 14px;background:#172033;border-radius:999px}.tabs .active{background:#7c3aed;color:white}form{display:flex;gap:8px;margin:18px 0}input,select,button{padding:10px;border-radius:9px;border:1px solid #334155;background:#172033;color:#e5e7eb}table{width:100%;border-collapse:collapse;background:#172033;border-radius:12px;overflow:hidden}th,td{text-align:left;padding:10px;border-bottom:1px solid #334155}.avatar{width:42px;height:42px;object-fit:cover;border-radius:50%;background:#27344d}.muted{color:#94a3b8}.pager{display:flex;justify-content:space-between;margin-top:15px}@media(max-width:700px){body{padding:12px}table{font-size:.82rem}.optional{display:none}}</style></head><body><main>
+<style>:root{color-scheme:dark}body{font-family:system-ui;background:#0b1120;color:#e5e7eb;margin:0;padding:24px}main{max-width:1100px;margin:auto}a{color:#c4b5fd;text-decoration:none}.tabs{display:flex;gap:8px;flex-wrap:wrap}.tabs a{padding:9px 14px;background:#172033;border-radius:999px}.tabs .active{background:#7c3aed;color:white}form{display:flex;gap:8px;margin:18px 0}input,select,button{padding:10px;border-radius:9px;border:1px solid #334155;background:#172033;color:#e5e7eb}table{width:100%;border-collapse:collapse;background:#172033;border-radius:12px;overflow:hidden}th,td{text-align:left;padding:10px;border-bottom:1px solid #334155}.avatar{width:42px;height:42px;object-fit:cover;border-radius:50%;background:#27344d;vertical-align:middle}.avatar-placeholder{display:inline-flex;align-items:center;justify-content:center;color:#94a3b8;font-size:20px}.muted{color:#94a3b8}.pager{display:flex;justify-content:space-between;margin-top:15px}@media(max-width:700px){body{padding:12px}table{font-size:.82rem}.optional{display:none}}</style></head><body><main>
 <p><a href="{{ url_for('account_detail', account_id=account.id) }}">← {{ account.label }}</a></p>
 <h1>關係名單</h1><p class="muted">整體：{{ account.relationship_status }}　Followers：{{ account.followers_state }}（{{ account.followers_baseline_at or '-' }}）　Following：{{ account.following_state }}（{{ account.following_baseline_at or '-' }}）</p>
 <nav class="tabs">{% for value,label in [('followers','Followers'),('following','Following'),('mutual','共同名單'),('history','異動紀錄')] %}<a class="{{ 'active' if tab==value else '' }}" href="{{ url_for('account_relationships',account_id=account.id,tab=value) }}">{{ label }}</a>{% endfor %}</nav>
 <form method="get"><input type="hidden" name="tab" value="{{ tab }}"><input name="q" value="{{ q }}" placeholder="搜尋 username／名稱"><select name="filter"><option value="current" {{ 'selected' if filter_value=='current' else '' }}>目前</option><option value="left" {{ 'selected' if filter_value=='left' else '' }}>已退出</option><option value="all" {{ 'selected' if filter_value=='all' else '' }}>全部</option></select><button>搜尋</button></form>
-<table><thead><tr><th>帳號</th><th class="optional">Profile ID</th><th>狀態／時間</th></tr></thead><tbody>{% for row in rows %}<tr><td>{% if row.avatar_url %}<img class="avatar" src="{{ row.avatar_url }}" loading="lazy">{% endif %} <a href="{{ url_for('relationship_member_detail',profile_id=row.instagram_profile_id) }}">@{{ row.username }}</a><br><span class="muted">{{ row.display_name or '' }}</span></td><td class="optional">{{ row.instagram_profile_id }}</td><td>{{ row.change_kind or ('目前' if row.active else '已退出') }}<br><span class="muted">{{ row.observed_at or row.last_seen_at or '-' }}</span></td></tr>{% else %}<tr><td colspan="3">目前沒有資料</td></tr>{% endfor %}</tbody></table>
+<table><thead><tr><th>帳號</th><th class="optional">Profile ID</th><th>狀態／時間</th></tr></thead><tbody>{% for row in rows %}<tr><td>{% if row.has_avatar %}<img class="avatar" src="{{ url_for('relationship_member_avatar',profile_id=row.instagram_profile_id) }}" loading="lazy">{% else %}<span class="avatar avatar-placeholder" aria-label="頭像等待補充">◎</span>{% endif %} <a href="{{ url_for('relationship_member_detail',profile_id=row.instagram_profile_id) }}">@{{ row.username }}</a><br><span class="muted">{{ row.display_name or '' }}</span></td><td class="optional">{{ row.instagram_profile_id }}</td><td>{{ row.change_kind or ('目前' if row.active else '已退出') }}<br><span class="muted">{{ row.observed_at or row.last_seen_at or '-' }}</span></td></tr>{% else %}<tr><td colspan="3">目前沒有資料</td></tr>{% endfor %}</tbody></table>
 <div class="pager">{% if page>1 %}<a href="{{ url_for('account_relationships',account_id=account.id,tab=tab,q=q,filter=filter_value,page=page-1) }}">← 上一頁</a>{% else %}<span></span>{% endif %}<span>第 {{ page }} 頁</span>{% if has_next %}<a href="{{ url_for('account_relationships',account_id=account.id,tab=tab,q=q,filter=filter_value,page=page+1) }}">下一頁 →</a>{% endif %}</div>
 </main></body></html>"""
 
 
-MEMBER_PAGE = """<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>@{{ member.username }}</title><style>:root{color-scheme:dark}body{font-family:system-ui;background:#0b1120;color:#e5e7eb;padding:24px}main{max-width:800px;margin:auto}a{color:#c4b5fd}.card{background:#172033;border-radius:16px;padding:20px}.avatar{width:96px;height:96px;border-radius:50%;object-fit:cover}.muted{color:#94a3b8}</style></head><body><main><p><a href="javascript:history.back()">← 返回</a></p><section class="card">{% if member.avatar_url %}<img class="avatar" src="{{ member.avatar_url }}">{% endif %}<h1>@{{ member.username }}</h1><p>{{ member.display_name or '' }}</p><p>Profile ID：{{ member.instagram_profile_id }}</p><p>貼文 {{ member.posts or 0 }}　Followers {{ member.followers or 0 }}　Following {{ member.following or 0 }}</p><p>{{ member.bio or '' }}</p><p class="muted">最後補資料：{{ member.profile_observed_at or '尚未' }}　隱私：{{ member.privacy or 'unknown' }}</p></section></main></body></html>"""
+MEMBER_PAGE = """<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>@{{ member.username }}</title><style>:root{color-scheme:dark}body{font-family:system-ui;background:#0b1120;color:#e5e7eb;padding:24px}main{max-width:800px;margin:auto}a{color:#c4b5fd}.card{background:#172033;border-radius:16px;padding:20px}.avatar{width:96px;height:96px;border-radius:50%;object-fit:cover;background:#27344d}.avatar-placeholder{display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:36px}.muted{color:#94a3b8}</style></head><body><main><p><a href="javascript:history.back()">← 返回</a></p><section class="card">{% if member.has_avatar %}<img class="avatar" src="{{ url_for('relationship_member_avatar',profile_id=member.instagram_profile_id) }}">{% else %}<div class="avatar avatar-placeholder" aria-label="頭像等待補充">◎</div>{% endif %}<h1>@{{ member.username }}</h1><p>{{ member.display_name or '' }}</p><p>Profile ID：{{ member.instagram_profile_id }}</p><p>貼文 {{ member.posts or 0 }}　Followers {{ member.followers or 0 }}　Following {{ member.following or 0 }}</p><p>{{ member.bio or '' }}</p><p class="muted">最後補資料：{{ member.profile_observed_at or '尚未' }}　隱私：{{ member.privacy or 'unknown' }}</p></section></main></body></html>"""
 
 
 def _systemctl_status(command: list[str]) -> str:
@@ -511,7 +511,7 @@ def relationship_page_data(
         if tab == "history":
             rows = connection.execute(
                 """SELECT h.instagram_profile_id,h.username,h.change_kind,h.observed_at,
-                          NULL AS active,NULL AS last_seen_at,m.display_name,m.avatar_url
+                          NULL AS active,NULL AS last_seen_at,m.display_name,m.avatar_url,m.avatar_path
                    FROM relationship_history h LEFT JOIN relationship_members m
                      ON m.instagram_profile_id=h.instagram_profile_id
                    WHERE h.account_id=? AND (h.username LIKE ? OR m.display_name LIKE ?)
@@ -521,7 +521,7 @@ def relationship_page_data(
         elif tab == "mutual":
             rows = connection.execute(
                 """SELECT f.instagram_profile_id,f.username,f.active,f.last_seen_at,
-                          NULL AS change_kind,NULL AS observed_at,m.display_name,m.avatar_url
+                          NULL AS change_kind,NULL AS observed_at,m.display_name,m.avatar_url,m.avatar_path
                    FROM account_relationships f JOIN account_relationships g
                      ON g.account_id=f.account_id AND g.instagram_profile_id=f.instagram_profile_id
                     AND g.direction='following' AND g.active=1
@@ -539,7 +539,7 @@ def relationship_page_data(
                 active_clause = "AND ar.active=0"
             rows = connection.execute(
                 f"""SELECT ar.instagram_profile_id,ar.username,ar.active,ar.last_seen_at,
-                           NULL AS change_kind,NULL AS observed_at,m.display_name,m.avatar_url
+                           NULL AS change_kind,NULL AS observed_at,m.display_name,m.avatar_url,m.avatar_path
                     FROM account_relationships ar JOIN relationship_members m
                       ON m.instagram_profile_id=ar.instagram_profile_id
                     WHERE ar.account_id=? AND ar.direction=? {active_clause}
@@ -547,7 +547,11 @@ def relationship_page_data(
                     ORDER BY ar.username LIMIT 51 OFFSET ?""",
                 (account_id, tab, pattern, pattern, offset),
             ).fetchall()
-        return account, [dict(row) for row in rows[:50]], len(rows) > 50
+        items = [dict(row) for row in rows[:50]]
+        for item in items:
+            path = Path(item["avatar_path"]) if item.get("avatar_path") else None
+            item["has_avatar"] = bool(path and path.is_file())
+        return account, items, len(rows) > 50
     finally:
         connection.close()
 
@@ -559,7 +563,12 @@ def relationship_member_data(db_path: Path, profile_id: str) -> dict[str, Any] |
         row = connection.execute(
             "SELECT * FROM relationship_members WHERE instagram_profile_id=?", (profile_id,)
         ).fetchone()
-        return dict(row) if row else None
+        if row is None:
+            return None
+        member = dict(row)
+        path = Path(member["avatar_path"]) if member.get("avatar_path") else None
+        member["has_avatar"] = bool(path and path.is_file())
+        return member
     finally:
         connection.close()
 
@@ -588,6 +597,21 @@ def _avatar_path(db_path: Path, account_id: int) -> Path | None:
         row = connection.execute("SELECT snapshot_json FROM accounts WHERE id=? AND enabled=1", (account_id,)).fetchone()
         snapshot = json.loads(row[0]) if row and row[0] else {}
         path = Path(snapshot["avatar_path"]) if snapshot.get("avatar_path") else None
+        return path if path and path.is_file() else None
+    finally:
+        connection.close()
+
+
+def _relationship_member_avatar_path(db_path: Path, profile_id: str) -> Path | None:
+    if not db_path.is_file():
+        return None
+    connection = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+    try:
+        row = connection.execute(
+            "SELECT avatar_path FROM relationship_members WHERE instagram_profile_id=?",
+            (profile_id,),
+        ).fetchone()
+        path = Path(row[0]) if row and row[0] else None
         return path if path and path.is_file() else None
     finally:
         connection.close()
@@ -765,6 +789,13 @@ def create_app(
     @app.get("/account/<int:account_id>/avatar")
     def avatar_asset(account_id: int):
         path = _avatar_path(db_path, account_id)
+        if path is None:
+            abort(404)
+        return send_file(path, conditional=True)
+
+    @app.get("/relationship-member/<profile_id>/avatar")
+    def relationship_member_avatar(profile_id: str):
+        path = _relationship_member_avatar_path(db_path, profile_id)
         if path is None:
             abort(404)
         return send_file(path, conditional=True)

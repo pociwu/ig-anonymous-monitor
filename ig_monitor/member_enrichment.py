@@ -4,6 +4,7 @@ import asyncio
 import random
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Protocol
 
 from .config import BrowserConfig, InstagramEnrichmentConfig
@@ -13,19 +14,27 @@ from .relationships import WorkOutcome
 
 
 class AnonymousMemberProfileSource(Protocol):
-    async def fetch_profile(self, username: str) -> ProfileSnapshot: ...
+    async def fetch_profile(self, profile_id: str, username: str) -> ProfileSnapshot: ...
 
 
 @dataclass(slots=True)
 class PlaywrightMemberProfileSource:
     browser: BrowserConfig
+    avatar_root: Path
 
-    async def fetch_profile(self, username: str) -> ProfileSnapshot:
+    async def fetch_profile(self, profile_id: str, username: str) -> ProfileSnapshot:
+        from .media import save_avatar
         from .scraper import ProfileScraper
+        profile_url = f"https://insta-stories-viewer.com/{username}/"
         async with ProfileScraper(self.browser) as scraper:
-            return await scraper.scrape_profile_only(
-                f"https://insta-stories-viewer.com/{username}/"
-            )
+            snapshot = await scraper.scrape_profile_only(profile_url)
+            if snapshot.avatar_url:
+                digest, path = await save_avatar(
+                    scraper, self.avatar_root, profile_id, snapshot.avatar_url, profile_url
+                )
+                snapshot.avatar_sha256 = digest
+                snapshot.avatar_path = path
+            return snapshot
 
 
 class MemberEnrichmentWorker:
@@ -56,7 +65,9 @@ class MemberEnrichmentWorker:
             self.db.finish_member_enrichment_job(job["id"], "cancelled", "member missing")
             return WorkOutcome("cancelled", job["id"])
         try:
-            snapshot = asyncio.run(self.source.fetch_profile(member["username"]))
+            snapshot = asyncio.run(self.source.fetch_profile(
+                member["instagram_profile_id"], member["username"]
+            ))
             self.db.apply_member_profile(job, snapshot, now.isoformat(timespec="seconds"))
             self._set_next_at(now)
             return WorkOutcome("completed", job["id"])

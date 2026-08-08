@@ -117,7 +117,8 @@ class Database:
         );
         CREATE TABLE IF NOT EXISTS relationship_members (
           instagram_profile_id TEXT PRIMARY KEY, username TEXT NOT NULL,
-          display_name TEXT, avatar_url TEXT, posts INTEGER, followers INTEGER, following INTEGER,
+          display_name TEXT, avatar_url TEXT, avatar_sha256 TEXT, avatar_path TEXT,
+          posts INTEGER, followers INTEGER, following INTEGER,
           bio TEXT, privacy TEXT, profile_observed_at TEXT, username_observed_at TEXT NOT NULL,
           created_at TEXT NOT NULL, updated_at TEXT NOT NULL
         );
@@ -252,6 +253,8 @@ class Database:
         self._add_column_if_missing("accounts", "post_reconciled_at", "TEXT")
         self._add_column_if_missing("accounts", "post_pause_reason", "TEXT")
         self._add_column_if_missing("relationship_jobs", "started_at", "TEXT")
+        self._add_column_if_missing("relationship_members", "avatar_sha256", "TEXT")
+        self._add_column_if_missing("relationship_members", "avatar_path", "TEXT")
         self._add_column_if_missing("media", "duplicate_of_id", "INTEGER")
         self._add_column_if_missing("media", "fingerprint_json", "TEXT")
         self._add_column_if_missing("media", "file_size", "INTEGER")
@@ -270,9 +273,24 @@ class Database:
             (now,),
         )
         self.conn.execute("INSERT OR IGNORE INTO media_sources(media_id,category) SELECT id,category FROM media")
+        self._backfill_member_avatar_jobs()
         self._backfill_authenticated_work_runs()
         self._backfill_profile_history()
         self.conn.commit()
+
+    def _backfill_member_avatar_jobs(self) -> None:
+        now = utc_now()
+        self.conn.execute(
+            """INSERT OR IGNORE INTO member_enrichment_jobs(
+                 instagram_profile_id,reason,status,available_at,created_at,updated_at
+               )
+               SELECT DISTINCT rm.instagram_profile_id,'avatar_cache_backfill','pending',?,?,?
+               FROM relationship_members rm
+               JOIN account_relationships ar
+                 ON ar.instagram_profile_id=rm.instagram_profile_id AND ar.active=1
+               WHERE rm.avatar_path IS NULL""",
+            (now, now, now),
+        )
 
     def _backfill_authenticated_work_runs(self) -> None:
         self.conn.execute(
@@ -1096,11 +1114,13 @@ class Database:
         old_username = current["username"] if current else None
         with self.transaction() as con:
             con.execute(
-                """UPDATE relationship_members SET username=?,display_name=?,avatar_url=?,posts=?,
+                """UPDATE relationship_members SET username=?,display_name=?,avatar_url=?,
+                   avatar_sha256=?,avatar_path=?,posts=?,
                    followers=?,following=?,bio=?,privacy=?,profile_observed_at=?,
                    username_observed_at=?,updated_at=? WHERE instagram_profile_id=?""",
                 (
-                    snapshot.username, snapshot.display_name, snapshot.avatar_url, snapshot.posts,
+                    snapshot.username, snapshot.display_name, snapshot.avatar_url,
+                    snapshot.avatar_sha256, snapshot.avatar_path, snapshot.posts,
                     snapshot.followers, snapshot.following, snapshot.bio, snapshot.privacy.value,
                     observed_at, observed_at, observed_at, profile_id,
                 ),
