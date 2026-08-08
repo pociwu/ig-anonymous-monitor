@@ -273,10 +273,52 @@ class Database:
             (now,),
         )
         self.conn.execute("INSERT OR IGNORE INTO media_sources(media_id,category) SELECT id,category FROM media")
+        self._discard_duplicate_private_avatar_placeholders()
         self._backfill_member_avatar_jobs()
         self._backfill_authenticated_work_runs()
         self._backfill_profile_history()
         self.conn.commit()
+
+    def _discard_duplicate_private_avatar_placeholders(self) -> None:
+        marker = "member_avatar_placeholder_cleanup_v1"
+        if self.conn.execute("SELECT 1 FROM meta WHERE key=?", (marker,)).fetchone():
+            return
+        now = utc_now()
+        duplicate_hashes = [
+            row[0] for row in self.conn.execute(
+                """SELECT avatar_sha256 FROM relationship_members
+                   WHERE privacy='private' AND avatar_sha256 IS NOT NULL
+                   GROUP BY avatar_sha256 HAVING COUNT(*)>1"""
+            ).fetchall()
+        ]
+        if duplicate_hashes:
+            placeholders = ",".join("?" for _ in duplicate_hashes)
+            account_ids = [
+                row[0] for row in self.conn.execute(
+                    f"""SELECT DISTINCT ar.account_id FROM account_relationships ar
+                         JOIN relationship_members rm
+                           ON rm.instagram_profile_id=ar.instagram_profile_id
+                         WHERE ar.active=1 AND rm.avatar_sha256 IN ({placeholders})""",
+                    duplicate_hashes,
+                ).fetchall()
+            ]
+            self.conn.execute(
+                f"""UPDATE relationship_members SET avatar_sha256=NULL,avatar_path=NULL
+                    WHERE avatar_sha256 IN ({placeholders})""",
+                duplicate_hashes,
+            )
+            for account_id in account_ids:
+                self.conn.execute(
+                    """INSERT OR IGNORE INTO relationship_jobs(
+                         account_id,need_followers,need_following,reason,status,available_at,
+                         created_at,updated_at
+                       ) VALUES(?,1,1,'avatar_source_refresh','pending',?,?,?)""",
+                    (account_id, now, now, now),
+                )
+        self.conn.execute(
+            "INSERT OR IGNORE INTO meta(key,value) VALUES(?,?)",
+            (marker, now),
+        )
 
     def _backfill_member_avatar_jobs(self) -> None:
         now = utc_now()
@@ -810,6 +852,16 @@ class Database:
                          username_observed_at=excluded.username_observed_at,updated_at=excluded.updated_at""",
                     (member.profile_id, member.username, member.display_name, member.avatar_url, now, now, now),
                 )
+                if member.avatar_url:
+                    con.execute(
+                        """INSERT OR IGNORE INTO member_enrichment_jobs(
+                             instagram_profile_id,reason,status,available_at,created_at,updated_at
+                           )
+                           SELECT instagram_profile_id,'avatar_refresh','pending',?,?,?
+                           FROM relationship_members
+                           WHERE instagram_profile_id=? AND avatar_path IS NULL""",
+                        (now, now, now, member.profile_id),
+                    )
                 if prior and prior["username"].casefold() != member.username.casefold():
                     con.execute(
                         """INSERT OR IGNORE INTO member_enrichment_jobs(
@@ -1114,7 +1166,8 @@ class Database:
         old_username = current["username"] if current else None
         with self.transaction() as con:
             con.execute(
-                """UPDATE relationship_members SET username=?,display_name=?,avatar_url=?,
+                """UPDATE relationship_members SET username=?,display_name=?,
+                   avatar_url=COALESCE(avatar_url,?),
                    avatar_sha256=?,avatar_path=?,posts=?,
                    followers=?,following=?,bio=?,privacy=?,profile_observed_at=?,
                    username_observed_at=?,updated_at=? WHERE instagram_profile_id=?""",

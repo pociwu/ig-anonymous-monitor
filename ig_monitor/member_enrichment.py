@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Protocol
+from urllib.parse import urlparse
 
 from .config import BrowserConfig, InstagramEnrichmentConfig
 from .db import Database
@@ -14,7 +15,16 @@ from .relationships import WorkOutcome
 
 
 class AnonymousMemberProfileSource(Protocol):
-    async def fetch_profile(self, profile_id: str, username: str) -> ProfileSnapshot: ...
+    async def fetch_profile(
+        self, profile_id: str, username: str, avatar_url: str | None
+    ) -> ProfileSnapshot: ...
+
+
+def _is_instagram_avatar_url(url: str | None) -> bool:
+    if not url:
+        return False
+    host = (urlparse(url).hostname or "").casefold()
+    return host.endswith((".cdninstagram.com", ".fbcdn.net"))
 
 
 @dataclass(slots=True)
@@ -22,13 +32,25 @@ class PlaywrightMemberProfileSource:
     browser: BrowserConfig
     avatar_root: Path
 
-    async def fetch_profile(self, profile_id: str, username: str) -> ProfileSnapshot:
+    async def fetch_profile(
+        self, profile_id: str, username: str, avatar_url: str | None
+    ) -> ProfileSnapshot:
         from .media import save_avatar
         from .scraper import ProfileScraper
         profile_url = f"https://insta-stories-viewer.com/{username}/"
         async with ProfileScraper(self.browser) as scraper:
             snapshot = await scraper.scrape_profile_only(profile_url)
-            if snapshot.avatar_url:
+            if _is_instagram_avatar_url(avatar_url):
+                try:
+                    digest, path = await save_avatar(
+                        scraper, self.avatar_root, profile_id, avatar_url,
+                        "https://www.instagram.com/",
+                    )
+                    snapshot.avatar_sha256 = digest
+                    snapshot.avatar_path = path
+                except (OSError, RuntimeError, ValueError):
+                    pass
+            if snapshot.avatar_path is None and snapshot.privacy.value == "public" and snapshot.avatar_url:
                 digest, path = await save_avatar(
                     scraper, self.avatar_root, profile_id, snapshot.avatar_url, profile_url
                 )
@@ -66,7 +88,7 @@ class MemberEnrichmentWorker:
             return WorkOutcome("cancelled", job["id"])
         try:
             snapshot = asyncio.run(self.source.fetch_profile(
-                member["instagram_profile_id"], member["username"]
+                member["instagram_profile_id"], member["username"], member.get("avatar_url")
             ))
             self.db.apply_member_profile(job, snapshot, now.isoformat(timespec="seconds"))
             self._set_next_at(now)

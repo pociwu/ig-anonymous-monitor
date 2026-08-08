@@ -191,6 +191,42 @@ class DatabaseTests(unittest.TestCase):
         ).fetchone()
         self.assertEqual((job["reason"], job["status"]), ("avatar_cache_backfill", "pending"))
 
+    def test_duplicate_private_placeholder_avatars_are_cleared_and_source_refresh_is_queued(self):
+        now = "2026-08-08T00:00:00+00:00"
+        for profile_id, username in (("member-1", "alice"), ("member-2", "bob")):
+            self.db.conn.execute(
+                """INSERT INTO relationship_members(
+                     instagram_profile_id,username,avatar_sha256,avatar_path,privacy,
+                     username_observed_at,created_at,updated_at
+                   ) VALUES(?,?, 'shared-placeholder','/avatars/default.png','private',?,?,?)""",
+                (profile_id, username, now, now, now),
+            )
+            self.db.conn.execute(
+                """INSERT INTO account_relationships(
+                     account_id,direction,instagram_profile_id,username,active,
+                     first_seen_at,last_seen_at
+                   ) VALUES(?,'following',?,?,1,?,?)""",
+                (self.row["id"], profile_id, username, now, now),
+            )
+        self.db.conn.execute(
+            "DELETE FROM meta WHERE key='member_avatar_placeholder_cleanup_v1'"
+        )
+        self.db.conn.commit()
+        path = self.db.path
+        self.db.close()
+
+        self.db = Database(path)
+
+        remaining = self.db.conn.execute(
+            "SELECT COUNT(*) FROM relationship_members WHERE avatar_path IS NOT NULL"
+        ).fetchone()[0]
+        refresh = self.db.conn.execute(
+            "SELECT reason FROM relationship_jobs WHERE account_id=?",
+            (self.row["id"],),
+        ).fetchone()
+        self.assertEqual(remaining, 0)
+        self.assertEqual(refresh["reason"], "avatar_source_refresh")
+
     def test_stuck_relationship_queue_alert_is_enqueued_only_once(self):
         now = datetime(2026, 8, 2, tzinfo=UTC)
         job_id = self.db.enqueue_relationship_job(

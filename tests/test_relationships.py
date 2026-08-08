@@ -241,7 +241,11 @@ class RelationshipWorkerTests(unittest.TestCase):
 
 
 class FakeMemberProfileSource:
-    async def fetch_profile(self, profile_id, username):
+    def __init__(self):
+        self.avatar_urls = []
+
+    async def fetch_profile(self, profile_id, username, avatar_url):
+        self.avatar_urls.append(avatar_url)
         return ProfileSnapshot(
             username, "Alice", 12, 34, 56, "bio", PrivacyState.PUBLIC,
             "https://cdn/avatar.jpg", observed_at="2026-08-02T00:00:00+00:00",
@@ -275,13 +279,50 @@ class MemberEnrichmentWorkerTests(unittest.TestCase):
         ):
             result = asyncio.run(
                 PlaywrightMemberProfileSource(object(), Path("/avatars")).fetch_profile(
-                    "1", "alice"
+                    "1", "alice", "https://scontent.cdninstagram.com/original.jpg"
                 )
             )
 
         self.assertEqual(result.avatar_sha256, "avatar-hash")
         self.assertEqual(result.avatar_path, "/avatars/1.jpg")
         save.assert_awaited_once()
+        self.assertEqual(
+            save.await_args.args[3],
+            "https://scontent.cdninstagram.com/original.jpg",
+        )
+
+    def test_private_profile_does_not_cache_anonymous_placeholder_when_original_expired(self):
+        snapshot = ProfileSnapshot(
+            "alice", "Alice", 0, 0, 0, "", PrivacyState.PRIVATE,
+            "https://insta-stories-viewer.com/images/default-avatar.png",
+            observed_at="2026-08-02T00:00:00+00:00",
+        )
+
+        class FakeScraper:
+            def __init__(self, _browser):
+                pass
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *_args):
+                return None
+
+            async def scrape_profile_only(self, _url):
+                return snapshot
+
+        save = AsyncMock(side_effect=RuntimeError("expired"))
+        with patch("ig_monitor.scraper.ProfileScraper", FakeScraper), patch(
+            "ig_monitor.media.save_avatar", save
+        ):
+            result = asyncio.run(
+                PlaywrightMemberProfileSource(object(), Path("/avatars")).fetch_profile(
+                    "1", "alice", "https://scontent.cdninstagram.com/expired.jpg"
+                )
+            )
+
+        self.assertIsNone(result.avatar_path)
+        self.assertEqual(save.await_count, 1)
 
     def test_profile_only_enrichment_updates_member_and_obeys_durable_delay(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -295,14 +336,28 @@ class MemberEnrichmentWorkerTests(unittest.TestCase):
                 )
                 db.conn.commit()
                 db.enqueue_member_enrichment("1", "manual", now.isoformat())
+                source = FakeMemberProfileSource()
+                db.conn.execute(
+                    "UPDATE relationship_members SET avatar_url=? WHERE instagram_profile_id='1'",
+                    ("https://scontent.cdninstagram.com/original.jpg",),
+                )
+                db.conn.commit()
                 worker = MemberEnrichmentWorker(
-                    db, enrichment(), FakeMemberProfileSource(), random_uniform=lambda _a, _b: 30
+                    db, enrichment(), source, random_uniform=lambda _a, _b: 30
                 )
                 self.assertEqual(worker.run_once(now).status, "completed")
                 member = db.relationship_member("1")
                 self.assertEqual(member["followers"], 34)
                 self.assertEqual(member["avatar_sha256"], "avatar-hash")
                 self.assertEqual(member["avatar_path"], "/avatars/1.jpg")
+                self.assertEqual(
+                    member["avatar_url"],
+                    "https://scontent.cdninstagram.com/original.jpg",
+                )
+                self.assertEqual(
+                    source.avatar_urls,
+                    ["https://scontent.cdninstagram.com/original.jpg"],
+                )
                 self.assertEqual(worker.run_once(now + timedelta(seconds=29)).status, "spacing")
             finally:
                 db.close()
