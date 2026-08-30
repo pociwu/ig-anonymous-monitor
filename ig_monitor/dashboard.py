@@ -133,6 +133,7 @@ DETAIL_PAGE = """<!doctype html>
 <title>{{ account.display_name or account.label }} · IG Monitor</title>
 <style>
 :root{color-scheme:dark}*{box-sizing:border-box}body{font-family:system-ui,-apple-system,sans-serif;background:#0b1120;color:#e5e7eb;margin:0;padding:24px}main{max-width:1200px;margin:auto}a{color:#c4b5fd;text-decoration:none}.profile{display:flex;gap:18px;align-items:center;background:#172033;border:1px solid #27344d;border-radius:16px;padding:20px}.avatar{width:96px;height:96px;border-radius:50%;object-fit:cover;background:#27344d}.avatar-fallback{display:grid;place-items:center;font-size:2rem;font-weight:700}.muted{color:#94a3b8}.stats{display:flex;gap:18px;flex-wrap:wrap;margin-top:10px}.stats strong{display:block;font-size:1.25rem}.delta{margin-left:4px;font-size:.8em}.delta-up{color:#4ade80}.delta-down{color:#fb7185}.meta{background:#172033;border-radius:12px;padding:16px;margin:16px 0;overflow-wrap:anywhere}.trend{background:#172033;border-radius:12px;margin:16px 0;overflow:hidden}.trend summary{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px;cursor:pointer;font-size:1.35rem;font-weight:700;list-style:none;user-select:none}.trend summary::-webkit-details-marker{display:none}.trend summary:after{content:'展開';color:#94a3b8;font-size:.88rem;font-weight:500}.trend[open] summary{border-bottom:1px solid #334155}.trend[open] summary:after{content:'收合'}.trend-content{padding:16px}.chart-panel h3{margin-bottom:4px}.chart-panel+.chart-panel{border-top:1px solid #334155;margin-top:24px;padding-top:16px}.chart-wrap{position:relative;width:100%;height:360px}.chart-wrap canvas{display:block;width:100%;height:360px;touch-action:pan-y}.chart-legend{display:flex;gap:18px;flex-wrap:wrap;color:#cbd5e1}.legend-key:before{content:'';display:inline-block;width:12px;height:3px;margin-right:6px;vertical-align:middle;background:var(--legend-color)}.chart-tooltip{position:absolute;z-index:2;pointer-events:none;transform:translate(-50%,-100%);padding:7px 10px;border:1px solid #64748b;border-radius:8px;background:#020617;color:#f8fafc;white-space:nowrap;font-size:.88rem;box-shadow:0 6px 18px #0008}.chart-tooltip[hidden]{display:none}.tabs{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}.tabs button{border:1px solid #334155;background:#172033;color:#cbd5e1;border-radius:999px;padding:9px 14px;cursor:pointer}.tabs button.active{background:#7c3aed;border-color:#8b5cf6;color:white}.gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px}.media{background:#172033;border-radius:14px;overflow:hidden;border:1px solid #27344d}.media[hidden]{display:none}.media img,.media video{width:100%;aspect-ratio:1/1;display:block;object-fit:cover;background:#020617}.caption{padding:10px;font-size:.85rem;color:#94a3b8}@media(max-width:600px){body{padding:14px}.profile{align-items:flex-start}.avatar{width:72px;height:72px}.gallery{grid-template-columns:repeat(2,minmax(0,1fr))}.chart-wrap,.chart-wrap canvas{height:300px}}\n</style></head><body><main>
+<style>.media-photo{display:block;cursor:zoom-in}.media-photo:focus-visible{outline:3px solid #a78bfa;outline-offset:-3px}body.lightbox-open{overflow:hidden}.lightbox{position:fixed;inset:0;z-index:1000;display:grid;place-items:center;padding:20px}.lightbox[hidden]{display:none}.lightbox-backdrop{position:absolute;inset:0;border:0;background:#020617e8;cursor:zoom-out}.lightbox-panel{position:relative;z-index:1;width:min(1200px,96vw);height:min(92vh,900px);display:grid;grid-template-rows:auto minmax(0,1fr) auto;background:#0b1120;border:1px solid #334155;border-radius:18px;overflow:hidden;box-shadow:0 24px 80px #000}.lightbox-header{display:flex;justify-content:flex-end;padding:8px 10px}.lightbox-close,.lightbox-nav,.lightbox-slideshow{border:1px solid #475569;background:#172033;color:#f8fafc;cursor:pointer}.lightbox-close{width:42px;height:42px;border-radius:50%;font-size:1.6rem;line-height:1}.lightbox-stage{position:relative;min-height:0;display:grid;place-items:center;padding:0 70px}.lightbox-image{max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain}.lightbox-nav{position:absolute;top:50%;transform:translateY(-50%);width:50px;height:64px;border-radius:14px;font-size:2.6rem;line-height:1}.lightbox-nav.previous{left:12px}.lightbox-nav.next{right:12px}.lightbox-nav:disabled,.lightbox-slideshow:disabled{opacity:.35;cursor:not-allowed}.lightbox-footer{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 18px;background:#111827}.lightbox-caption{min-width:0;color:#cbd5e1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.lightbox-controls{display:flex;align-items:center;gap:12px;flex:none}.lightbox-counter{color:#94a3b8;font-variant-numeric:tabular-nums}.lightbox-slideshow{border-radius:999px;padding:8px 14px}.lightbox button:focus-visible{outline:3px solid #a78bfa;outline-offset:2px}@media(max-width:600px){.lightbox{padding:0}.lightbox-panel{width:100vw;height:100vh;border:0;border-radius:0}.lightbox-stage{padding:0 48px}.lightbox-nav{width:40px;height:54px;font-size:2rem}.lightbox-nav.previous{left:4px}.lightbox-nav.next{right:4px}.lightbox-footer{align-items:flex-start;flex-direction:column}.lightbox-caption{white-space:normal}.lightbox-controls{width:100%;justify-content:space-between}}</style>
 <p><a href="{{ url_for('index') }}">← 返回帳號列表</a></p>
 <section class="profile">
 {% if account.has_avatar %}<img class="avatar" src="{{ url_for('avatar_asset', account_id=account.id) }}" alt="{{ account.label }}">
@@ -167,11 +168,23 @@ DETAIL_PAGE = """<!doctype html>
 <section class="gallery">
 {% for item in media %}<article class="media" data-sources="{{ item.categories|join(' ') }}" data-kind="{{ item.kind }}">
 {% if item.kind == 'video' %}<video controls preload="metadata" src="{{ url_for('media_asset', media_id=item.id) }}"></video>
-{% else %}<a href="{{ url_for('media_asset', media_id=item.id) }}" target="_blank"><img loading="lazy" src="{{ url_for('media_asset', media_id=item.id) }}" alt="IG photo"></a>{% endif %}
+{% else %}<a class="media-photo" href="{{ url_for('media_asset', media_id=item.id) }}"><img loading="lazy" src="{{ url_for('media_asset', media_id=item.id) }}" alt="IG photo"></a>{% endif %}
 <div class="caption">{{ item.categories|join(' · ') }}{% if item.published_at %} · {{ item.published_at }}{% endif %}</div>
 </article>
 {% else %}<p class="muted">目前沒有已下載的照片或影片。</p>{% endfor %}
 </section>
+<div class="lightbox" id="photo-lightbox" role="dialog" aria-modal="true" aria-label="照片檢視器" hidden>
+<button class="lightbox-backdrop" type="button" data-lightbox-action="close" aria-label="關閉照片檢視器"></button>
+<section class="lightbox-panel">
+<header class="lightbox-header"><button class="lightbox-close" type="button" data-lightbox-action="close" aria-label="關閉">×</button></header>
+<div class="lightbox-stage">
+<button class="lightbox-nav previous" type="button" data-lightbox-action="previous" aria-label="上一張照片">‹</button>
+<img class="lightbox-image" id="lightbox-image" alt="">
+<button class="lightbox-nav next" type="button" data-lightbox-action="next" aria-label="下一張照片">›</button>
+</div>
+<footer class="lightbox-footer"><div class="lightbox-caption" id="lightbox-caption"></div><div class="lightbox-controls"><span class="lightbox-counter" id="lightbox-counter" aria-live="polite"></span><button class="lightbox-slideshow" id="lightbox-slideshow" type="button" aria-pressed="false">播放投影片</button></div></footer>
+</section>
+</div>
 <script>
 let selectedSource='posts',selectedKind='all';
 function filterMedia(){
@@ -196,6 +209,65 @@ document.querySelectorAll('[data-kind]').forEach(button=>button.addEventListener
  filterMedia();
 }));
 filterMedia();
+const lightbox=document.getElementById('photo-lightbox');
+const lightboxImage=document.getElementById('lightbox-image');
+const lightboxCaption=document.getElementById('lightbox-caption');
+const lightboxCounter=document.getElementById('lightbox-counter');
+const slideshowButton=document.getElementById('lightbox-slideshow');
+const previousButton=lightbox.querySelector('[data-lightbox-action="previous"]');
+const nextButton=lightbox.querySelector('[data-lightbox-action="next"]');
+let lightboxIndex=0,slideshowTimer=null,lightboxReturnFocus=null;
+function visiblePhotos(){return [...document.querySelectorAll('.media:not([hidden]) .media-photo')]}
+function stopSlideshow(){
+ if(slideshowTimer){clearInterval(slideshowTimer);slideshowTimer=null}
+ slideshowButton.textContent='播放投影片';
+ slideshowButton.setAttribute('aria-pressed','false');
+}
+function renderLightbox(index){
+ const photos=visiblePhotos();
+ if(!photos.length){closeLightbox();return}
+ lightboxIndex=(index%photos.length+photos.length)%photos.length;
+ const photo=photos[lightboxIndex],thumbnail=photo.querySelector('img');
+ lightboxImage.src=photo.href;
+ lightboxImage.alt=thumbnail?.alt||'IG photo';
+ lightboxCaption.textContent=photo.closest('.media')?.querySelector('.caption')?.textContent.trim()||'';
+ lightboxCounter.textContent=`${lightboxIndex+1} / ${photos.length}`;
+ const single=photos.length<2;
+ previousButton.disabled=single;nextButton.disabled=single;slideshowButton.disabled=single;
+ if(single)stopSlideshow();
+ if(!single){const preload=new Image();preload.src=photos[(lightboxIndex+1)%photos.length].href}
+}
+function openLightbox(photo){
+ const photos=visiblePhotos(),index=photos.indexOf(photo);
+ if(index<0)return;
+ lightboxReturnFocus=photo;lightbox.hidden=false;document.body.classList.add('lightbox-open');
+ renderLightbox(index);lightbox.querySelector('.lightbox-close').focus();
+}
+function closeLightbox(){
+ if(lightbox.hidden)return;
+ stopSlideshow();lightbox.hidden=true;lightboxImage.removeAttribute('src');document.body.classList.remove('lightbox-open');
+ lightboxReturnFocus?.focus();lightboxReturnFocus=null;
+}
+function changePhoto(step){renderLightbox(lightboxIndex+step)}
+function toggleSlideshow(){
+ if(slideshowButton.disabled)return;
+ if(slideshowTimer){stopSlideshow();return}
+ slideshowButton.textContent='暫停投影片';slideshowButton.setAttribute('aria-pressed','true');
+ slideshowTimer=setInterval(()=>changePhoto(1),4000);
+}
+document.querySelectorAll('.media-photo').forEach(photo=>photo.addEventListener('click',event=>{event.preventDefault();openLightbox(photo)}));
+lightbox.querySelectorAll('[data-lightbox-action="close"]').forEach(button=>button.addEventListener('click',closeLightbox));
+previousButton.addEventListener('click',()=>changePhoto(-1));
+nextButton.addEventListener('click',()=>changePhoto(1));
+slideshowButton.addEventListener('click',toggleSlideshow);
+document.addEventListener('keydown',event=>{
+ if(lightbox.hidden)return;
+ if(event.key==='Escape')closeLightbox();
+ else if(event.key==='ArrowLeft')changePhoto(-1);
+ else if(event.key==='ArrowRight')changePhoto(1);
+ else if(event.key===' '){event.preventDefault();toggleSlideshow()}
+});
+document.addEventListener('visibilitychange',()=>{if(document.hidden)stopSlideshow()});
 const profileHistory={{ account.history|tojson }};
 const chartAxes={{ account.chart_axes|tojson }};
 const chartConfigs=[
