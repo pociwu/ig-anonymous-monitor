@@ -112,6 +112,11 @@ class DashboardTests(unittest.TestCase):
                 self.assertIn(b"ArrowLeft", detail.data)
                 self.assertIn(b"setInterval", detail.data)
                 self.assertIn(b".media img{object-fit:contain}", detail.data)
+                self.assertIn(b".lightbox{padding:0}", detail.data)
+                self.assertIn(
+                    b".lightbox-panel{width:100vw;height:100vh;height:100dvh;border:0;border-radius:0}",
+                    detail.data,
+                )
                 self.assertIn(b".lightbox-stage{overflow:hidden}", detail.data)
                 self.assertIn(
                     b".lightbox-image{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}",
