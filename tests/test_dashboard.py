@@ -112,7 +112,11 @@ class DashboardTests(unittest.TestCase):
                 self.assertIn(b"ArrowLeft", detail.data)
                 self.assertIn(b"setInterval", detail.data)
                 self.assertIn(b".media img{object-fit:contain}", detail.data)
-                self.assertIn(b".lightbox-image{width:100%;height:100%;object-fit:contain}", detail.data)
+                self.assertIn(b".lightbox-stage{overflow:hidden}", detail.data)
+                self.assertIn(
+                    b".lightbox-image{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}",
+                    detail.data,
+                )
                 self.assertEqual(app.test_client().get(f"/account/{row['id']}/avatar").data, b"avatar")
                 self.assertEqual(app.test_client().get(f"/media/{media_row['id']}").data, b"photo")
                 health = app.test_client().get("/healthz")
