@@ -92,6 +92,11 @@ def _collector_fatal_reason(exc: CollectorFatalError) -> str:
     return reason if re.fullmatch(r"[A-Za-z][A-Za-z0-9_-]{0,79}", reason) else "CollectorFatalError"
 
 
+def _target_ineligible_reason(exc: TargetIneligibleError) -> str:
+    reason = str(exc).strip()
+    return reason if re.fullmatch(r"[A-Za-z][A-Za-z0-9_-]{0,79}", reason) else "TargetIneligibleError"
+
+
 class RelationshipTrigger:
     """Turns anonymous profile observations into durable relationship work."""
 
@@ -267,10 +272,17 @@ class RelationshipWorker:
             )
         canary_final = False
         if collector["state"] == "canary" and collector.get("canary_started_at"):
-            canary_final = now >= datetime.fromisoformat(collector["canary_started_at"]) + timedelta(
+            canary_started_at = collector["canary_started_at"]
+            canary_final = now >= datetime.fromisoformat(canary_started_at) + timedelta(
                 days=self.config.canary_days
             )
-            if canary_final and not self.db.has_open_relationship_job(collector["canary_account_id"]):
+            if (
+                canary_final
+                and not self.db.has_open_relationship_job(collector["canary_account_id"])
+                and not self.db.has_relationship_job_reason_since(
+                    collector["canary_account_id"], "canary_final", canary_started_at
+                )
+            ):
                 self.db.enqueue_relationship_job(
                     collector["canary_account_id"], True, True, "canary_final",
                     now.isoformat(timespec="seconds"),
@@ -298,9 +310,10 @@ class RelationshipWorker:
         try:
             target = self.source.resolve_public_user(username)
             if not target.is_public:
+                reason = "PrivateError"
                 self.db.freeze_relationships(account["id"], now.isoformat(timespec="seconds"))
-                self.db.finish_relationship_job(job["id"], "cancelled", "target ineligible")
-                return completed(WorkOutcome("target_ineligible", job["id"]))
+                self.db.finish_relationship_job(job["id"], "cancelled", reason)
+                return completed(WorkOutcome("target_ineligible", job["id"], reason))
             if account.get("instagram_profile_id") and account["instagram_profile_id"] != target.profile_id:
                 self.db.record_identity_conflict(account["id"], target.profile_id, now.isoformat(timespec="seconds"))
                 self.db.finish_relationship_job(job["id"], "failed", "identity conflict")
@@ -341,7 +354,15 @@ class RelationshipWorker:
             self.db.finish_relationship_job(job["id"], "completed" if overall == "completed" else "failed")
             if overall == "completed":
                 self.db.finalize_relationship_account(account["id"], now.isoformat(timespec="seconds"))
-            if overall == "completed" and canary_final and job["account_id"] == collector.get("canary_account_id"):
+            completed_both_directions = set(requested) == {
+                Direction.FOLLOWERS, Direction.FOLLOWING
+            }
+            if (
+                overall == "completed"
+                and canary_final
+                and completed_both_directions
+                and job["account_id"] == collector.get("canary_account_id")
+            ):
                 self.db.set_collector_state("active", now.isoformat(timespec="seconds"))
             return completed(WorkOutcome(overall, job["id"]))
         except CollectorFatalError as exc:
@@ -349,10 +370,11 @@ class RelationshipWorker:
             self.db.place_collector_risk_hold(reason)
             self.db.finish_relationship_job(job["id"], "failed", reason)
             return completed(WorkOutcome("risk_hold", job["id"], reason))
-        except TargetIneligibleError:
+        except TargetIneligibleError as exc:
+            reason = _target_ineligible_reason(exc)
             self.db.freeze_relationships(account["id"], now.isoformat(timespec="seconds"))
-            self.db.finish_relationship_job(job["id"], "cancelled", "target ineligible")
-            return completed(WorkOutcome("target_ineligible", job["id"]))
+            self.db.finish_relationship_job(job["id"], "cancelled", reason)
+            return completed(WorkOutcome("target_ineligible", job["id"], reason))
         except Exception as exc:
             self.db.finish_relationship_job(job["id"], "failed", type(exc).__name__)
             return completed(WorkOutcome("incomplete", job["id"], type(exc).__name__))

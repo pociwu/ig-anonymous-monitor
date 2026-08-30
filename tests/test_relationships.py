@@ -20,6 +20,7 @@ from ig_monitor.relationships import (
     RelationshipTarget,
     RelationshipTrigger,
     RelationshipWorker,
+    TargetIneligibleError,
 )
 
 
@@ -135,6 +136,16 @@ class FatalLoginSource(FakeRelationshipSource):
         raise CollectorFatalError("TwoFactorRequired")
 
 
+class IneligibleRelationshipSource(FakeRelationshipSource):
+    def resolve_public_user(self, username):
+        raise TargetIneligibleError("PrivateError")
+
+
+class RateLimitedRelationshipSource(FakeRelationshipSource):
+    def resolve_public_user(self, username):
+        raise CollectorFatalError("RateLimitError")
+
+
 class RelationshipWorkerTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -166,6 +177,73 @@ class RelationshipWorkerTests(unittest.TestCase):
         ).login(self.now)
         self.assertEqual(status.state, "risk_hold")
         self.assertEqual(status.risk_reason, "TwoFactorRequired")
+
+    def test_failed_canary_final_preserves_reason_and_is_not_recreated(self):
+        self.db.approve_collector_canary(self.account["id"], self.now.isoformat())
+        final_at = self.now + timedelta(days=7)
+        worker = RelationshipWorker(
+            self.db, enrichment(), IneligibleRelationshipSource()
+        )
+
+        first = worker.run_once(final_at)
+        second = worker.run_once(final_at + timedelta(hours=4))
+
+        self.assertEqual(first.status, "target_ineligible")
+        self.assertEqual(first.detail, "PrivateError")
+        self.assertEqual(second.status, "idle")
+        jobs = self.db.relationship_jobs(self.account["id"])
+        self.assertEqual(len(jobs), 1)
+        self.assertEqual(jobs[0]["reason"], "canary_final")
+        self.assertEqual(jobs[0]["status"], "cancelled")
+        self.assertEqual(jobs[0]["last_error"], "PrivateError")
+        self.assertEqual(self.db.collector_state()["state"], "canary")
+
+    def test_rate_limit_during_relationship_work_places_collector_on_risk_hold(self):
+        self.db.set_collector_state("active", self.now.isoformat())
+        job_id = self.db.enqueue_relationship_job(
+            self.account["id"], True, False, "count_change", self.now.isoformat()
+        )
+
+        result = RelationshipWorker(
+            self.db, enrichment(), RateLimitedRelationshipSource()
+        ).run_once(self.now)
+
+        self.assertEqual(result.status, "risk_hold")
+        self.assertEqual(result.detail, "RateLimitError")
+        self.assertEqual(self.db.collector_state()["state"], "risk_hold")
+        self.assertEqual(self.db.collector_state()["risk_reason"], "RateLimitError")
+        self.assertEqual(self.db.get_relationship_job(job_id)["status"], "failed")
+        self.assertEqual(self.db.get_relationship_job(job_id)["last_error"], "RateLimitError")
+
+    def test_canary_does_not_activate_after_one_direction_only(self):
+        self.db.approve_collector_canary(self.account["id"], self.now.isoformat())
+        final_at = self.now + timedelta(days=7)
+        self.db.enqueue_relationship_job(
+            self.account["id"], True, False, "count_change", final_at.isoformat()
+        )
+        source = FakeRelationshipSource({
+            Direction.FOLLOWERS: [RelationshipPage((), True)],
+        })
+
+        result = RelationshipWorker(self.db, enrichment(), source).run_once(final_at)
+
+        self.assertEqual(result.status, "completed")
+        self.assertEqual(self.db.collector_state()["state"], "canary")
+
+    def test_successful_two_direction_canary_final_activates_collector(self):
+        self.db.approve_collector_canary(self.account["id"], self.now.isoformat())
+        final_at = self.now + timedelta(days=7)
+        source = FakeRelationshipSource({
+            Direction.FOLLOWERS: [RelationshipPage((), True)],
+            Direction.FOLLOWING: [RelationshipPage((), True)],
+        })
+
+        result = RelationshipWorker(
+            self.db, enrichment(), source, sleeper=lambda _seconds: None
+        ).run_once(final_at)
+
+        self.assertEqual(result.status, "completed")
+        self.assertEqual(self.db.collector_state()["state"], "active")
 
     def test_complete_baseline_then_change_creates_only_real_delta(self):
         source = FakeRelationshipSource({

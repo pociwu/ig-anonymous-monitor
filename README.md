@@ -73,6 +73,9 @@ docker compose run --rm --no-deps relationship-worker \
 `docker compose up -d`。canary 成功運作滿 7 天並完成最後一次雙向巡檢後，程式才會自動轉成
 `active`。發生 challenge、checkpoint、rate limit 等 collector-fatal 訊號會立即進入
 `risk_hold`；人工處理 Instagram 後使用 `--collector-recovery`，重新開始 72 小時觀察。
+七天後的雙向最終巡檢只會自動建立一次；若目標變成私人、找不到或不可存取，程式會保留
+實際原因並停止自動重試，等待匿名巡檢確認重新公開。包裝在 HTTP retry 錯誤中的 429 也會
+視為 `RateLimitError` 並立即進入 `risk_hold`，避免持續消耗登入工作額度。
 
 Dashboard 的帳號詳情頁提供 Followers、Following、共同名單與 History，每頁 50 筆；首頁可逐帳號關閉名單巡檢。collector 登入、核准與恢復只允許 CLI／`igmenu.sh`，不提供網頁操作。
 

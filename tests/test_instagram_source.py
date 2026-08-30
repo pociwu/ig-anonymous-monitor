@@ -2,6 +2,9 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import Mock
+
+from requests.exceptions import RetryError
 
 from ig_monitor.instagram_source import InstagrapiRelationshipSource
 from ig_monitor.relationships import CollectorFatalError
@@ -44,6 +47,29 @@ class InstagrapiSessionTests(unittest.TestCase):
 
             with self.assertRaisesRegex(CollectorFatalError, "SessionInvalid"):
                 source.own_account_health()
+
+    def test_wrapped_http_429_is_reported_as_collector_rate_limit(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source = InstagrapiRelationshipSource(Path(tmp) / "session.json")
+            source._load_saved_session = Mock()
+            source.client.user_info_by_username = Mock(side_effect=RetryError(
+                "too many 429 error responses"
+            ))
+
+            with self.assertRaisesRegex(CollectorFatalError, "RateLimitError"):
+                source.resolve_public_user("target")
+
+    def test_unrelated_retry_error_with_429_in_username_is_not_a_rate_limit(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source = InstagrapiRelationshipSource(Path(tmp) / "session.json")
+            source._load_saved_session = Mock()
+            retry = RetryError("connection failed for username=user429")
+            source.client.user_info_by_username = Mock(side_effect=retry)
+
+            with self.assertRaises(RetryError) as raised:
+                source.resolve_public_user("user429")
+
+            self.assertIs(raised.exception, retry)
 
 
 if __name__ == "__main__":

@@ -619,6 +619,15 @@ class Database:
                AND status IN ('pending','leased') LIMIT 1""", (account_id,)
         ).fetchone() is not None
 
+    def has_relationship_job_reason_since(
+        self, account_id: int, reason: str, since: str
+    ) -> bool:
+        return self.conn.execute(
+            """SELECT 1 FROM relationship_jobs
+               WHERE account_id=? AND reason=? AND created_at>=? LIMIT 1""",
+            (account_id, reason, since),
+        ).fetchone() is not None
+
     def enqueue_due_reconciliations(self, now: datetime, days: int, random_uniform) -> int:
         queued = 0
         threshold = now - timedelta(days=days)

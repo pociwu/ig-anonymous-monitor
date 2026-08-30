@@ -34,6 +34,49 @@ TARGET_EXCEPTIONS = tuple(
 )
 
 
+def _exception_chain(exc: BaseException) -> Iterator[BaseException]:
+    """Yield wrapped request errors, including RetryError arguments."""
+    pending = [exc]
+    seen: set[int] = set()
+    while pending:
+        current = pending.pop()
+        if id(current) in seen:
+            continue
+        seen.add(id(current))
+        yield current
+        for nested in (current.__cause__, current.__context__, *current.args):
+            if isinstance(nested, BaseException):
+                pending.append(nested)
+
+
+def _classified_source_error(exc: BaseException) -> CollectorFatalError | TargetIneligibleError | None:
+    chain = tuple(_exception_chain(exc))
+    text = " ".join(str(item) for item in chain).casefold()
+    rate_limited = (
+        "too many requests" in text
+        or "too many 429" in text
+        or "429 error response" in text
+        or "status code 429" in text
+        or "status code: 429" in text
+        or "http 429" in text
+    )
+    if rate_limited:
+        return CollectorFatalError("RateLimitError")
+    for item in chain:
+        if isinstance(item, FATAL_EXCEPTIONS):
+            return CollectorFatalError(type(item).__name__)
+    for item in chain:
+        if isinstance(item, TARGET_EXCEPTIONS):
+            return TargetIneligibleError(type(item).__name__)
+    return None
+
+
+def _raise_classified_source_error(exc: BaseException) -> None:
+    classified = _classified_source_error(exc)
+    if classified is not None:
+        raise classified from exc
+
+
 class InstagrapiRelationshipSource:
     """The sole adapter allowed to know instagrapi and collector credentials."""
 
@@ -54,26 +97,27 @@ class InstagrapiRelationshipSource:
             self.client.login(username, password, verification_code=code)
             self._save_session()
             return CollectorIdentity(str(self.client.user_id), str(self.client.username or username))
-        except FATAL_EXCEPTIONS as exc:
-            raise CollectorFatalError(type(exc).__name__) from exc
+        except Exception as exc:
+            _raise_classified_source_error(exc)
+            raise
 
     def own_account_health(self) -> None:
         try:
             self._load_saved_session()
             self.client.user_info(str(self.client.user_id))
             self._save_session()
-        except FATAL_EXCEPTIONS as exc:
-            raise CollectorFatalError(type(exc).__name__) from exc
+        except Exception as exc:
+            _raise_classified_source_error(exc)
+            raise
 
     def resolve_public_user(self, username: str) -> RelationshipTarget:
         try:
             self._load_saved_session()
             user = self.client.user_info_by_username(username)
             return RelationshipTarget(str(user.pk), user.username, not bool(user.is_private))
-        except TARGET_EXCEPTIONS as exc:
-            raise TargetIneligibleError(type(exc).__name__) from exc
-        except FATAL_EXCEPTIONS as exc:
-            raise CollectorFatalError(type(exc).__name__) from exc
+        except Exception as exc:
+            _raise_classified_source_error(exc)
+            raise
 
     def iter_members(
         self, user_id: str, direction: Direction, page_size: int, limit: int
@@ -96,10 +140,9 @@ class InstagrapiRelationshipSource:
                     page = []
             yield RelationshipPage(tuple(page), True)
             self._save_session()
-        except TARGET_EXCEPTIONS as exc:
-            raise TargetIneligibleError(type(exc).__name__) from exc
-        except FATAL_EXCEPTIONS as exc:
-            raise CollectorFatalError(type(exc).__name__) from exc
+        except Exception as exc:
+            _raise_classified_source_error(exc)
+            raise
 
     def _load_saved_session(self) -> None:
         if not self.session_path.is_file():
