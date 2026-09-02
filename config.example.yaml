@@ -25,6 +25,8 @@ schedule:
   account_delay_min_seconds: 10
   account_delay_max_seconds: 20
   media_limit_per_account: 50
+  # Emergency switch: false keeps profile monitoring active but ignores and does not download media.
+  media_download_enabled: false
 
 heartbeat:
   enabled: true

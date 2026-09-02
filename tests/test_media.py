@@ -6,7 +6,13 @@ from PIL import Image
 
 from ig_monitor.config import AccountConfig, DedupConfig
 from ig_monitor.db import Database
-from ig_monitor.dedup import deduplicate_existing_media, fingerprint_file, is_similar, quality_rank
+from ig_monitor.dedup import (
+    deduplicate_existing_media,
+    fingerprint_file,
+    is_similar,
+    quality_rank,
+    quarantine_cross_account_media,
+)
 from ig_monitor.media import save_avatar
 from ig_monitor.models import MediaCandidate, PrivacyState, ProfileSnapshot
 
@@ -17,6 +23,73 @@ class FakeScraper:
 
 
 class MediaTests(unittest.IsolatedAsyncioTestCase):
+    async def test_cross_account_quarantine_blocks_pending_shared_urls(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "state.sqlite3")
+            try:
+                accounts = [
+                    AccountConfig(f"https://insta-stories-viewer.com/p{index}/", True, f"p{index}")
+                    for index in range(3)
+                ]
+                db.sync_accounts(accounts)
+                snapshot = ProfileSnapshot("p", None, 1, 1, 1, "", PrivacyState.PUBLIC, "")
+                for index, account in enumerate(db.enabled_accounts()):
+                    db.record_success(account["id"], snapshot, [], [MediaCandidate(
+                        f"pending-{index}", "posts", "video",
+                        "https://cdn.example.test/unrelated-global-video.mp4",
+                    )])
+
+                report = quarantine_cross_account_media(db, apply=True, min_accounts=3)
+
+                self.assertEqual(report["media_rows"], 3)
+                statuses = [row[0] for row in db.conn.execute("SELECT status FROM media ORDER BY id")]
+                self.assertEqual(statuses, ["quarantined"] * 3)
+            finally:
+                db.close()
+
+    async def test_cross_account_quarantine_previews_then_removes_shared_exact_media(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            db = Database(root / "state.sqlite3")
+            try:
+                accounts = [
+                    AccountConfig(f"https://insta-stories-viewer.com/a{index}/", True, f"a{index}")
+                    for index in range(4)
+                ]
+                db.sync_accounts(accounts)
+                rows = db.enabled_accounts()
+                snapshot = ProfileSnapshot("a", None, 1, 1, 1, "", PrivacyState.PUBLIC, "")
+                paths = []
+                for index, account in enumerate(rows):
+                    candidate = MediaCandidate(f"media-{index}", "posts", "image", f"https://cdn/{index}.jpg")
+                    db.record_success(account["id"], snapshot, [], [candidate])
+                    media_id = db.conn.execute(
+                        "SELECT id FROM media WHERE account_id=?", (account["id"],)
+                    ).fetchone()[0]
+                    path = root / f"media-{index}.jpg"
+                    path.write_bytes(b"shared" if index < 3 else b"unique")
+                    paths.append(path)
+                    db.mark_media_downloaded(
+                        media_id, str(path), "shared-hash" if index < 3 else "unique-hash"
+                    )
+
+                preview = quarantine_cross_account_media(db, apply=False, min_accounts=3)
+                self.assertEqual(preview["groups"], 1)
+                self.assertEqual(preview["media_rows"], 3)
+                self.assertEqual(preview["files"], 3)
+                self.assertTrue(all(path.exists() for path in paths))
+
+                applied = quarantine_cross_account_media(db, apply=True, min_accounts=3)
+                self.assertEqual(applied["media_rows"], 3)
+                states = db.conn.execute("SELECT status,local_path FROM media ORDER BY id").fetchall()
+                self.assertEqual([row["status"] for row in states[:3]], ["quarantined"] * 3)
+                self.assertTrue(all(row["local_path"] is None for row in states[:3]))
+                self.assertEqual(states[3]["status"], "downloaded")
+                self.assertTrue(all(not path.exists() for path in paths[:3]))
+                self.assertTrue(paths[3].exists())
+            finally:
+                db.close()
+
     async def test_unchanged_avatar_reuses_existing_file(self):
         with tempfile.TemporaryDirectory() as tmp:
             first_hash, first_path = await save_avatar(FakeScraper(), Path(tmp), "a", "https://cdn/a", "https://site/a")

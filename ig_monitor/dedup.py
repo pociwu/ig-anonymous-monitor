@@ -248,3 +248,98 @@ def deduplicate_existing_media(db, config: DedupConfig, apply: bool = False) -> 
         "quality_upgrades": upgrades, "removable_files": len(removable_paths),
         "errors": errors, "ffmpeg_missing": ffmpeg_missing, "applied": apply,
     }
+
+
+def quarantine_cross_account_media(
+    db,
+    *,
+    apply: bool = False,
+    min_accounts: int = 3,
+    since: str | None = None,
+) -> dict[str, Any]:
+    """Hide and optionally remove exact media bytes shared by many monitored accounts.
+
+    This is an incident-response tool for upstream account/media cross-contamination. It is
+    intentionally separate from normal perceptual deduplication, whose scope remains one account.
+    """
+    if min_accounts < 2:
+        raise ValueError("min_accounts must be at least 2")
+    query = """
+      SELECT m.*,a.label
+      FROM media m JOIN accounts a ON a.id=m.account_id
+      WHERE m.status IN ('pending','failed','downloaded','duplicate')
+    """
+    params: list[Any] = []
+    if since:
+        query += " AND COALESCE(m.downloaded_at,m.discovered_at)>=?"
+        params.append(since)
+    query += " ORDER BY m.account_id,m.id"
+    rows = [dict(row) for row in db.conn.execute(query, params)]
+
+    by_hash: dict[str, list[dict[str, Any]]] = {}
+    by_url: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        if row.get("sha256") and row["status"] == "downloaded":
+            by_hash.setdefault(row["sha256"], []).append(row)
+        by_url.setdefault(row["url"].rstrip("/ "), []).append(row)
+    hash_groups = [
+        ("sha256", group[0]["sha256"], group) for group in by_hash.values()
+        if len({row["account_id"] for row in group}) >= min_accounts
+    ]
+    url_groups = [
+        ("url", url, group) for url, group in by_url.items()
+        if len({row["account_id"] for row in group}) >= min_accounts
+    ]
+    groups = hash_groups + url_groups
+    target_by_id = {
+        int(row["id"]): row
+        for _signal, _value, group in groups
+        for row in group
+    }
+    target_rows = list(target_by_id.values())
+    target_ids = [int(row["id"]) for row in target_rows]
+    paths = {str(row["local_path"]) for row in target_rows if row.get("local_path")}
+    errors: list[str] = []
+
+    if apply and target_ids:
+        placeholders = ",".join("?" for _ in target_ids)
+        with db.transaction() as con:
+            con.execute(
+                f"""UPDATE media SET status='quarantined',local_path=NULL,duplicate_of_id=NULL,
+                       last_error='cross-account-source-contamination'
+                       WHERE id IN ({placeholders})""",
+                target_ids,
+            )
+            con.execute(
+                f"""UPDATE media SET status='quarantined',duplicate_of_id=NULL,
+                       last_error='cross-account-source-contamination'
+                       WHERE duplicate_of_id IN ({placeholders})""",
+                target_ids,
+            )
+        for value in paths:
+            try:
+                if not db.media_path_referenced(value):
+                    Path(value).unlink(missing_ok=True)
+            except OSError as exc:
+                errors.append(f"file not removed: {value}: {exc}")
+
+    samples = [
+        {
+            "signal": signal,
+            "value": value,
+            "accounts": sorted({str(row["label"]) for row in group}),
+            "rows": len(group),
+        }
+        for signal, value, group in groups
+    ]
+    return {
+        "scanned": len(rows),
+        "groups": len(groups),
+        "media_rows": len(target_rows),
+        "files": len(paths),
+        "samples": samples,
+        "errors": errors,
+        "applied": apply,
+        "min_accounts": min_accounts,
+        "since": since,
+    }

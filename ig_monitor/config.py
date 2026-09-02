@@ -47,6 +47,7 @@ class ScheduleConfig:
     account_delay_min_seconds: int
     account_delay_max_seconds: int
     media_limit_per_account: int
+    media_download_enabled: bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -237,8 +238,13 @@ def load_config(
     interval_minutes = int(schedule.get("interval_minutes", 15))
     if interval_minutes < 1:
         raise ValueError("schedule.interval_minutes must be at least 1")
-    schedule_cfg = ScheduleConfig(interval_minutes, delay_min, delay_max,
-                                  max(1, int(schedule.get("media_limit_per_account", 50))))
+    schedule_cfg = ScheduleConfig(
+        interval_minutes,
+        delay_min,
+        delay_max,
+        max(1, int(schedule.get("media_limit_per_account", 50))),
+        bool(schedule.get("media_download_enabled", False)),
+    )
 
     heartbeat = _section(raw, "heartbeat")
     heartbeat_cfg = HeartbeatConfig(bool(heartbeat.get("enabled", True)), str(heartbeat.get("time", "09:00")),

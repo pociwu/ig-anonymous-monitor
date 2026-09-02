@@ -10,7 +10,7 @@ from pathlib import Path
 
 from .config import load_config
 from .db import Database
-from .dedup import deduplicate_existing_media
+from .dedup import deduplicate_existing_media, quarantine_cross_account_media
 from .monitor import Monitor, check_accounts
 from .instagram_source import InstagrapiRelationshipSource
 from .relationships import CollectorAdministration
@@ -26,14 +26,21 @@ def build_parser() -> argparse.ArgumentParser:
     group.add_argument("--send-test", action="store_true", help="傳送 Telegram 測試訊息")
     group.add_argument("--reset-account", metavar="URL_OR_USERNAME", help="清除單一帳號監控基準")
     group.add_argument("--dedupe-media", action="store_true", help="Analyze and deduplicate downloaded media")
+    group.add_argument(
+        "--quarantine-cross-account-media", action="store_true",
+        help="Find exact media bytes incorrectly shared by multiple monitored accounts",
+    )
     group.add_argument("--collector-status", action="store_true", help="Show non-secret collector state")
     group.add_argument("--collector-login", action="store_true", help="Login and begin the 72-hour observation")
     group.add_argument("--collector-approve", metavar="ACCOUNT", help="Approve one account as the seven-day canary")
     group.add_argument("--collector-recovery", action="store_true", help="Begin a new observation after risk_hold")
     parser.add_argument("--collector-session", default="collector-secrets/session.json")
+    parser.add_argument("--media-since", help="Only quarantine media downloaded at or after this ISO-8601 time")
+    parser.add_argument("--min-accounts", type=int, default=3,
+                        help="Minimum distinct accounts sharing exact media bytes (default: 3)")
     apply_group = parser.add_mutually_exclusive_group()
-    apply_group.add_argument("--dry-run", action="store_true", help="Preview media deduplication")
-    apply_group.add_argument("--apply", action="store_true", help="Apply media deduplication")
+    apply_group.add_argument("--dry-run", action="store_true", help="Preview media maintenance changes")
+    apply_group.add_argument("--apply", action="store_true", help="Apply media maintenance changes")
     return parser
 
 
@@ -54,18 +61,21 @@ def setup_logging(data_dir: Path, verbose: bool = False, write_file: bool = True
 
 
 async def _async_main(args: argparse.Namespace) -> int:
-    if (args.dry_run or args.apply) and not args.dedupe_media:
-        raise ValueError("--dry-run/--apply can only be used with --dedupe-media")
+    media_utility = args.dedupe_media or args.quarantine_cross_account_media
+    if (args.dry_run or args.apply) and not media_utility:
+        raise ValueError("--dry-run/--apply can only be used with a media maintenance command")
+    if (args.media_since or args.min_accounts != 3) and not args.quarantine_cross_account_media:
+        raise ValueError("--media-since/--min-accounts require --quarantine-cross-account-media")
     collector_command = any((args.collector_status, args.collector_login, args.collector_approve, args.collector_recovery))
     utility_command = any((
-        args.check, args.send_test, args.reset_account, args.dedupe_media, collector_command,
+        args.check, args.send_test, args.reset_account, media_utility, collector_command,
     ))
     config = load_config(
         args.config,
-        require_telegram=not (args.check or args.dedupe_media or collector_command),
+        require_telegram=not (args.check or media_utility or collector_command),
         require_apify=not utility_command,
     )
-    setup_logging(config.paths.data_dir, write_file=not (args.check or args.dedupe_media))
+    setup_logging(config.paths.data_dir, write_file=not (args.check or media_utility))
     if args.check:
         return await check_accounts(config)
     if args.send_test:
@@ -115,6 +125,33 @@ async def _async_main(args: argparse.Namespace) -> int:
             )
             if report["ffmpeg_missing"]:
                 logging.warning("ffmpeg/ffprobe unavailable; video deduplication used SHA-256 only")
+            for error in report["errors"]:
+                logging.warning("%s", error)
+            return 1 if report["errors"] else 0
+        if args.quarantine_cross_account_media:
+            if not args.dry_run and not args.apply:
+                raise ValueError("--quarantine-cross-account-media requires --dry-run or --apply")
+            if args.min_accounts < 2:
+                raise ValueError("--min-accounts must be at least 2")
+            if args.media_since:
+                try:
+                    datetime.fromisoformat(args.media_since)
+                except ValueError as exc:
+                    raise ValueError("--media-since must be an ISO-8601 date/time") from exc
+            report = quarantine_cross_account_media(
+                db, apply=args.apply, min_accounts=args.min_accounts, since=args.media_since,
+            )
+            mode = "APPLY" if args.apply else "DRY-RUN"
+            logging.info(
+                "%s cross-account quarantine: scanned=%d groups=%d rows=%d files=%d",
+                mode, report["scanned"], report["groups"], report["media_rows"], report["files"],
+            )
+            for sample in report["samples"]:
+                logging.info(
+                    "shared %s=%s accounts=%s rows=%d",
+                    sample["signal"], sample["value"][:80],
+                    ",".join(sample["accounts"]), sample["rows"],
+                )
             for error in report["errors"]:
                 logging.warning("%s", error)
             return 1 if report["errors"] else 0

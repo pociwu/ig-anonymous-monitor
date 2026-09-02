@@ -107,7 +107,8 @@ class Monitor:
                                 privacy = changes.get("privacy")
                                 if privacy and privacy[0].value == "private" and privacy[1].value == "public":
                                     opened.add(account["id"])
-                        self.db.record_success(account["id"], result.snapshot, events, result.media)
+                        recorded_media = result.media if self.config.schedule.media_download_enabled else []
+                        self.db.record_success(account["id"], result.snapshot, events, recorded_media)
                         observed_at = (
                             datetime.fromisoformat(result.snapshot.observed_at)
                             if result.snapshot.observed_at else datetime.now(UTC)
@@ -117,8 +118,12 @@ class Monitor:
                         )
                         if self.apify and not account.get("instagram_profile_id"):
                             await self._enrol_identity(account, result.snapshot.username)
-                        LOG.info("%s 載入成功：%s，發現媒體 %d", account["label"],
-                                 result.snapshot.privacy.value, len(result.media))
+                        if self.config.schedule.media_download_enabled:
+                            LOG.info("%s 載入成功：%s，發現媒體 %d", account["label"],
+                                     result.snapshot.privacy.value, len(result.media))
+                        else:
+                            LOG.warning("%s 載入成功：%s；媒體記錄與下載目前已暫停，忽略候選 %d 筆",
+                                        account["label"], result.snapshot.privacy.value, len(result.media))
                     except ScrapeFailure as exc:
                         failures += 1
                         save_diagnostic(self.config.paths.diagnostics_dir, account["account_key"], exc.html,
@@ -132,24 +137,27 @@ class Monitor:
                         count = self.db.record_failure(account["id"], account["label"], str(exc), None)
                         LOG.exception("%s 處理失敗（連續 %d 次）", account["label"], count)
 
-                refreshed = {row["id"]: row for row in self.db.enabled_accounts()}
-                for account_id, account in refreshed.items():
-                    current = self.db.snapshot_from_row(account)
-                    if account["fail_count"] or current is None or current.privacy != PrivacyState.PUBLIC:
-                        continue
-                    stats = await download_account_media(self.db, scraper, account,
-                                                         self.config.paths.download_root,
-                                                         self.config.schedule.media_limit_per_account,
-                                                         self.config.dedup)
-                    attachments = stats.pop("attachments", [])
-                    if self.config.telegram.send_new_media:
-                        stats["attachments"] = attachments[:self.config.telegram.max_new_media_attachments]
-                        stats["attachment_total"] = len(attachments)
-                    if stats["downloaded"] or stats["failed"] or account_id in opened:
-                        payload = {"label": account["label"], **stats}
-                        self.db.enqueue_event(f"media:{run_id}:{account_id}", "media_summary", payload, account_id)
-                    LOG.info("%s 媒體：新增 %d、重複 %d、失敗 %d、待下載 %d", account["label"],
-                             stats["downloaded"], stats["duplicate"], stats["failed"], stats["pending"])
+                if self.config.schedule.media_download_enabled:
+                    refreshed = {row["id"]: row for row in self.db.enabled_accounts()}
+                    for account_id, account in refreshed.items():
+                        current = self.db.snapshot_from_row(account)
+                        if account["fail_count"] or current is None or current.privacy != PrivacyState.PUBLIC:
+                            continue
+                        stats = await download_account_media(self.db, scraper, account,
+                                                             self.config.paths.download_root,
+                                                             self.config.schedule.media_limit_per_account,
+                                                             self.config.dedup)
+                        attachments = stats.pop("attachments", [])
+                        if self.config.telegram.send_new_media:
+                            stats["attachments"] = attachments[:self.config.telegram.max_new_media_attachments]
+                            stats["attachment_total"] = len(attachments)
+                        if stats["downloaded"] or stats["failed"] or account_id in opened:
+                            payload = {"label": account["label"], **stats}
+                            self.db.enqueue_event(f"media:{run_id}:{account_id}", "media_summary", payload, account_id)
+                        LOG.info("%s 媒體：新增 %d、重複 %d、失敗 %d、待下載 %d", account["label"],
+                                 stats["downloaded"], stats["duplicate"], stats["failed"], stats["pending"])
+                else:
+                    LOG.warning("媒體記錄與下載已由 schedule.media_download_enabled=false 暫停")
 
             self._enqueue_heartbeat_if_due()
             self.db.enqueue_relationship_watchdogs(datetime.now(UTC))

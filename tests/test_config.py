@@ -22,6 +22,7 @@ heartbeat:
             self.assertEqual(config.schedule.account_delay_min_seconds, 10)
             self.assertEqual(config.schedule.account_delay_max_seconds, 20)
             self.assertEqual(config.schedule.media_limit_per_account, 50)
+            self.assertFalse(config.schedule.media_download_enabled)
             self.assertFalse(config.instagram_enrichment.enabled)
             self.assertFalse(config.instagram_posts.enabled)
             self.assertEqual(config.instagram_posts.baseline_max, 6)
@@ -29,6 +30,23 @@ heartbeat:
             self.assertTrue(config.accounts[0].relationship_tracking)
             self.assertTrue(config.accounts[0].post_tracking)
             self.assertFalse(config.accounts[0].full_post_backfill_on_reopen)
+
+    def test_media_download_can_be_paused_without_disabling_profile_monitoring(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "config.yaml"
+            path.write_text("""
+accounts:
+  - url: https://insta-stories-viewer.com/iii_u716/
+schedule:
+  media_download_enabled: false
+telegram:
+  enabled: false
+""", encoding="utf-8")
+
+            config = load_config(path, require_telegram=False)
+
+            self.assertFalse(config.schedule.media_download_enabled)
+            self.assertTrue(config.accounts[0].enabled)
 
     def test_instagram_posts_safe_limits_are_loaded(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -79,6 +79,32 @@ docker compose run --rm --no-deps relationship-worker \
 
 Dashboard 的帳號詳情頁提供 Followers、Following、共同名單與 History，每頁 50 筆；首頁可逐帳號關閉名單巡檢。collector 登入、核准與恢復只允許 CLI／`igmenu.sh`，不提供網頁操作。
 
+## 匿名媒體來源異常的緊急暫停與清理
+
+若匿名檢視來源把同一批照片或影片錯配到不同帳號，`media_download_enabled` 預設會安全關閉；
+並請在 `config.yaml` 明確設定：
+
+```yaml
+schedule:
+  media_download_enabled: false
+```
+
+這會保留個人資料、公開／私人狀態、數量異動與 Telegram 巡檢，但不記錄來源站新回傳的媒體，
+也不下載資料庫內既有待處理媒體。來源恢復並完成不同帳號交叉驗證後，才改回 `true`。
+
+已下載或待處理的跨帳號相同媒體可先預覽；預設只列出相同 SHA-256 或完全相同媒體 URL
+出現在至少三個帳號的群組：
+
+```bash
+docker compose run --rm --no-deps monitor \
+  python -m ig_monitor --config /srv/ig-monitor/config.yaml \
+  --quarantine-cross-account-media --dry-run --min-accounts 3
+```
+
+確認列出的帳號與數量屬於本次污染後，再將 `--dry-run` 改成 `--apply`。可加上
+`--media-since 2026-09-01T00:00:00+00:00` 限定事故時間；套用後資料庫保留隔離紀錄，
+Dashboard 不再顯示，且未被其他正常紀錄引用的檔案會移除。
+
 既有 systemd/Miniconda 主機請依照
 [Ubuntu Docker 遷移指南](docs/docker-migration.md) 停止舊排程、備份 SQLite，再啟動容器。
 
