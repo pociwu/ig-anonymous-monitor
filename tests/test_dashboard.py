@@ -6,6 +6,7 @@ from pathlib import Path
 from ig_monitor.config import AccountConfig, load_config
 from ig_monitor.dashboard import _chart_axis, create_app, system_status
 from ig_monitor.db import Database
+from ig_monitor.dedup import quarantine_cross_account_media
 from ig_monitor.models import MediaCandidate, PrivacyState, ProfileSnapshot
 
 
@@ -129,6 +130,81 @@ class DashboardTests(unittest.TestCase):
                 self.assertEqual(health.get_json(), {"status": "ok"})
             finally:
                 db.close()
+
+    def test_dashboard_reviews_keeps_and_deletes_quarantined_videos(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config_path = root / "config.yaml"
+            config_path.write_text("""
+accounts:
+  - url: https://insta-stories-viewer.com/q0/
+    enabled: true
+  - url: https://insta-stories-viewer.com/q1/
+    enabled: true
+  - url: https://insta-stories-viewer.com/q2/
+    enabled: true
+telegram:
+  enabled: false
+""", encoding="utf-8")
+            db_path = root / "state.sqlite3"
+            db = Database(db_path)
+            try:
+                db.sync_accounts(load_config(config_path, require_telegram=False).accounts)
+                snapshot = ProfileSnapshot("q", None, 1, 2, 3, "", PrivacyState.PUBLIC, "")
+                media_ids = []
+                paths = []
+                for index, account in enumerate(db.enabled_accounts()):
+                    db.record_success(account["id"], snapshot, [], [MediaCandidate(
+                        f"video-{index}", "posts", "video", f"https://cdn/{index}.mp4",
+                    )])
+                    media_id = db.conn.execute(
+                        "SELECT id FROM media WHERE account_id=?", (account["id"],)
+                    ).fetchone()[0]
+                    path = root / f"video-{index}.mp4"
+                    path.write_bytes(b"same-video")
+                    db.mark_media_downloaded(media_id, str(path), "same-video-hash")
+                    media_ids.append(media_id)
+                    paths.append(path)
+                quarantine_cross_account_media(db, apply=True, min_accounts=3)
+            finally:
+                db.close()
+
+            app = create_app(db_path, config_path=config_path, account_validator=lambda _url: None)
+            client = app.test_client()
+            detail = client.get("/account/1")
+            self.assertIn("隔離影片 1".encode(), detail.data)
+            self.assertIn(b'/account/1/quarantine', detail.data)
+
+            review = client.get("/account/1/quarantine")
+            self.assertEqual(review.status_code, 200)
+            self.assertIn("隔離影片審核".encode(), review.data)
+            self.assertIn(f'/media/{media_ids[0]}#t=0.1'.encode(), review.data)
+            self.assertIn("保留此影片".encode(), review.data)
+            self.assertIn("永久刪除此影片".encode(), review.data)
+
+            kept = client.post(f"/media/{media_ids[0]}/quarantine/keep")
+            self.assertEqual(kept.status_code, 303)
+            db = Database(db_path)
+            try:
+                self.assertEqual(
+                    db.conn.execute("SELECT status FROM media WHERE id=?", (media_ids[0],)).fetchone()[0],
+                    "downloaded",
+                )
+            finally:
+                db.close()
+            self.assertTrue(paths[0].is_file())
+
+            deleted = client.post(f"/media/{media_ids[1]}/quarantine/delete")
+            self.assertEqual(deleted.status_code, 303)
+            db = Database(db_path)
+            try:
+                self.assertEqual(
+                    db.conn.execute("SELECT status FROM media WHERE id=?", (media_ids[1],)).fetchone()[0],
+                    "deleted",
+                )
+            finally:
+                db.close()
+            self.assertFalse(paths[1].exists())
 
     def test_home_adds_a_validated_account_to_config_and_dashboard(self):
         with tempfile.TemporaryDirectory() as tmp:

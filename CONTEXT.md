@@ -214,6 +214,15 @@ _Avoid_: 每次雙向抓取、部分共同名單
 
 **Media collection**: 帳號媒體依來源分成 Posts、Stories 與 Highlights；每個來源再分為照片與影片。相同 Canonical media 可保留多個來源關聯，但只保存與顯示一份內容。
 
+**Anonymous source contamination**: 匿名檢視來源把完全相同或感知內容相同的媒體錯配至至少三個不同 Monitored Instagram account 的事故狀態；只供跨帳號事故檢測，不改變一般 Duplicate media 的單帳號定義。
+_Avoid_: 一般重複媒體、Instagram 共同貼文
+
+**Media quarantine review**: Anonymous source contamination 候選從一般相簿隱藏，但保留檔案、路徑、來源、指紋與原狀態，等待 Dashboard 人工判斷保留或永久刪除的非破壞性狀態。
+_Avoid_: 自動刪檔、一般媒體去重
+
+**Trusted quarantined media**: 操作人員確認為真正原始內容、從 Media quarantine review 恢復且不再被相同跨帳號規則自動隔離的媒體。
+_Avoid_: 自動白名單、帳號白名單
+
 **Instagram Profile ID**: Instagram 帳號的穩定識別碼；巡檢程式會為每個帳號保存此值，並在使用者名稱改變後用它查回目前的名稱。
 
 _Avoid_: 帳號名稱、Apify ID

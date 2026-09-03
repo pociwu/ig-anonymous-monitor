@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import tempfile
 from dataclasses import asdict, dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -256,20 +257,31 @@ def quarantine_cross_account_media(
     apply: bool = False,
     min_accounts: int = 3,
     since: str | None = None,
+    kind: str = "video",
+    dedup: DedupConfig | None = None,
 ) -> dict[str, Any]:
-    """Hide and optionally remove exact media bytes shared by many monitored accounts.
+    """Find and non-destructively hide media shared by many monitored accounts.
 
     This is an incident-response tool for upstream account/media cross-contamination. It is
     intentionally separate from normal perceptual deduplication, whose scope remains one account.
     """
     if min_accounts < 2:
         raise ValueError("min_accounts must be at least 2")
+    if kind not in {"video", "image", "all"}:
+        raise ValueError("kind must be video, image, or all")
     query = """
       SELECT m.*,a.label
       FROM media m JOIN accounts a ON a.id=m.account_id
       WHERE m.status IN ('pending','failed','downloaded','duplicate')
+        AND NOT EXISTS (
+          SELECT 1 FROM media_quarantine mq
+          WHERE mq.media_id=m.id AND mq.decision='kept'
+        )
     """
     params: list[Any] = []
+    if kind != "all":
+        query += " AND m.kind=?"
+        params.append(kind)
     if since:
         query += " AND COALESCE(m.downloaded_at,m.discovered_at)>=?"
         params.append(since)
@@ -282,64 +294,211 @@ def quarantine_cross_account_media(
         if row.get("sha256") and row["status"] == "downloaded":
             by_hash.setdefault(row["sha256"], []).append(row)
         by_url.setdefault(row["url"].rstrip("/ "), []).append(row)
-    hash_groups = [
+    candidate_groups: list[tuple[str, str, list[dict[str, Any]]]] = [
         ("sha256", group[0]["sha256"], group) for group in by_hash.values()
         if len({row["account_id"] for row in group}) >= min_accounts
     ]
-    url_groups = [
+    candidate_groups.extend(
         ("url", url, group) for url, group in by_url.items()
         if len({row["account_id"] for row in group}) >= min_accounts
-    ]
-    groups = hash_groups + url_groups
+    )
+
+    fingerprint_missing = 0
+    if dedup and dedup.enabled and kind in {"video", "all"}:
+        fingerprint_rows: list[tuple[dict[str, Any], MediaFingerprint]] = []
+        for row in rows:
+            if row.get("kind") != "video" or row.get("status") != "downloaded":
+                continue
+            try:
+                fingerprint = row_fingerprint(row)
+            except (TypeError, ValueError, json.JSONDecodeError):
+                fingerprint = None
+            if fingerprint is None or not fingerprint.frame_phashes:
+                fingerprint_missing += 1
+                continue
+            fingerprint_rows.append((row, fingerprint))
+
+        perceptual_groups: list[list[tuple[dict[str, Any], MediaFingerprint]]] = []
+        for entry in fingerprint_rows:
+            row, fingerprint = entry
+            matching = next((
+                group for group in perceptual_groups
+                if is_similar(group[0][1], fingerprint, dedup)
+            ), None)
+            if matching is None:
+                perceptual_groups.append([entry])
+            else:
+                matching.append(entry)
+        for group in perceptual_groups:
+            media_rows = [entry[0] for entry in group]
+            if len({row["account_id"] for row in media_rows}) < min_accounts:
+                continue
+            signature = hashlib.sha256(
+                ",".join(str(row["id"]) for row in media_rows).encode("ascii")
+            ).hexdigest()
+            candidate_groups.append(("perceptual", signature, media_rows))
+
+    groups = _merge_cross_account_groups(candidate_groups)
     target_by_id = {
         int(row["id"]): row
-        for _signal, _value, group in groups
-        for row in group
+        for group in groups
+        for row in group["rows"]
     }
     target_rows = list(target_by_id.values())
     target_ids = [int(row["id"]) for row in target_rows]
     paths = {str(row["local_path"]) for row in target_rows if row.get("local_path")}
-    errors: list[str] = []
 
     if apply and target_ids:
         placeholders = ",".join("?" for _ in target_ids)
+        detected_by_id = {
+            int(row["id"]): (group["signal"], group["value"])
+            for group in groups for row in group["rows"]
+        }
+        now = datetime.now(UTC).isoformat(timespec="seconds")
         with db.transaction() as con:
+            for row in target_rows:
+                signal, value = detected_by_id[int(row["id"])]
+                con.execute(
+                    """INSERT INTO media_quarantine(
+                         media_id,reason,signal,signal_value,original_status,
+                         quarantined_at,decision,reviewed_at
+                       ) VALUES(?,?,?,?,?,?,'pending',NULL)
+                       ON CONFLICT(media_id) DO UPDATE SET
+                         reason=excluded.reason,signal=excluded.signal,
+                         signal_value=excluded.signal_value,
+                         original_status=excluded.original_status,
+                         quarantined_at=excluded.quarantined_at,
+                         decision='pending',reviewed_at=NULL""",
+                    (
+                        row["id"], "cross-account-source-contamination", signal,
+                        value, row["status"], now,
+                    ),
+                )
             con.execute(
-                f"""UPDATE media SET status='quarantined',local_path=NULL,duplicate_of_id=NULL,
+                f"""UPDATE media SET status='quarantined',
                        last_error='cross-account-source-contamination'
                        WHERE id IN ({placeholders})""",
                 target_ids,
             )
-            con.execute(
-                f"""UPDATE media SET status='quarantined',duplicate_of_id=NULL,
-                       last_error='cross-account-source-contamination'
-                       WHERE duplicate_of_id IN ({placeholders})""",
-                target_ids,
-            )
-        for value in paths:
-            try:
-                if not db.media_path_referenced(value):
-                    Path(value).unlink(missing_ok=True)
-            except OSError as exc:
-                errors.append(f"file not removed: {value}: {exc}")
 
     samples = [
         {
-            "signal": signal,
-            "value": value,
-            "accounts": sorted({str(row["label"]) for row in group}),
-            "rows": len(group),
+            "signal": group["signal"],
+            "signals": group["signals"],
+            "value": group["value"],
+            "accounts": sorted({str(row["label"]) for row in group["rows"]}),
+            "rows": len(group["rows"]),
+            "media_ids": sorted(int(row["id"]) for row in group["rows"]),
+            "kinds": sorted({str(row["kind"]) for row in group["rows"]}),
         }
-        for signal, value, group in groups
+        for group in groups
     ]
     return {
         "scanned": len(rows),
         "groups": len(groups),
         "media_rows": len(target_rows),
         "files": len(paths),
+        "files_preserved": len(paths),
         "samples": samples,
-        "errors": errors,
+        "errors": [],
         "applied": apply,
         "min_accounts": min_accounts,
         "since": since,
+        "kind": kind,
+        "fingerprint_missing": fingerprint_missing,
     }
+
+
+def _merge_cross_account_groups(
+    candidates: list[tuple[str, str, list[dict[str, Any]]]],
+) -> list[dict[str, Any]]:
+    """Collapse SHA, URL, and perceptual detections that refer to the same media rows."""
+    groups: list[dict[str, Any]] = []
+    for signal, value, rows in candidates:
+        row_by_id = {int(row["id"]): row for row in rows}
+        overlapping = [group for group in groups if set(group["row_by_id"]) & set(row_by_id)]
+        if not overlapping:
+            groups.append({
+                "signal": signal, "value": value, "signals": [signal], "row_by_id": row_by_id,
+            })
+            continue
+        primary = overlapping[0]
+        primary["row_by_id"].update(row_by_id)
+        if signal not in primary["signals"]:
+            primary["signals"].append(signal)
+        for extra in overlapping[1:]:
+            primary["row_by_id"].update(extra["row_by_id"])
+            for extra_signal in extra["signals"]:
+                if extra_signal not in primary["signals"]:
+                    primary["signals"].append(extra_signal)
+            groups.remove(extra)
+    for group in groups:
+        group["rows"] = list(group.pop("row_by_id").values())
+    return groups
+
+
+def restore_quarantined_media(db, media_id: int) -> bool:
+    """Trust one quarantined item and restore its previous state without moving its file."""
+    row = db.conn.execute(
+        """SELECT m.local_path,m.status,mq.original_status
+           FROM media m JOIN media_quarantine mq ON mq.media_id=m.id
+           WHERE m.id=? AND m.status='quarantined' AND mq.decision='pending'""",
+        (media_id,),
+    ).fetchone()
+    if row is None:
+        return False
+    original_status = str(row["original_status"])
+    local_path = row["local_path"]
+    if original_status == "downloaded" and (not local_path or not Path(local_path).is_file()):
+        raise FileNotFoundError(f"quarantined media file is missing: {local_path or media_id}")
+    now = datetime.now(UTC).isoformat(timespec="seconds")
+    with db.transaction() as con:
+        con.execute(
+            "UPDATE media SET status=?,last_error=NULL WHERE id=?",
+            (original_status, media_id),
+        )
+        con.execute(
+            "UPDATE media_quarantine SET decision='kept',reviewed_at=? WHERE media_id=?",
+            (now, media_id),
+        )
+    return True
+
+
+def delete_quarantined_media(db, media_id: int) -> dict[str, Any]:
+    """Permanently remove one reviewed file while retaining a database tombstone."""
+    row = db.conn.execute(
+        """SELECT m.local_path,m.status
+           FROM media m JOIN media_quarantine mq ON mq.media_id=m.id
+           WHERE m.id=? AND m.status='quarantined' AND mq.decision='pending'""",
+        (media_id,),
+    ).fetchone()
+    if row is None:
+        return {"deleted": False, "file_deleted": False, "error": None}
+    local_path = str(row["local_path"]) if row["local_path"] else None
+    now = datetime.now(UTC).isoformat(timespec="seconds")
+    with db.transaction() as con:
+        con.execute(
+            """UPDATE media SET status='deleted',local_path=NULL,duplicate_of_id=NULL,
+                 last_error='cross-account-source-contamination-deleted' WHERE id=?""",
+            (media_id,),
+        )
+        con.execute(
+            """UPDATE media SET status='deleted',local_path=NULL,duplicate_of_id=NULL,
+                 last_error='cross-account-source-contamination-deleted'
+               WHERE duplicate_of_id=?""",
+            (media_id,),
+        )
+        con.execute(
+            "UPDATE media_quarantine SET decision='deleted',reviewed_at=? WHERE media_id=?",
+            (now, media_id),
+        )
+    file_deleted = False
+    error = None
+    if local_path and not db.media_path_referenced(local_path):
+        try:
+            path = Path(local_path)
+            file_deleted = path.is_file()
+            path.unlink(missing_ok=True)
+        except OSError as exc:
+            error = str(exc)
+    return {"deleted": True, "file_deleted": file_deleted, "error": error}

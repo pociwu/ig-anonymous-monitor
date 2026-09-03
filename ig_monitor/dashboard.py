@@ -15,6 +15,7 @@ from flask import Flask, abort, redirect, render_template_string, request, send_
 
 from .account_registry import AccountRegistry, AccountValidator
 from .config import load_config
+from .dedup import delete_quarantined_media, restore_quarantined_media
 
 
 PAGE = """<!doctype html>
@@ -132,7 +133,7 @@ DETAIL_PAGE = """<!doctype html>
 <html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{{ account.display_name or account.label }} · IG Monitor</title>
 <style>
-:root{color-scheme:dark}*{box-sizing:border-box}body{font-family:system-ui,-apple-system,sans-serif;background:#0b1120;color:#e5e7eb;margin:0;padding:24px}main{max-width:1200px;margin:auto}a{color:#c4b5fd;text-decoration:none}.profile{display:flex;gap:18px;align-items:center;background:#172033;border:1px solid #27344d;border-radius:16px;padding:20px}.avatar{width:96px;height:96px;border-radius:50%;object-fit:cover;background:#27344d}.avatar-fallback{display:grid;place-items:center;font-size:2rem;font-weight:700}.muted{color:#94a3b8}.stats{display:flex;gap:18px;flex-wrap:wrap;margin-top:10px}.stats strong{display:block;font-size:1.25rem}.delta{margin-left:4px;font-size:.8em}.delta-up{color:#4ade80}.delta-down{color:#fb7185}.meta{background:#172033;border-radius:12px;padding:16px;margin:16px 0;overflow-wrap:anywhere}.trend{background:#172033;border-radius:12px;margin:16px 0;overflow:hidden}.trend summary{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px;cursor:pointer;font-size:1.35rem;font-weight:700;list-style:none;user-select:none}.trend summary::-webkit-details-marker{display:none}.trend summary:after{content:'展開';color:#94a3b8;font-size:.88rem;font-weight:500}.trend[open] summary{border-bottom:1px solid #334155}.trend[open] summary:after{content:'收合'}.trend-content{padding:16px}.chart-panel h3{margin-bottom:4px}.chart-panel+.chart-panel{border-top:1px solid #334155;margin-top:24px;padding-top:16px}.chart-wrap{position:relative;width:100%;height:360px}.chart-wrap canvas{display:block;width:100%;height:360px;touch-action:pan-y}.chart-legend{display:flex;gap:18px;flex-wrap:wrap;color:#cbd5e1}.legend-key:before{content:'';display:inline-block;width:12px;height:3px;margin-right:6px;vertical-align:middle;background:var(--legend-color)}.chart-tooltip{position:absolute;z-index:2;pointer-events:none;transform:translate(-50%,-100%);padding:7px 10px;border:1px solid #64748b;border-radius:8px;background:#020617;color:#f8fafc;white-space:nowrap;font-size:.88rem;box-shadow:0 6px 18px #0008}.chart-tooltip[hidden]{display:none}.tabs{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}.tabs button{border:1px solid #334155;background:#172033;color:#cbd5e1;border-radius:999px;padding:9px 14px;cursor:pointer}.tabs button.active{background:#7c3aed;border-color:#8b5cf6;color:white}.gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px}.media{background:#172033;border-radius:14px;overflow:hidden;border:1px solid #27344d}.media[hidden]{display:none}.media img,.media video{width:100%;aspect-ratio:1/1;display:block;object-fit:cover;background:#020617}.caption{padding:10px;font-size:.85rem;color:#94a3b8}@media(max-width:600px){body{padding:14px}.profile{align-items:flex-start}.avatar{width:72px;height:72px}.gallery{grid-template-columns:repeat(2,minmax(0,1fr))}.chart-wrap,.chart-wrap canvas{height:300px}}\n</style></head><body><main>
+:root{color-scheme:dark}*{box-sizing:border-box}body{font-family:system-ui,-apple-system,sans-serif;background:#0b1120;color:#e5e7eb;margin:0;padding:24px}main{max-width:1200px;margin:auto}a{color:#c4b5fd;text-decoration:none}.profile{display:flex;gap:18px;align-items:center;background:#172033;border:1px solid #27344d;border-radius:16px;padding:20px}.avatar{width:96px;height:96px;border-radius:50%;object-fit:cover;background:#27344d}.avatar-fallback{display:grid;place-items:center;font-size:2rem;font-weight:700}.muted{color:#94a3b8}.stats{display:flex;gap:18px;flex-wrap:wrap;margin-top:10px}.stats strong{display:block;font-size:1.25rem}.delta{margin-left:4px;font-size:.8em}.delta-up{color:#4ade80}.delta-down{color:#fb7185}.meta{background:#172033;border-radius:12px;padding:16px;margin:16px 0;overflow-wrap:anywhere}.quarantine-alert{display:flex;justify-content:space-between;align-items:center;gap:16px;background:#422006;border:1px solid #d97706;border-radius:12px;padding:14px 16px;margin:16px 0}.quarantine-alert a{font-weight:700;white-space:nowrap}.trend{background:#172033;border-radius:12px;margin:16px 0;overflow:hidden}.trend summary{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px;cursor:pointer;font-size:1.35rem;font-weight:700;list-style:none;user-select:none}.trend summary::-webkit-details-marker{display:none}.trend summary:after{content:'展開';color:#94a3b8;font-size:.88rem;font-weight:500}.trend[open] summary{border-bottom:1px solid #334155}.trend[open] summary:after{content:'收合'}.trend-content{padding:16px}.chart-panel h3{margin-bottom:4px}.chart-panel+.chart-panel{border-top:1px solid #334155;margin-top:24px;padding-top:16px}.chart-wrap{position:relative;width:100%;height:360px}.chart-wrap canvas{display:block;width:100%;height:360px;touch-action:pan-y}.chart-legend{display:flex;gap:18px;flex-wrap:wrap;color:#cbd5e1}.legend-key:before{content:'';display:inline-block;width:12px;height:3px;margin-right:6px;vertical-align:middle;background:var(--legend-color)}.chart-tooltip{position:absolute;z-index:2;pointer-events:none;transform:translate(-50%,-100%);padding:7px 10px;border:1px solid #64748b;border-radius:8px;background:#020617;color:#f8fafc;white-space:nowrap;font-size:.88rem;box-shadow:0 6px 18px #0008}.chart-tooltip[hidden]{display:none}.tabs{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}.tabs button{border:1px solid #334155;background:#172033;color:#cbd5e1;border-radius:999px;padding:9px 14px;cursor:pointer}.tabs button.active{background:#7c3aed;border-color:#8b5cf6;color:white}.gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px}.media{background:#172033;border-radius:14px;overflow:hidden;border:1px solid #27344d}.media[hidden]{display:none}.media img,.media video{width:100%;aspect-ratio:1/1;display:block;object-fit:cover;background:#020617}.caption{padding:10px;font-size:.85rem;color:#94a3b8}@media(max-width:600px){body{padding:14px}.profile{align-items:flex-start}.avatar{width:72px;height:72px}.gallery{grid-template-columns:repeat(2,minmax(0,1fr))}.quarantine-alert{align-items:flex-start;flex-direction:column}.chart-wrap,.chart-wrap canvas{height:300px}}\n</style></head><body><main>
 <style>.media-photo{display:block;cursor:zoom-in}.media-photo:focus-visible{outline:3px solid #a78bfa;outline-offset:-3px}body.lightbox-open{overflow:hidden}.lightbox{position:fixed;inset:0;z-index:1000;display:grid;place-items:center;padding:20px}.lightbox[hidden]{display:none}.lightbox-backdrop{position:absolute;inset:0;border:0;background:#020617e8;cursor:zoom-out}.lightbox-panel{position:relative;z-index:1;width:min(1200px,96vw);height:min(92vh,900px);display:grid;grid-template-rows:auto minmax(0,1fr) auto;background:#0b1120;border:1px solid #334155;border-radius:18px;overflow:hidden;box-shadow:0 24px 80px #000}.lightbox-header{display:flex;justify-content:flex-end;padding:8px 10px}.lightbox-close,.lightbox-nav,.lightbox-slideshow{border:1px solid #475569;background:#172033;color:#f8fafc;cursor:pointer}.lightbox-close{width:42px;height:42px;border-radius:50%;font-size:1.6rem;line-height:1}.lightbox-stage{position:relative;min-height:0;display:grid;place-items:center;padding:0 70px}.lightbox-image{max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain}.lightbox-nav{position:absolute;top:50%;transform:translateY(-50%);width:50px;height:64px;border-radius:14px;font-size:2.6rem;line-height:1}.lightbox-nav.previous{left:12px}.lightbox-nav.next{right:12px}.lightbox-nav:disabled,.lightbox-slideshow:disabled{opacity:.35;cursor:not-allowed}.lightbox-footer{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 18px;background:#111827}.lightbox-caption{min-width:0;color:#cbd5e1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.lightbox-controls{display:flex;align-items:center;gap:12px;flex:none}.lightbox-counter{color:#94a3b8;font-variant-numeric:tabular-nums}.lightbox-slideshow{border-radius:999px;padding:8px 14px}.lightbox button:focus-visible{outline:3px solid #a78bfa;outline-offset:2px}@media(max-width:600px){.lightbox{padding:0}.lightbox-panel{width:100vw;height:100vh;border:0;border-radius:0}.lightbox-stage{padding:0 48px}.lightbox-nav{width:40px;height:54px;font-size:2rem}.lightbox-nav.previous{left:4px}.lightbox-nav.next{right:4px}.lightbox-footer{align-items:flex-start;flex-direction:column}.lightbox-caption{white-space:normal}.lightbox-controls{width:100%;justify-content:space-between}}</style>
 <style>.media img{object-fit:contain}.lightbox{padding:0}.lightbox-panel{width:100vw;height:100vh;height:100dvh;border:0;border-radius:0}.lightbox-stage{overflow:hidden}.lightbox-image{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}</style>
 <p><a href="{{ url_for('index') }}">← 返回帳號列表</a></p>
@@ -147,6 +148,7 @@ DETAIL_PAGE = """<!doctype html>
 </div></div>
 </section>
 <section class="meta"><div>Instagram Profile ID：{{ account.instagram_profile_id or '尚未建立' }}</div><div>有效網址：{{ account.effective_url }}</div>{% if account.bio %}<p>{{ account.bio }}</p>{% endif %}<p><a href="{{ url_for('account_relationships', account_id=account.id) }}">Followers／Following／共同名單／異動紀錄</a></p></section>
+{% if account.quarantined_videos %}<section class="quarantine-alert"><span>已隱藏疑似來源污染影片，不影響原始檔案。</span><a href="{{ url_for('account_quarantine', account_id=account.id) }}">隔離影片 {{ account.quarantined_videos }} →</a></section>{% endif %}
 <details class="trend" id="social-trends">
 <summary><span>社群趨勢</span></summary>
 <div class="trend-content">
@@ -313,6 +315,22 @@ window.addEventListener('resize',()=>{if(socialTrends.open)redrawSocialTrends()}
 </main></body></html>"""
 
 
+QUARANTINE_PAGE = """<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>{{ account.label }} · 隔離影片審核</title>
+<style>:root{color-scheme:dark}*{box-sizing:border-box}body{font-family:system-ui,-apple-system,sans-serif;background:#0b1120;color:#e5e7eb;margin:0;padding:24px}main{max-width:1200px;margin:auto}a{color:#c4b5fd;text-decoration:none}.muted{color:#94a3b8}.notice{background:#422006;border:1px solid #d97706;border-radius:12px;padding:14px 16px}.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;margin-top:20px}.item{background:#172033;border:1px solid #334155;border-radius:14px;overflow:hidden}.item video{display:block;width:100%;aspect-ratio:9/16;max-height:520px;object-fit:contain;background:#020617}.details{padding:14px}.details p{margin:6px 0;overflow-wrap:anywhere}.actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}.actions button{border-radius:9px;padding:10px;border:1px solid #475569;color:white;cursor:pointer}.keep{background:#166534}.delete{background:#7f1d1d}.missing{display:grid;place-items:center;aspect-ratio:9/16;max-height:520px;background:#020617;color:#fca5a5}@media(max-width:600px){body{padding:14px}.grid{grid-template-columns:1fr}.actions{grid-template-columns:1fr}}</style>
+</head><body><main><p><a href="{{ url_for('account_detail', account_id=account.id) }}">← {{ account.label }}</a></p>
+<h1>隔離影片審核</h1><p class="notice">這些影片已從一般相簿隱藏，但檔案仍完整保留。「保留」會恢復顯示並加入人工信任；「永久刪除」才會移除檔案。</p>
+<section class="grid">{% for item in media %}<article class="item">
+{% if item.has_file %}<video controls preload="metadata" src="{{ url_for('media_asset',media_id=item.id) }}#t=0.1"></video>{% else %}<div class="missing">尚未下載或檔案不存在</div>{% endif %}
+<div class="details"><strong>媒體 #{{ item.id }}</strong>
+<p>{{ item.categories|join(' · ') }}{% if item.published_at %} · {{ item.published_at }}{% endif %}</p>
+<p>{{ item.width or '?' }} × {{ item.height or '?' }}{% if item.video_duration is not none %} · {{ '%.1f'|format(item.video_duration) }} 秒{% endif %}{% if item.file_size %} · {{ item.file_size }} bytes{% endif %}</p>
+<p class="muted">比對：{{ item.signal }}<br>同組帳號：{{ item.accounts|join('、') }}<br>隔離時間：{{ item.quarantined_at }}</p>
+{% if management_enabled %}<div class="actions"><form method="post" action="{{ url_for('keep_quarantined_media',media_id=item.id) }}"><button class="keep" type="submit">保留此影片</button></form><form method="post" action="{{ url_for('delete_quarantined_media_route',media_id=item.id) }}" onsubmit="return confirm('永久刪除此影片檔案？這個動作無法復原。')"><button class="delete" type="submit">永久刪除此影片</button></form></div>{% endif %}
+</div></article>{% else %}<p class="muted">目前沒有待審核的隔離影片。</p>{% endfor %}</section>
+</main></body></html>"""
+
+
 RELATIONSHIP_PAGE = """<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>{{ account.label }} 名單</title>
 <style>:root{color-scheme:dark}body{font-family:system-ui;background:#0b1120;color:#e5e7eb;margin:0;padding:24px}main{max-width:1100px;margin:auto}a{color:#c4b5fd;text-decoration:none}.tabs{display:flex;gap:8px;flex-wrap:wrap}.tabs a{padding:9px 14px;background:#172033;border-radius:999px}.tabs .active{background:#7c3aed;color:white}form{display:flex;gap:8px;margin:18px 0}input,select,button{padding:10px;border-radius:9px;border:1px solid #334155;background:#172033;color:#e5e7eb}table{width:100%;border-collapse:collapse;background:#172033;border-radius:12px;overflow:hidden}th,td{text-align:left;padding:10px;border-bottom:1px solid #334155}.avatar{width:42px;height:42px;object-fit:cover;border-radius:50%;background:#27344d;vertical-align:middle}.avatar-placeholder{display:inline-flex;align-items:center;justify-content:center;color:#94a3b8;font-size:20px}.muted{color:#94a3b8}.pager{display:flex;justify-content:space-between;margin-top:15px}@media(max-width:700px){body{padding:12px}table{font-size:.82rem}.optional{display:none}}</style></head><body><main>
@@ -457,6 +475,12 @@ def account_detail_data(
             "followers_baseline_at": row["followers_baseline_at"],
             "following_baseline_at": row["following_baseline_at"],
             "has_avatar": bool(snapshot.get("avatar_path") and Path(snapshot["avatar_path"]).is_file()),
+            "quarantined_videos": int(connection.execute(
+                """SELECT COUNT(*) FROM media m JOIN media_quarantine mq ON mq.media_id=m.id
+                   WHERE m.account_id=? AND m.kind='video' AND m.status='quarantined'
+                     AND mq.decision='pending'""",
+                (account_id,),
+            ).fetchone()[0]),
         }
         media_rows = connection.execute("""
             SELECT m.id,m.kind,m.published_at,m.local_path,GROUP_CONCAT(ms.category) AS categories
@@ -480,6 +504,59 @@ def account_detail_data(
                 counts[category]["all"] += 1
                 counts[category][item["kind"]] += 1
         return account, media, counts
+    finally:
+        connection.close()
+
+
+def account_quarantine_data(
+    db_path: Path, account_id: int,
+) -> tuple[dict[str, Any] | None, list[dict[str, Any]]]:
+    if not db_path.is_file():
+        return None, []
+    connection = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+    connection.row_factory = sqlite3.Row
+    try:
+        account_row = connection.execute(
+            "SELECT id,label FROM accounts WHERE id=? AND enabled=1", (account_id,)
+        ).fetchone()
+        if account_row is None:
+            return None, []
+        rows = connection.execute("""
+            SELECT m.id,m.kind,m.published_at,m.local_path,m.width,m.height,
+                   m.file_size,m.video_duration,mq.signal,mq.signal_value,mq.quarantined_at,
+                   GROUP_CONCAT(ms.category) AS categories
+            FROM media m JOIN media_quarantine mq ON mq.media_id=m.id
+            LEFT JOIN media_sources ms ON ms.media_id=m.id
+            WHERE m.account_id=? AND m.kind='video' AND m.status='quarantined'
+              AND mq.decision='pending'
+            GROUP BY m.id,m.kind,m.published_at,m.local_path,m.width,m.height,m.file_size,
+                     m.video_duration,mq.signal,mq.signal_value,mq.quarantined_at
+            ORDER BY mq.quarantined_at DESC,m.id DESC
+        """, (account_id,)).fetchall()
+        media = []
+        for row in rows:
+            shared_accounts = [item[0] for item in connection.execute("""
+                SELECT DISTINCT a.label
+                FROM media_quarantine mq
+                JOIN media m ON m.id=mq.media_id
+                JOIN accounts a ON a.id=m.account_id
+                WHERE mq.signal=? AND mq.signal_value=? AND mq.decision='pending'
+                ORDER BY a.label
+            """, (row["signal"], row["signal_value"])).fetchall()]
+            path = Path(row["local_path"]) if row["local_path"] else None
+            media.append({
+                "id": row["id"], "kind": row["kind"],
+                "published_at": row["published_at"], "width": row["width"],
+                "height": row["height"], "file_size": row["file_size"],
+                "video_duration": row["video_duration"], "signal": row["signal"],
+                "quarantined_at": row["quarantined_at"], "accounts": shared_accounts,
+                "categories": sorted({
+                    _collection_name(value) for value in (row["categories"] or "").split(",")
+                    if value
+                }),
+                "has_file": bool(path and path.is_file()),
+            })
+        return dict(account_row), media
     finally:
         connection.close()
 
@@ -696,7 +773,8 @@ def _media_path(db_path: Path, media_id: int) -> Path | None:
     connection = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
     try:
         row = connection.execute("""
-            SELECT local_path FROM media WHERE id=? AND status='downloaded' AND local_path IS NOT NULL
+            SELECT local_path FROM media WHERE id=?
+              AND status IN ('downloaded','quarantined') AND local_path IS NOT NULL
         """, (media_id,)).fetchone()
         path = Path(row[0]) if row else None
         return path if path and path.is_file() else None
@@ -811,6 +889,63 @@ def create_app(
         if account is None:
             abort(404)
         return render_template_string(DETAIL_PAGE, account=account, media=media, counts=counts)
+
+    @app.get("/account/<int:account_id>/quarantine")
+    def account_quarantine(account_id: int):
+        account, media = account_quarantine_data(db_path, account_id)
+        if account is None:
+            abort(404)
+        return render_template_string(
+            QUARANTINE_PAGE, account=account, media=media,
+            management_enabled=registry is not None,
+        )
+
+    @app.post("/media/<int:media_id>/quarantine/keep")
+    def keep_quarantined_media(media_id: int):
+        if registry is None:
+            abort(404)
+        _require_same_origin()
+        from .db import Database
+        writable = Database(db_path)
+        try:
+            row = writable.conn.execute(
+                "SELECT account_id FROM media WHERE id=? AND status='quarantined'", (media_id,)
+            ).fetchone()
+            if row is None:
+                abort(404)
+            account_id = int(row["account_id"])
+            try:
+                restored = restore_quarantined_media(writable, media_id)
+            except FileNotFoundError as exc:
+                return str(exc), 409
+            if not restored:
+                abort(404)
+        finally:
+            writable.close()
+        return redirect(url_for("account_quarantine", account_id=account_id), code=303)
+
+    @app.post("/media/<int:media_id>/quarantine/delete")
+    def delete_quarantined_media_route(media_id: int):
+        if registry is None:
+            abort(404)
+        _require_same_origin()
+        from .db import Database
+        writable = Database(db_path)
+        try:
+            row = writable.conn.execute(
+                "SELECT account_id FROM media WHERE id=? AND status='quarantined'", (media_id,)
+            ).fetchone()
+            if row is None:
+                abort(404)
+            account_id = int(row["account_id"])
+            result = delete_quarantined_media(writable, media_id)
+            if not result["deleted"]:
+                abort(404)
+            if result["error"]:
+                return f"資料已移除，但檔案刪除失敗：{result['error']}", 500
+        finally:
+            writable.close()
+        return redirect(url_for("account_quarantine", account_id=account_id), code=303)
 
     @app.get("/account/<int:account_id>/relationships")
     def account_relationships(account_id: int):

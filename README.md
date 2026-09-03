@@ -92,18 +92,24 @@ schedule:
 這會保留個人資料、公開／私人狀態、數量異動與 Telegram 巡檢，但不記錄來源站新回傳的媒體，
 也不下載資料庫內既有待處理媒體。來源恢復並完成不同帳號交叉驗證後，才改回 `true`。
 
-已下載或待處理的跨帳號相同媒體可先預覽；預設只列出相同 SHA-256 或完全相同媒體 URL
-出現在至少三個帳號的群組：
+已下載或待處理的跨帳號相同媒體可先預覽。預設只分析影片，使用相同 SHA-256、完全
+相同媒體 URL，以及既有 ffmpeg 三影格感知指紋，列出出現在至少三個帳號的群組：
 
 ```bash
 docker compose run --rm --no-deps monitor \
   python -m ig_monitor --config /srv/ig-monitor/config.yaml \
-  --quarantine-cross-account-media --dry-run --min-accounts 3
+  --quarantine-cross-account-media --dry-run --media-kind video --min-accounts 3
 ```
 
-確認列出的帳號與數量屬於本次污染後，再將 `--dry-run` 改成 `--apply`。可加上
-`--media-since 2026-09-01T00:00:00+00:00` 限定事故時間；套用後資料庫保留隔離紀錄，
-Dashboard 不再顯示，且未被其他正常紀錄引用的檔案會移除。
+可加上 `--media-since 2026-09-01T00:00:00+08:00` 限定事故時間。確認後將 `--dry-run`
+改成 `--apply` 只會把候選影片移到 Dashboard 的隔離審核區，原始檔案與路徑都會保留，
+一般帳號相簿不再顯示。進入帳號詳細頁的「隔離影片」後，可以逐筆：
+
+- 「保留此影片」：恢復原狀並加入人工信任，後續掃描不會再次隔離。
+- 「永久刪除此影片」：保留資料庫墓碑避免重新下載，並在沒有其他紀錄引用時刪除檔案。
+
+`--media-kind image` 或 `--media-kind all` 只供人工診斷；本次來源污染清理應維持預設
+`video`。缺少 ffmpeg 指紋的舊影片仍會執行 SHA-256 與 URL 精確比對，不會猜測相似內容。
 
 既有 systemd/Miniconda 主機請依照
 [Ubuntu Docker 遷移指南](docs/docker-migration.md) 停止舊排程、備份 SQLite，再啟動容器。

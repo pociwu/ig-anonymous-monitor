@@ -28,7 +28,7 @@ def build_parser() -> argparse.ArgumentParser:
     group.add_argument("--dedupe-media", action="store_true", help="Analyze and deduplicate downloaded media")
     group.add_argument(
         "--quarantine-cross-account-media", action="store_true",
-        help="Find exact media bytes incorrectly shared by multiple monitored accounts",
+        help="Find exact or perceptually matching media shared by multiple monitored accounts",
     )
     group.add_argument("--collector-status", action="store_true", help="Show non-secret collector state")
     group.add_argument("--collector-login", action="store_true", help="Login and begin the 72-hour observation")
@@ -36,8 +36,12 @@ def build_parser() -> argparse.ArgumentParser:
     group.add_argument("--collector-recovery", action="store_true", help="Begin a new observation after risk_hold")
     parser.add_argument("--collector-session", default="collector-secrets/session.json")
     parser.add_argument("--media-since", help="Only quarantine media downloaded at or after this ISO-8601 time")
+    parser.add_argument(
+        "--media-kind", choices=("video", "image", "all"), default="video",
+        help="Cross-account quarantine media kind (default: video)",
+    )
     parser.add_argument("--min-accounts", type=int, default=3,
-                        help="Minimum distinct accounts sharing exact media bytes (default: 3)")
+                        help="Minimum distinct accounts sharing matching media (default: 3)")
     apply_group = parser.add_mutually_exclusive_group()
     apply_group.add_argument("--dry-run", action="store_true", help="Preview media maintenance changes")
     apply_group.add_argument("--apply", action="store_true", help="Apply media maintenance changes")
@@ -64,8 +68,11 @@ async def _async_main(args: argparse.Namespace) -> int:
     media_utility = args.dedupe_media or args.quarantine_cross_account_media
     if (args.dry_run or args.apply) and not media_utility:
         raise ValueError("--dry-run/--apply can only be used with a media maintenance command")
-    if (args.media_since or args.min_accounts != 3) and not args.quarantine_cross_account_media:
-        raise ValueError("--media-since/--min-accounts require --quarantine-cross-account-media")
+    if (args.media_since or args.min_accounts != 3 or args.media_kind != "video") \
+            and not args.quarantine_cross_account_media:
+        raise ValueError(
+            "--media-since/--min-accounts/--media-kind require --quarantine-cross-account-media"
+        )
     collector_command = any((args.collector_status, args.collector_login, args.collector_approve, args.collector_recovery))
     utility_command = any((
         args.check, args.send_test, args.reset_account, media_utility, collector_command,
@@ -140,17 +147,25 @@ async def _async_main(args: argparse.Namespace) -> int:
                     raise ValueError("--media-since must be an ISO-8601 date/time") from exc
             report = quarantine_cross_account_media(
                 db, apply=args.apply, min_accounts=args.min_accounts, since=args.media_since,
+                kind=args.media_kind, dedup=config.dedup,
             )
             mode = "APPLY" if args.apply else "DRY-RUN"
             logging.info(
-                "%s cross-account quarantine: scanned=%d groups=%d rows=%d files=%d",
-                mode, report["scanned"], report["groups"], report["media_rows"], report["files"],
+                "%s cross-account quarantine: kind=%s scanned=%d groups=%d rows=%d files-preserved=%d",
+                mode, report["kind"], report["scanned"], report["groups"],
+                report["media_rows"], report["files_preserved"],
             )
             for sample in report["samples"]:
                 logging.info(
-                    "shared %s=%s accounts=%s rows=%d",
+                    "shared %s=%s kinds=%s accounts=%s rows=%d media-ids=%s",
                     sample["signal"], sample["value"][:80],
-                    ",".join(sample["accounts"]), sample["rows"],
+                    ",".join(sample["kinds"]), ",".join(sample["accounts"]),
+                    sample["rows"], ",".join(str(value) for value in sample["media_ids"]),
+                )
+            if report["fingerprint_missing"]:
+                logging.warning(
+                    "%d downloaded videos had no reusable ffmpeg fingerprint; exact SHA/URL checks still ran",
+                    report["fingerprint_missing"],
                 )
             for error in report["errors"]:
                 logging.warning("%s", error)

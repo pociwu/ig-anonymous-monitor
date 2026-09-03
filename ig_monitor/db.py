@@ -81,6 +81,14 @@ class Database:
           category TEXT NOT NULL,
           PRIMARY KEY(media_id,category)
         );
+        CREATE TABLE IF NOT EXISTS media_quarantine (
+          media_id INTEGER PRIMARY KEY REFERENCES media(id) ON DELETE CASCADE,
+          reason TEXT NOT NULL, signal TEXT NOT NULL, signal_value TEXT,
+          original_status TEXT NOT NULL, quarantined_at TEXT NOT NULL,
+          decision TEXT NOT NULL DEFAULT 'pending', reviewed_at TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_media_quarantine_review
+          ON media_quarantine(decision,quarantined_at DESC,media_id DESC);
         CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS runs (
           id INTEGER PRIMARY KEY, started_at TEXT NOT NULL, finished_at TEXT,
@@ -1354,7 +1362,9 @@ class Database:
 
     def media_path_referenced(self, local_path: str) -> bool:
         row = self.conn.execute(
-            "SELECT 1 FROM media WHERE local_path=? AND status='downloaded' LIMIT 1", (local_path,)
+            """SELECT 1 FROM media WHERE local_path=?
+               AND status IN ('downloaded','quarantined') LIMIT 1""",
+            (local_path,),
         ).fetchone()
         return row is not None
 

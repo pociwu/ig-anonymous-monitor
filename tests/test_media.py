@@ -7,11 +7,14 @@ from PIL import Image
 from ig_monitor.config import AccountConfig, DedupConfig
 from ig_monitor.db import Database
 from ig_monitor.dedup import (
+    MediaFingerprint,
+    delete_quarantined_media,
     deduplicate_existing_media,
     fingerprint_file,
     is_similar,
     quality_rank,
     quarantine_cross_account_media,
+    restore_quarantined_media,
 )
 from ig_monitor.media import save_avatar
 from ig_monitor.models import MediaCandidate, PrivacyState, ProfileSnapshot
@@ -47,7 +50,7 @@ class MediaTests(unittest.IsolatedAsyncioTestCase):
             finally:
                 db.close()
 
-    async def test_cross_account_quarantine_previews_then_removes_shared_exact_media(self):
+    async def test_cross_account_quarantine_only_hides_videos_and_preserves_files(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             db = Database(root / "state.sqlite3")
@@ -59,34 +62,112 @@ class MediaTests(unittest.IsolatedAsyncioTestCase):
                 db.sync_accounts(accounts)
                 rows = db.enabled_accounts()
                 snapshot = ProfileSnapshot("a", None, 1, 1, 1, "", PrivacyState.PUBLIC, "")
-                paths = []
+                video_paths = []
+                image_paths = []
                 for index, account in enumerate(rows):
-                    candidate = MediaCandidate(f"media-{index}", "posts", "image", f"https://cdn/{index}.jpg")
-                    db.record_success(account["id"], snapshot, [], [candidate])
-                    media_id = db.conn.execute(
-                        "SELECT id FROM media WHERE account_id=?", (account["id"],)
-                    ).fetchone()[0]
-                    path = root / f"media-{index}.jpg"
-                    path.write_bytes(b"shared" if index < 3 else b"unique")
-                    paths.append(path)
+                    candidates = [
+                        MediaCandidate(f"video-{index}", "posts", "video", f"https://cdn/{index}.mp4"),
+                        MediaCandidate(f"image-{index}", "posts", "image", f"https://cdn/{index}.jpg"),
+                    ]
+                    db.record_success(account["id"], snapshot, [], candidates)
+                    media = {
+                        row["kind"]: row for row in db.conn.execute(
+                            "SELECT * FROM media WHERE account_id=?", (account["id"],)
+                        )
+                    }
+                    path = root / f"video-{index}.mp4"
+                    path.write_bytes(b"shared-video" if index < 3 else b"unique-video")
+                    video_paths.append(path)
                     db.mark_media_downloaded(
-                        media_id, str(path), "shared-hash" if index < 3 else "unique-hash"
+                        media["video"]["id"], str(path),
+                        "shared-video-hash" if index < 3 else "unique-video-hash",
+                    )
+                    image_path = root / f"image-{index}.jpg"
+                    image_path.write_bytes(b"shared-image" if index < 3 else b"unique-image")
+                    image_paths.append(image_path)
+                    db.mark_media_downloaded(
+                        media["image"]["id"], str(image_path),
+                        "shared-image-hash" if index < 3 else "unique-image-hash",
                     )
 
                 preview = quarantine_cross_account_media(db, apply=False, min_accounts=3)
                 self.assertEqual(preview["groups"], 1)
                 self.assertEqual(preview["media_rows"], 3)
                 self.assertEqual(preview["files"], 3)
-                self.assertTrue(all(path.exists() for path in paths))
+                self.assertEqual(preview["kind"], "video")
+                self.assertTrue(all(path.exists() for path in video_paths + image_paths))
 
                 applied = quarantine_cross_account_media(db, apply=True, min_accounts=3)
                 self.assertEqual(applied["media_rows"], 3)
-                states = db.conn.execute("SELECT status,local_path FROM media ORDER BY id").fetchall()
-                self.assertEqual([row["status"] for row in states[:3]], ["quarantined"] * 3)
-                self.assertTrue(all(row["local_path"] is None for row in states[:3]))
-                self.assertEqual(states[3]["status"], "downloaded")
-                self.assertTrue(all(not path.exists() for path in paths[:3]))
-                self.assertTrue(paths[3].exists())
+                video_rows = db.conn.execute(
+                    "SELECT id,status,local_path FROM media WHERE kind='video' ORDER BY id"
+                ).fetchall()
+                image_rows = db.conn.execute(
+                    "SELECT status,local_path FROM media WHERE kind='image' ORDER BY id"
+                ).fetchall()
+                self.assertEqual([row["status"] for row in video_rows[:3]], ["quarantined"] * 3)
+                self.assertEqual([row["local_path"] for row in video_rows[:3]], [str(p) for p in video_paths[:3]])
+                self.assertEqual([row["status"] for row in image_rows], ["downloaded"] * 4)
+                self.assertTrue(all(path.exists() for path in video_paths + image_paths))
+
+                self.assertTrue(restore_quarantined_media(db, video_rows[0]["id"]))
+                restored = db.conn.execute(
+                    "SELECT status,local_path FROM media WHERE id=?", (video_rows[0]["id"],)
+                ).fetchone()
+                self.assertEqual((restored["status"], restored["local_path"]), ("downloaded", str(video_paths[0])))
+                self.assertTrue(video_paths[0].exists())
+
+                deleted = delete_quarantined_media(db, video_rows[1]["id"])
+                self.assertTrue(deleted["deleted"])
+                removed = db.conn.execute(
+                    "SELECT status,local_path FROM media WHERE id=?", (video_rows[1]["id"],)
+                ).fetchone()
+                self.assertEqual((removed["status"], removed["local_path"]), ("deleted", None))
+                self.assertFalse(video_paths[1].exists())
+            finally:
+                db.close()
+
+    async def test_cross_account_quarantine_detects_reencoded_video_fingerprints(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            db = Database(root / "state.sqlite3")
+            try:
+                db.sync_accounts([
+                    AccountConfig(f"https://insta-stories-viewer.com/f{index}/", True, f"f{index}")
+                    for index in range(3)
+                ])
+                snapshot = ProfileSnapshot("f", None, 1, 1, 1, "", PrivacyState.PUBLIC, "")
+                fingerprints = [
+                    MediaFingerprint(
+                        "video", 1080, 1920, 1000 + index, duration_seconds=12.0,
+                        bitrate=800_000 + index, frame_phashes=("0f0f", "3333", "aaaa"),
+                    )
+                    for index in range(3)
+                ]
+                for index, account in enumerate(db.enabled_accounts()):
+                    db.record_success(account["id"], snapshot, [], [MediaCandidate(
+                        f"reencoded-{index}", "posts", "video", f"https://cdn/{index}-different.mp4",
+                    )])
+                    media_id = db.conn.execute(
+                        "SELECT id FROM media WHERE account_id=?", (account["id"],)
+                    ).fetchone()[0]
+                    path = root / f"reencoded-{index}.mp4"
+                    path.write_bytes(f"different-{index}".encode())
+                    fingerprint = fingerprints[index]
+                    db.mark_media_downloaded(
+                        media_id, str(path), f"different-hash-{index}", fingerprint.to_json(),
+                        fingerprint.width, fingerprint.height, fingerprint.size_bytes,
+                        fingerprint.duration_seconds, fingerprint.bitrate,
+                    )
+
+                report = quarantine_cross_account_media(
+                    db, apply=False, min_accounts=3,
+                    dedup=DedupConfig(True, 4, 1.0, 1.0, 1.0),
+                )
+
+                self.assertEqual(report["groups"], 1)
+                self.assertEqual(report["media_rows"], 3)
+                self.assertEqual(report["samples"][0]["signal"], "perceptual")
             finally:
                 db.close()
 
