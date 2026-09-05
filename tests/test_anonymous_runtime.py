@@ -137,6 +137,47 @@ def test_exception_block_has_one_source_incident_not_account_failures(runtime):
     assert "暫停請求" in format_event(events[0]["kind"], events[0]["payload"])
 
 
+@pytest.mark.parametrize("stage", ["profile", "collection"])
+def test_source_diagnostic_reaches_logs_file_and_db_without_duplicate_incidents(runtime, caplog, stage):
+    config, db = runtime
+    diagnostic = ('AnonyIG 來源暫停 [ANONYIG-DIAG] '
+                  '{"source":"anonyig","endpoint":"stories","http_status":429,'
+                  '"block_type":"http_rate_limit","observed_at":"2026-09-05T08:01:46+00:00"}')
+    if stage == "profile":
+        result = ScrapeFailure(diagnostic, "AnonyIG 個人檔案", blocker="CAPTCHA/網站限流")
+    else:
+        result = result_for(blocked=True)
+        result.collections["stories"].error = diagnostic
+    assert run_monitor(config, db, {"alpha": result})[0] == 1
+    assert any(diagnostic in record.getMessage() for record in caplog.records)
+    assert diagnostic in db.source_cooldown("anonyig")["error"]
+    files = list(config.paths.diagnostics_dir.glob("alpha/*.txt"))
+    assert len(files) == 1
+    assert diagnostic in files[0].read_text(encoding="utf-8")
+    assert run_monitor(config, db, {})[0] == 0
+    assert FakeScraper.calls == []
+    incidents = [event for event in db.pending_events(100) if event["payload"].get("scope") == "source"]
+    assert len(incidents) == 1
+    assert diagnostic in format_event(incidents[0]["kind"], incidents[0]["payload"])
+    assert len(list(config.paths.diagnostics_dir.glob("alpha/*.txt"))) == 1
+
+
+def test_failed_diagnostic_write_cannot_discard_successful_collections(runtime, caplog):
+    config, db = runtime
+    with patch("ig_monitor.monitor.save_diagnostic", side_effect=OSError("PRIVATE_DIAGNOSTIC_PATH")):
+        status, downloads = run_monitor(config, db, {"alpha": result_for(blocked=True)})
+    assert status == 1
+    downloads.assert_not_awaited()
+    alpha = db.get_account("alpha")
+    assert alpha["snapshot_json"] is not None
+    assert alpha["fail_count"] == 0
+    assert db.collection_observations(alpha["id"])["posts"]["complete"]
+    assert db.conn.execute("SELECT COUNT(*) FROM media WHERE account_id=?", (alpha["id"],)).fetchone()[0] == 1
+    assert db.source_cooldown("anonyig")
+    assert len(FakeScraper.calls) == 1
+    assert "PRIVATE_DIAGNOSTIC_PATH" not in caplog.text
+
+
 def test_avatar_challenge_preserves_verified_collections_and_stops_source(runtime):
     config, db = runtime
     with patch.object(FakeScraper, "download", AsyncMock(

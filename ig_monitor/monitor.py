@@ -118,6 +118,12 @@ class Monitor:
                                         if value.state == TerminalState.BLOCKED), None)
                         if blocked:
                             self.db.record_source_block(source, blocked)
+                            LOG.error("%s：來源暫停，%s", account["label"], blocked)
+                            try:
+                                save_diagnostic(self.config.paths.diagnostics_dir, account["account_key"],
+                                                None, None, blocked, self.config.retention.diagnostic_runs)
+                            except OSError:
+                                LOG.warning("%s：診斷檔無法寫入；已保留日誌與來源冷卻紀錄", account["label"])
                         self._validate_source_identity(account, target_url, result)
                         old = self.db.snapshot_from_row(account)
                         if blocked:

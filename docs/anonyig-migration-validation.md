@@ -14,11 +14,12 @@
 
 ## 已完成驗證（2026-09-05）
 
-- 全套回歸 **177 項通過**，包含桌面／手機瀏覽器 QA 與驗證腳本跨平台快取路徑測試；這些測試不連線匿名來源或正式帳號。
+- 全套回歸 **201 項通過**，包含桌面／手機瀏覽器 QA、驗證腳本跨平台快取路徑及阻擋診斷測試；這些測試不連線匿名來源或正式帳號。
 - 瀏覽器 QA 驗證四類切換、輪播／燈箱、精選專輯、舊版媒體、手機寬度與 JavaScript 錯誤，使用隔離資料庫及人工圖片／影片。示範截圖位於 `.pytest-tmp/anonymous-dashboard/`，不是正式媒體庫。
 - 回歸包含相同媒體網址刷新、空基準後增量、作者證據保留、下載端驗證頁阻擋，以及跨工作程序的冷卻／恢復競態。
 - 另外完成兩次全新本機 headless 來源查詢及一張記憶體 JPEG 解碼驗證；詳見[來源實測報告](research/anonyig-adapter-validation.md)。未完成 Docker、影片實體下載或長期排程驗證。
 - 正式設定、資料庫、下載目錄及執行中的服務均未改動。本次未部署或啟動正式服務。
+- 操作人員後續在 Ubuntu 啟動隔離驗證，於個人檔案階段收到來源阻擋訊息。舊版 `20fb530` 未保存該次 HTTP 狀態碼，因此目前只能確認阻擋，尚未確認遠端原因；正式來源驗收仍未通過。
 
 ## 設定與資料續接
 
@@ -71,6 +72,41 @@ docker compose -f compose.validation.yaml stop dashboard
 
 驗收需涵蓋四類作者／識別碼、輪播保序、專輯內容、至少一次真實分頁、實體下載、乾淨工作階段及連續執行。
 先排除未通過項目、完成來源驗收，再取得操作人員另行核准，才能修改正式下載開關；不能自動轉用付費來源。
+
+## Ubuntu 阻擋診斷與重測
+
+新版 AnonyIG API／可見驗證頁阻擋訊息會附上 `[ANONYIG-DIAG]` 與固定 JSON 欄位：
+`source`、`endpoint`、`http_status`、`block_type`、`observed_at`（UTC）。
+只保留本次工作階段第一個阻擋事件；診斷 JSON 不輸出完整 URL、查詢參數、帳號、請求標頭、Cookie、權杖或回應內容。
+已知端點只記名稱；未識別的 API 路徑記為 `unknown_api`。
+
+| `block_type` | 直接觀測到的訊號 |
+| --- | --- |
+| `http_unauthorized` | HTTP 401 |
+| `http_forbidden` | HTTP 403 |
+| `http_unprocessable` | HTTP 422 |
+| `http_rate_limit` | HTTP 429 |
+| `visible_challenge` | 可見驗證元件；`endpoint=page`、`http_status=null` |
+| `source_cooldown` | 其他工作程序已建立冷卻；`endpoint=none`、`http_status=null` |
+| `unknown_block` | 已標記阻擋但缺少可識別訊號；不推測 HTTP 狀態 |
+
+分類只描述觀測證據，不把 HTTP 403 直接判定為 IP 封鎖，也不把 HTTP 422 直接判定為 CAPTCHA。
+這是有限欄位的操作診斷，不是開啟 HTTP debug／完整封包追蹤。
+個人檔案或分類阻擋會在終端機與既有診斷 `.txt` 顯示此摘要，並沿用原 DB 冷卻與一次性通知。
+既有冷卻／Telegram 事件不會因更新映像被重設或重送。
+
+在既有的隔離測試 checkout 內更新、重建，再執行一次（不需要刪除測試卷）：
+
+```bash
+git pull --ff-only
+docker compose -f compose.validation.yaml build
+docker compose -f compose.validation.yaml run --rm --no-deps validate
+```
+
+若輸出只有「冷卻中／下次允許」，表示尚未發出新的來源請求；等到列出的時間後再執行最後一行。
+`validate` 是單次工作，退出後不會自動在冷卻結束時重跑。
+請回傳含 `[ANONYIG-DIAG]` 的完整錯誤行；舊的通用錯誤無法事後補出 HTTP 狀態。
+本更新只增加診斷，不代表已解除 Ubuntu 的來源阻擋，不改動正式下載設定。
 
 ## 回歸測試
 

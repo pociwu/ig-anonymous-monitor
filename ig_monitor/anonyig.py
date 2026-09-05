@@ -24,6 +24,14 @@ from .utils import normalize_text, stable_key
 
 CATEGORIES = ("posts", "stories", "highlights", "reels")
 REELS_LIMITATION = "來源 Reels 是已載貼文影片篩選，獨立完整性未驗證"
+_API_ENDPOINTS = frozenset({
+    "userInfo", "postsV2", "posts", "stories", "highlights", "highlightStories",
+})
+_DIAGNOSTIC_ENDPOINTS = _API_ENDPOINTS | {"page", "none"}
+_HTTP_BLOCK_TYPES = {
+    401: "http_unauthorized", 403: "http_forbidden",
+    422: "http_unprocessable", 429: "http_rate_limit",
+}
 
 
 class SourceContractError(ValueError):
@@ -257,8 +265,28 @@ class _Session:
         self.responses: list[_Response] = []
         self.tasks: set[asyncio.Task] = set()
         self.blocked = False
+        self.block_diagnostic: dict[str, Any] | None = None
         self.guard = guard
         page.on("response", self._schedule)
+
+    def _record_block(self, endpoint: str, status: int | None, block_type: str) -> None:
+        self.blocked = True
+        if self.block_diagnostic is None:
+            # Record the first observable signal synchronously: response bodies
+            # may be delayed or unreadable. No URL or body enters the diagnostic.
+            self.block_diagnostic = {
+                "source": "anonyig",
+                "endpoint": endpoint if endpoint in _DIAGNOSTIC_ENDPOINTS else "unknown_api",
+                "http_status": status,
+                "block_type": block_type,
+                "observed_at": datetime.now(UTC).isoformat(timespec="seconds"),
+            }
+
+    def _blocked_error(self, message: str) -> SourceBlocked:
+        if self.block_diagnostic is None:
+            self._record_block("none", None, "unknown_block")
+        detail = json.dumps(self.block_diagnostic, ensure_ascii=False, separators=(",", ":"))
+        return SourceBlocked(f"{message} [ANONYIG-DIAG] {detail}")
 
     def _schedule(self, response):
         parsed = urlsplit(response.url)
@@ -266,8 +294,10 @@ class _Session:
         if (not (host == "anonyig.com" or host.endswith(".anonyig.com"))
                 or not parsed.path.startswith("/api/v1/instagram/")):
             return
-        if response.status in {401, 403, 422, 429}:
-            self.blocked = True
+        if response.status in _HTTP_BLOCK_TYPES:
+            endpoint = parsed.path.removeprefix("/api/v1/instagram/")
+            self._record_block(endpoint if endpoint in _API_ENDPOINTS else "unknown_api", response.status,
+                               _HTTP_BLOCK_TYPES[response.status])
         task = asyncio.create_task(self._capture(response))
         self.tasks.add(task)
         task.add_done_callback(self.tasks.discard)
@@ -281,17 +311,17 @@ class _Session:
 
     async def check_blocked(self):
         if self.guard is not None and self.guard():
-            self.blocked = True
-            raise SourceBlocked("AnonyIG 來源全域冷卻中；本輪不再發送請求")
+            self._record_block("none", None, "source_cooldown")
+            raise self._blocked_error("AnonyIG 來源全域冷卻中；本輪不再發送請求")
         if self.blocked:
-            raise SourceBlocked("AnonyIG 驗證／限流／拒絕存取；本輪停止所有來源請求")
+            raise self._blocked_error("AnonyIG 驗證／限流／拒絕存取；本輪停止所有來源請求")
         # Detect only visible challenge widgets/messages, not marketing FAQ text.
         selectors = ['iframe[src*="challenges.cloudflare.com"]', 'iframe[src*="recaptcha"][title*="challenge"]']
         for selector in selectors:
             locator = self.page.locator(selector)
             if await locator.count() and await locator.first.is_visible():
-                self.blocked = True
-                raise SourceBlocked("AnonyIG 出現人工驗證；未嘗試完成")
+                self._record_block("page", None, "visible_challenge")
+                raise self._blocked_error("AnonyIG 出現人工驗證；未嘗試完成")
 
     async def wait(self, endpoints: set[str], after=0) -> _Response:
         deadline = time.monotonic() + self.timeout
