@@ -89,3 +89,17 @@ Highlights 分批測試使用明確測試替身：第一輪 5 專輯／預算 4�
 6. 尚未完成影片二進位驗證、所有精選完整實測、完整 Docker 排程週期、正式帳號來源品質驗證。這些都是啟用前的真實缺口。
 
 本輪沒有繞過上述邊界、購買另一個來源或啟用正式媒體新增／下載。
+
+## 阻擋分類的補充來源核對（2026-09-05）
+
+操作人員的 Ubuntu 診斷回報 `userInfo` HTTP 422。本輪只重新讀取[同版本公開前端](https://anonyig.com/js/app.js?id=500c39611047f0043c00671cf568e665)，未查詢任何帳號。
+取得的 JavaScript 共 787,699 字元，UTF-8 文字 SHA-256：`251a74d292799a0b2fcdd463af561bf83bb80c332ac664cb490e182b84583685`。
+
+一般初始查詢的 HTTP 422／429 分支會呼叫 `showCaptcha`。
+`extractTurnstileChallenge` 只接受物件形式的 `response.data.challenge`，且要求 `type` 精確為 `turnstile`、`siteKey` 為非空字串；符合時顯示 Turnstile，否則走一般 CAPTCHA 分支。
+來源也使用自由文字 `error_message`，但它不作為本程式可直接輸出的安全白名單。
+
+因此新增分類會分開標記「前端 HTTP 流程推論」與「回應含已知挑戰結構」。前者不是 Ubuntu 該次回應原文的證據；後者也不輸出 `siteKey` 或其他回應值。
+目前仍未取得操作人員 Ubuntu 上的實際挑戰分類，亦未完成或繞過任何驗證。
+
+第二版診斷的挑戰物件、異常 JSON、延遲與競態測試均為離線合成輸入，用來驗證上述前端契約、固定白名單與逾時凍結；不是 Ubuntu HTTP 422 原始回應的 fixture。

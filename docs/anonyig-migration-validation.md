@@ -14,12 +14,12 @@
 
 ## 已完成驗證（2026-09-05）
 
-- 全套回歸 **201 項通過**，包含桌面／手機瀏覽器 QA、驗證腳本跨平台快取路徑及阻擋診斷測試；這些測試不連線匿名來源或正式帳號。
+- 全套回歸 **248 項通過**，包含桌面／手機瀏覽器 QA、驗證腳本跨平台快取路徑及阻擋診斷測試；這些測試不連線匿名來源或正式帳號。
 - 瀏覽器 QA 驗證四類切換、輪播／燈箱、精選專輯、舊版媒體、手機寬度與 JavaScript 錯誤，使用隔離資料庫及人工圖片／影片。示範截圖位於 `.pytest-tmp/anonymous-dashboard/`，不是正式媒體庫。
 - 回歸包含相同媒體網址刷新、空基準後增量、作者證據保留、下載端驗證頁阻擋，以及跨工作程序的冷卻／恢復競態。
 - 另外完成兩次全新本機 headless 來源查詢及一張記憶體 JPEG 解碼驗證；詳見[來源實測報告](research/anonyig-adapter-validation.md)。未完成 Docker、影片實體下載或長期排程驗證。
 - 正式設定、資料庫、下載目錄及執行中的服務均未改動。本次未部署或啟動正式服務。
-- 操作人員後續在 Ubuntu 啟動隔離驗證，於個人檔案階段收到來源阻擋訊息。舊版 `20fb530` 未保存該次 HTTP 狀態碼，因此目前只能確認阻擋，尚未確認遠端原因；正式來源驗收仍未通過。
+- 操作人員後續在 Ubuntu 啟動隔離驗證，於個人檔案階段收到來源阻擋訊息。第一版診斷已確認 `userInfo` HTTP 422；第二版將補充驗證類型與判讀依據，尚待 Ubuntu 重測。正式來源驗收仍未通過。
 
 ## 設定與資料續接
 
@@ -77,6 +77,7 @@ docker compose -f compose.validation.yaml stop dashboard
 
 新版 AnonyIG API／可見驗證頁阻擋訊息會附上 `[ANONYIG-DIAG]` 與固定 JSON 欄位：
 `source`、`endpoint`、`http_status`、`block_type`、`observed_at`（UTC）。
+第二版新增 `verification_required`、`error_type`、`classification_basis`、`body_state`。
 只保留本次工作階段第一個阻擋事件；診斷 JSON 不輸出完整 URL、查詢參數、帳號、請求標頭、Cookie、權杖或回應內容。
 已知端點只記名稱；未識別的 API 路徑記為 `unknown_api`。
 
@@ -90,10 +91,23 @@ docker compose -f compose.validation.yaml stop dashboard
 | `source_cooldown` | 其他工作程序已建立冷卻；`endpoint=none`、`http_status=null` |
 | `unknown_block` | 已標記阻擋但缺少可識別訊號；不推測 HTTP 狀態 |
 
-分類只描述觀測證據，不把 HTTP 403 直接判定為 IP 封鎖，也不把 HTTP 422 直接判定為 CAPTCHA。
+`block_type` 只描述觀測證據，不把 HTTP 403 直接判定為 IP 封鎖；HTTP 422 本身也沒有跨網站通用的 CAPTCHA 意義。
+新增分類使用本次已核對的 AnonyIG 前端契約，並明確標記證據來自何處，詳見[補充來源核對](research/anonyig-adapter-validation.md#阻擋分類的補充來源核對2026-09-05)。
 這是有限欄位的操作診斷，不是開啟 HTTP debug／完整封包追蹤。
 個人檔案或分類阻擋會在終端機與既有診斷 `.txt` 顯示此摘要，並沿用原 DB 冷卻與一次性通知。
 既有冷卻／Telegram 事件不會因更新映像被重設或重送。
+捲動、等待或檢查畫面期間若收到阻擋／其他工作程序建立冷卻，會在後續點擊或捲動前重新檢查，並保留原診斷。
+
+新增欄位的判讀方式：
+
+- `verification_required: true` 表示來源流程／可見元件要求人機驗證；`null` 表示尚無判定證據，不等於 `false`。
+- `error_type` 只會是 `turnstile_required`、`captcha_required`、`rate_limited`、`unauthorized`、`forbidden` 或 `unclassified`；不輸出來源的自由文字錯誤訊息。
+- `classification_basis: response_challenge` 表示回應含已確認的 Turnstile 挑戰結構；`frontend_http_status` 表示依已核對的 AnonyIG HTTP 處理流程判讀，不表示已讀到挑戰原文；另外有 `visible_widget` 與 `none`。
+- `body_state` 為 `json`、`unreadable`、`timeout` 或 `not_applicable`。只有首個已收到的 HTTP 阻擋回應會用於分類；最多等待 0.5 秒，不主動增加來源請求，逾時後不反覆等待或改寫已輸出的結果。
+
+422 的前端流程預設為 `captcha_required`；429 為 `rate_limited` 且會進入驗證流程。
+若該回應直接提供有效的 Turnstile 挑戰結構，才細分為 `turnstile_required`。
+只在記憶體讀取錯誤回應並產生固定分類，不將原文、`siteKey`、權杖、未知錯誤值放進日誌、診斷檔或回應歷史。
 
 在既有的隔離測試 checkout 內更新、重建，再執行一次（不需要刪除測試卷）：
 
@@ -106,7 +120,7 @@ docker compose -f compose.validation.yaml run --rm --no-deps validate
 若輸出只有「冷卻中／下次允許」，表示尚未發出新的來源請求；等到列出的時間後再執行最後一行。
 `validate` 是單次工作，退出後不會自動在冷卻結束時重跑。
 請回傳含 `[ANONYIG-DIAG]` 的完整錯誤行；舊的通用錯誤無法事後補出 HTTP 狀態。
-本更新只增加診斷，不代表已解除 Ubuntu 的來源阻擋，不改動正式下載設定。
+本更新補強診斷與收到阻擋後的停止檢查，不代表已解除 Ubuntu 的來源阻擋，不改動正式下載設定。
 
 ## 回歸測試
 

@@ -32,6 +32,13 @@ _HTTP_BLOCK_TYPES = {
     401: "http_unauthorized", 403: "http_forbidden",
     422: "http_unprocessable", 429: "http_rate_limit",
 }
+_BLOCK_BODY_TIMEOUT_SECONDS = 0.5
+# AnonyIG's observed frontend sends normal HTTP 422/429 lookup failures into
+# showCaptcha. This is site-specific inference, not proof of a response challenge.
+_HTTP_ERROR_TYPES = {
+    401: "unauthorized", 403: "forbidden",
+    422: "captcha_required", 429: "rate_limited",
+}
 
 
 class SourceContractError(ValueError):
@@ -266,10 +273,13 @@ class _Session:
         self.tasks: set[asyncio.Task] = set()
         self.blocked = False
         self.block_diagnostic: dict[str, Any] | None = None
+        self._block_body_task: asyncio.Task | None = None
+        self._block_body_deadline = 0.0
+        self._block_body_frozen = False
         self.guard = guard
         page.on("response", self._schedule)
 
-    def _record_block(self, endpoint: str, status: int | None, block_type: str) -> None:
+    def _record_block(self, endpoint: str, status: int | None, block_type: str) -> bool:
         self.blocked = True
         if self.block_diagnostic is None:
             # Record the first observable signal synchronously: response bodies
@@ -280,7 +290,50 @@ class _Session:
                 "http_status": status,
                 "block_type": block_type,
                 "observed_at": datetime.now(UTC).isoformat(timespec="seconds"),
+                "verification_required": True if status in {422, 429} or block_type == "visible_challenge" else None,
+                "error_type": _HTTP_ERROR_TYPES.get(status, "captcha_required" if block_type == "visible_challenge" else "unclassified"),
+                "classification_basis": ("frontend_http_status" if status in _HTTP_BLOCK_TYPES else
+                                         "visible_widget" if block_type == "visible_challenge" else "none"),
+                "body_state": "unreadable" if status in _HTTP_BLOCK_TYPES else "not_applicable",
             }
+            self._block_body_frozen = status not in _HTTP_BLOCK_TYPES
+            self._block_body_deadline = time.monotonic() + _BLOCK_BODY_TIMEOUT_SECONDS
+            return True
+        return False
+
+    def _classify_block_body(self, payload: Any, body_state: str) -> None:
+        if self._block_body_frozen or self.block_diagnostic is None:
+            return
+        self._block_body_frozen = True
+        detail = self.block_diagnostic
+        if time.monotonic() > self._block_body_deadline:
+            detail["body_state"] = "timeout"
+            return
+        detail["body_state"] = body_state
+        challenge = payload.get("challenge") if isinstance(payload, dict) else None
+        # Match extractTurnstileChallenge's exact observed body shape. Never copy
+        # siteKey, free-form error messages, or any unknown body values into state.
+        if (detail["http_status"] in {422, 429} and isinstance(challenge, dict)
+                and challenge.get("type") == "turnstile"
+                and isinstance(challenge.get("siteKey"), str) and challenge["siteKey"]):
+            detail.update(verification_required=True, error_type="turnstile_required",
+                          classification_basis="response_challenge")
+
+    async def _finish_block_diagnostic(self) -> None:
+        task = self._block_body_task
+        if self._block_body_frozen or task is None:
+            return
+        remaining = self._block_body_deadline - time.monotonic()
+        if not task.done() and remaining > 0:
+            # Wait only for an already received response, never replay a request.
+            # asyncio.wait preserves caller cancellation and does not cancel the
+            # capture task implicitly when a caller is cancelled.
+            await asyncio.wait({task}, timeout=remaining)
+        if not self._block_body_frozen:
+            self._block_body_frozen = True
+            self.block_diagnostic["body_state"] = "unreadable" if task.done() else "timeout"
+            if not task.done():
+                task.cancel()
 
     def _blocked_error(self, message: str) -> SourceBlocked:
         if self.block_diagnostic is None:
@@ -294,26 +347,41 @@ class _Session:
         if (not (host == "anonyig.com" or host.endswith(".anonyig.com"))
                 or not parsed.path.startswith("/api/v1/instagram/")):
             return
+        first_block = False
         if response.status in _HTTP_BLOCK_TYPES:
             endpoint = parsed.path.removeprefix("/api/v1/instagram/")
-            self._record_block(endpoint if endpoint in _API_ENDPOINTS else "unknown_api", response.status,
-                               _HTTP_BLOCK_TYPES[response.status])
-        task = asyncio.create_task(self._capture(response))
+            first_block = self._record_block(endpoint if endpoint in _API_ENDPOINTS else "unknown_api", response.status,
+                                             _HTTP_BLOCK_TYPES[response.status])
+        task = asyncio.create_task(self._capture(response, first_block=first_block))
+        if first_block:
+            self._block_body_task = task
         self.tasks.add(task)
         task.add_done_callback(self.tasks.discard)
 
-    async def _capture(self, response):
-        try:
-            payload = await response.json()
-        except Exception:
+    async def _capture(self, response, *, first_block=False):
+        blocked = response.status in _HTTP_BLOCK_TYPES
+        payload, body_state = None, "unreadable"
+        if not blocked or first_block:
+            try:
+                payload = await response.json()
+                body_state = "json"
+            except Exception:
+                pass
+        if first_block:
+            self._classify_block_body(payload, body_state)
+        endpoint = urlsplit(response.url).path.rsplit("/", 1)[-1]
+        if blocked:
             payload = None
-        self.responses.append(_Response(urlsplit(response.url).path.rsplit("/", 1)[-1], response.status, payload))
+            endpoint = endpoint if endpoint in _API_ENDPOINTS else "unknown_api"
+        self.responses.append(_Response(endpoint, response.status, payload))
 
     async def check_blocked(self):
         if self.guard is not None and self.guard():
             self._record_block("none", None, "source_cooldown")
+            await self._finish_block_diagnostic()
             raise self._blocked_error("AnonyIG 來源全域冷卻中；本輪不再發送請求")
         if self.blocked:
+            await self._finish_block_diagnostic()
             raise self._blocked_error("AnonyIG 驗證／限流／拒絕存取；本輪停止所有來源請求")
         # Detect only visible challenge widgets/messages, not marketing FAQ text.
         selectors = ['iframe[src*="challenges.cloudflare.com"]', 'iframe[src*="recaptcha"][title*="challenge"]']
@@ -321,7 +389,16 @@ class _Session:
             locator = self.page.locator(selector)
             if await locator.count() and await locator.first.is_visible():
                 self._record_block("page", None, "visible_challenge")
+                await self._finish_block_diagnostic()
                 raise self._blocked_error("AnonyIG 出現人工驗證；未嘗試完成")
+        # A response or another worker's cooldown can arrive while UI checks yield.
+        if self.guard is not None and self.guard():
+            self._record_block("none", None, "source_cooldown")
+            await self._finish_block_diagnostic()
+            raise self._blocked_error("AnonyIG 來源全域冷卻中；本輪不再發送請求")
+        if self.blocked:
+            await self._finish_block_diagnostic()
+            raise self._blocked_error("AnonyIG 驗證／限流／拒絕存取；本輪停止所有來源請求")
 
     async def wait(self, endpoints: set[str], after=0) -> _Response:
         deadline = time.monotonic() + self.timeout
@@ -348,7 +425,9 @@ class _Session:
         while time.monotonic() < deadline:
             await self.check_blocked()
             await self.page.locator("footer").scroll_into_view_if_needed()
+            await self.check_blocked()
             await asyncio.sleep(0.5)
+            await self.check_blocked()
             for response in self.responses[after:]:
                 if response.endpoint in {"postsV2", "posts"}:
                     if response.status != 200:
@@ -356,6 +435,7 @@ class _Session:
                     return response.payload
             # Lazy rendering appends a local batch before requesting another page.
             await self.page.mouse.wheel(0, -400)
+            await self.check_blocked()
             await self.page.mouse.wheel(0, 800)
         raise SourceContractError("Posts 分頁未產生新回應，保留續抓狀態")
 
