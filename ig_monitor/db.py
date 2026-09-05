@@ -6,8 +6,10 @@ from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterable, Iterator
+from urllib.parse import urlparse
 
-from .config import AccountConfig
+from .anonymous_store import AnonymousStore
+from .config import AccountConfig, account_username, normalize_account_url
 from .models import MediaCandidate, ProfileSnapshot
 
 
@@ -15,7 +17,7 @@ def utc_now() -> str:
     return datetime.now(UTC).isoformat(timespec="seconds")
 
 
-class Database:
+class Database(AnonymousStore):
     def __init__(self, path: Path):
         self.path = path
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -286,6 +288,7 @@ class Database:
         self._backfill_authenticated_work_runs()
         self._backfill_profile_history()
         self.conn.commit()
+        self._init_anonymous_schema()
 
     def _discard_duplicate_private_avatar_placeholders(self) -> None:
         marker = "member_avatar_placeholder_cleanup_v1"
@@ -418,8 +421,50 @@ class Database:
     def sync_accounts(self, accounts: Iterable[AccountConfig]) -> None:
         now = utc_now()
         with self.transaction() as con:
+            con.execute("BEGIN IMMEDIATE")
+            existing = [dict(row) for row in con.execute("SELECT * FROM accounts")]
+            claimed_ids: set[int] = set()
+            claimed_usernames: set[str] = set()
+            planned = []
+            for account in accounts:
+                username = account_username(account.url).casefold()
+                if username in claimed_usernames:
+                    raise ValueError(f"Duplicate configured account: {username}")
+                claimed_usernames.add(username)
+                matches = []
+                for row in existing:
+                    names = set()
+                    for url in (row["url"], row["effective_url"],
+                                f"https://www.instagram.com/{row['account_key']}/"):
+                        if url:
+                            try:
+                                names.add(account_username(url).casefold())
+                            except ValueError:
+                                # Unknown historical URLs are not identity evidence.
+                                pass
+                    if row["url"] == account.url or username in names:
+                        matches.append(row)
+                if len(matches) > 1:
+                    raise ValueError(f"Ambiguous existing account identity: {username}")
+                previous = matches[0] if matches else None
+                if previous and previous["id"] in claimed_ids:
+                    raise ValueError(f"Multiple configured URLs refer to account: {username}")
+                if previous:
+                    claimed_ids.add(previous["id"])
+                planned.append((account, previous))
             con.execute("UPDATE accounts SET enabled=0, updated_at=?", (now,))
-            for sort_order, account in enumerate(accounts):
+            for sort_order, (account, previous) in enumerate(planned):
+                if previous:
+                    effective_url = previous["effective_url"] or previous["url"]
+                    if urlparse(previous["url"]).netloc != urlparse(account.url).netloc:
+                        effective_url = self._username_url(account.url, account_username(effective_url))
+                    con.execute("""UPDATE accounts SET url=?,label=?,enabled=?,sort_order=?,
+                                   effective_url=?,relationship_tracking=?,post_tracking=?,
+                                   full_post_backfill_on_reopen=?,updated_at=? WHERE id=?""",
+                                (account.url, account.label, int(account.enabled), sort_order,
+                                 effective_url, int(account.relationship_tracking), int(account.post_tracking),
+                                 int(account.full_post_backfill_on_reopen), now, previous["id"]))
+                    continue
                 con.execute("""
                   INSERT INTO accounts(url,account_key,label,enabled,sort_order,effective_url,
                     relationship_tracking,post_tracking,full_post_backfill_on_reopen,
@@ -507,6 +552,7 @@ class Database:
                     "INSERT OR IGNORE INTO media_sources(media_id,category) VALUES(?,?)",
                     (media_row["id"], item.category),
                 )
+                self._record_media_membership(con, account_id, item, media_row["id"], now)
             con.execute("""
               UPDATE accounts SET snapshot_json=?,fail_count=0,failure_notified=0,failure_since=NULL,
                 last_error=NULL,last_success_at=?,updated_at=? WHERE id=?
@@ -531,7 +577,10 @@ class Database:
         now = utc_now()
         with self.transaction() as con:
             if username:
-                effective_url = f"https://insta-stories-viewer.com/{username}/"
+                row = con.execute("SELECT url FROM accounts WHERE id=?", (account_id,)).fetchone()
+                if row is None:
+                    raise ValueError(f"Unknown account ID: {account_id}")
+                effective_url = self._username_url(row["url"], username)
                 con.execute("""UPDATE accounts SET instagram_profile_id=?,effective_url=?,updated_at=? WHERE id=?""",
                             (profile_id, effective_url, now, account_id))
             else:
@@ -540,9 +589,17 @@ class Database:
 
     def set_effective_url(self, account_id: int, username: str) -> None:
         now = utc_now()
-        url = f"https://insta-stories-viewer.com/{username}/"
+        row = self.get_account_by_id(account_id)
+        if row is None:
+            raise ValueError(f"Unknown account ID: {account_id}")
+        url = self._username_url(row["url"], username)
         self.conn.execute("UPDATE accounts SET effective_url=?,updated_at=? WHERE id=?", (url, now, account_id))
         self.conn.commit()
+
+    @staticmethod
+    def _username_url(account_url: str, username: str) -> str:
+        parsed = urlparse(account_url)
+        return normalize_account_url(f"https://{parsed.netloc}/{username}/")
 
     def set_relationship_status(self, account_id: int, status: str) -> None:
         self.conn.execute(
@@ -1341,6 +1398,7 @@ class Database:
             con.execute("""INSERT OR IGNORE INTO media_sources(media_id,category)
                            SELECT ?,category FROM media_sources WHERE media_id=?""", (canonical_id, media_id))
             con.execute("DELETE FROM media_sources WHERE media_id=?", (media_id,))
+            con.execute("UPDATE media_memberships SET media_id=? WHERE media_id=?", (canonical_id, media_id))
             con.execute("""UPDATE media SET status='duplicate',duplicate_of_id=?,sha256=?,
                            fingerprint_json=COALESCE(?,fingerprint_json),local_path=NULL,last_error=NULL
                            WHERE id=?""", (canonical_id, sha256, fingerprint_json, media_id))
@@ -1355,6 +1413,7 @@ class Database:
             con.execute("""INSERT OR IGNORE INTO media_sources(media_id,category)
                            SELECT ?,category FROM media_sources WHERE media_id=?""", (new_id, old_id))
             con.execute("DELETE FROM media_sources WHERE media_id=?", (old_id,))
+            con.execute("UPDATE media_memberships SET media_id=? WHERE media_id=?", (new_id, old_id))
             con.execute("UPDATE media SET duplicate_of_id=? WHERE duplicate_of_id=?", (new_id, old_id))
             con.execute("""UPDATE media SET status='duplicate',duplicate_of_id=?,local_path=NULL,last_error=NULL
                            WHERE id=?""", (new_id, old_id))

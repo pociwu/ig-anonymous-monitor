@@ -1,0 +1,34 @@
+# Only for compose.validation.yaml; never copy over the production config.
+accounts:
+  - url: https://www.instagram.com/nasa/
+    label: NASA validation
+    relationship_tracking: false
+    post_tracking: false
+paths:
+  data_dir: /validation/data
+  download_root: /validation/media
+  diagnostics_dir: /validation/diagnostics
+browser:
+  anonymous_source: anonyig
+  headless: true
+  timeout_seconds: 45
+  retry_count: 0
+  max_pages_per_collection: 4
+  browsers_path: /ms-playwright
+schedule:
+  interval_minutes: 15
+  account_delay_min_seconds: 10
+  account_delay_max_seconds: 20
+  # Bounded sample downloads, only inside the isolated validation volume.
+  media_limit_per_account: 8
+  media_download_enabled: true
+telegram:
+  enabled: false
+heartbeat:
+  enabled: false
+apify:
+  enabled: false
+instagram_enrichment:
+  enabled: false
+instagram_posts:
+  enabled: false

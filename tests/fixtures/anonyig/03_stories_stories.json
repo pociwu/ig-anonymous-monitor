@@ -1,0 +1,356 @@
+{
+  "stage": "stories",
+  "path": "/api/v1/instagram/stories",
+  "status": 200,
+  "payload": {
+    "result": [
+      {
+        "image_versions2": {
+          "candidates": [
+            {
+              "height": 2144,
+              "url": "https://media.example.test/asset-836",
+              "width": 1206,
+              "url_wrapped": "https://media.example.test/asset-837",
+              "url_downloadable": "https://media.example.test/asset-838"
+            },
+            {
+              "height": 1920,
+              "url": "https://media.example.test/asset-839",
+              "width": 1080,
+              "url_wrapped": "https://media.example.test/asset-840",
+              "url_downloadable": "https://media.example.test/asset-841"
+            },
+            {
+              "height": 1280,
+              "url": "https://media.example.test/asset-842",
+              "width": 720,
+              "url_wrapped": "https://media.example.test/asset-843",
+              "url_downloadable": "https://media.example.test/asset-844"
+            },
+            {
+              "height": 1138,
+              "url": "https://media.example.test/asset-845",
+              "width": 640,
+              "url_wrapped": "https://media.example.test/asset-846",
+              "url_downloadable": "https://media.example.test/asset-847"
+            },
+            {
+              "height": 853,
+              "url": "https://media.example.test/asset-848",
+              "width": 480,
+              "url_wrapped": "https://media.example.test/asset-849",
+              "url_downloadable": "https://media.example.test/asset-850"
+            },
+            {
+              "height": 569,
+              "url": "https://media.example.test/asset-851",
+              "width": 320,
+              "url_wrapped": "https://media.example.test/asset-852",
+              "url_downloadable": "https://media.example.test/asset-853"
+            },
+            {
+              "height": 427,
+              "url": "https://media.example.test/asset-854",
+              "width": 240,
+              "url_wrapped": "https://media.example.test/asset-855",
+              "url_downloadable": "https://media.example.test/asset-856"
+            },
+            {
+              "height": 1080,
+              "url": "https://media.example.test/asset-857",
+              "width": 1080,
+              "url_wrapped": "https://media.example.test/asset-858",
+              "url_downloadable": "https://media.example.test/asset-859"
+            },
+            {
+              "height": 750,
+              "url": "https://media.example.test/asset-860",
+              "width": 750,
+              "url_wrapped": "https://media.example.test/asset-861",
+              "url_downloadable": "https://media.example.test/asset-862"
+            },
+            {
+              "height": 640,
+              "url": "https://media.example.test/asset-863",
+              "width": 640,
+              "url_wrapped": "https://media.example.test/asset-864",
+              "url_downloadable": "https://media.example.test/asset-865"
+            },
+            {
+              "height": 480,
+              "url": "https://media.example.test/asset-866",
+              "width": 480,
+              "url_wrapped": "https://media.example.test/asset-867",
+              "url_downloadable": "https://media.example.test/asset-868"
+            },
+            {
+              "height": 320,
+              "url": "https://media.example.test/asset-869",
+              "width": 320,
+              "url_wrapped": "https://media.example.test/asset-870",
+              "url_downloadable": "https://media.example.test/asset-871"
+            },
+            {
+              "height": 240,
+              "url": "https://media.example.test/asset-872",
+              "width": 240,
+              "url_wrapped": "https://media.example.test/asset-873",
+              "url_downloadable": "https://media.example.test/asset-874"
+            },
+            {
+              "height": 150,
+              "url": "https://media.example.test/asset-875",
+              "width": 150,
+              "url_wrapped": "https://media.example.test/asset-876",
+              "url_downloadable": "https://media.example.test/asset-877"
+            }
+          ]
+        },
+        "original_height": 1280,
+        "original_width": 720,
+        "pk": "100877",
+        "taken_at": 1788535424,
+        "video_versions": [
+          {
+            "height": 1280,
+            "type": 101,
+            "url": "https://media.example.test/asset-879",
+            "width": 720,
+            "url_wrapped": "https://media.example.test/asset-880",
+            "url_downloadable": "https://media.example.test/asset-880"
+          }
+        ],
+        "user": {
+          "id": "100000",
+          "is_private": false,
+          "profile_pic_url": "https://media.example.test/asset-881",
+          "username": "fixture_account",
+          "profile_pic_url_wrapped": "https://media.example.test/asset-882",
+          "profile_pic_url_downloadable": "https://media.example.test/asset-883"
+        }
+      },
+      {
+        "image_versions2": {
+          "candidates": [
+            {
+              "height": 1136,
+              "url": "https://media.example.test/asset-884",
+              "width": 640,
+              "url_wrapped": "https://media.example.test/asset-885",
+              "url_downloadable": "https://media.example.test/asset-886"
+            },
+            {
+              "height": 852,
+              "url": "https://media.example.test/asset-887",
+              "width": 480,
+              "url_wrapped": "https://media.example.test/asset-888",
+              "url_downloadable": "https://media.example.test/asset-889"
+            },
+            {
+              "height": 568,
+              "url": "https://media.example.test/asset-890",
+              "width": 320,
+              "url_wrapped": "https://media.example.test/asset-891",
+              "url_downloadable": "https://media.example.test/asset-892"
+            },
+            {
+              "height": 426,
+              "url": "https://media.example.test/asset-893",
+              "width": 240,
+              "url_wrapped": "https://media.example.test/asset-894",
+              "url_downloadable": "https://media.example.test/asset-895"
+            },
+            {
+              "height": 640,
+              "url": "https://media.example.test/asset-896",
+              "width": 640,
+              "url_wrapped": "https://media.example.test/asset-897",
+              "url_downloadable": "https://media.example.test/asset-898"
+            },
+            {
+              "height": 640,
+              "url": "https://media.example.test/asset-896",
+              "width": 640,
+              "url_wrapped": "https://media.example.test/asset-897",
+              "url_downloadable": "https://media.example.test/asset-898"
+            },
+            {
+              "height": 640,
+              "url": "https://media.example.test/asset-896",
+              "width": 640,
+              "url_wrapped": "https://media.example.test/asset-897",
+              "url_downloadable": "https://media.example.test/asset-898"
+            },
+            {
+              "height": 480,
+              "url": "https://media.example.test/asset-899",
+              "width": 480,
+              "url_wrapped": "https://media.example.test/asset-900",
+              "url_downloadable": "https://media.example.test/asset-901"
+            },
+            {
+              "height": 320,
+              "url": "https://media.example.test/asset-902",
+              "width": 320,
+              "url_wrapped": "https://media.example.test/asset-903",
+              "url_downloadable": "https://media.example.test/asset-904"
+            },
+            {
+              "height": 240,
+              "url": "https://media.example.test/asset-905",
+              "width": 240,
+              "url_wrapped": "https://media.example.test/asset-906",
+              "url_downloadable": "https://media.example.test/asset-907"
+            },
+            {
+              "height": 150,
+              "url": "https://media.example.test/asset-908",
+              "width": 150,
+              "url_wrapped": "https://media.example.test/asset-909",
+              "url_downloadable": "https://media.example.test/asset-910"
+            }
+          ]
+        },
+        "original_height": 1280,
+        "original_width": 720,
+        "pk": "100910",
+        "taken_at": 1788538148,
+        "video_versions": [
+          {
+            "height": 1280,
+            "type": 101,
+            "url": "https://media.example.test/asset-912",
+            "width": 720,
+            "url_wrapped": "https://media.example.test/asset-913",
+            "url_downloadable": "https://media.example.test/asset-913"
+          }
+        ],
+        "user": {
+          "id": "100000",
+          "is_private": false,
+          "profile_pic_url": "https://media.example.test/asset-881",
+          "username": "fixture_account",
+          "profile_pic_url_wrapped": "https://media.example.test/asset-882",
+          "profile_pic_url_downloadable": "https://media.example.test/asset-883"
+        }
+      },
+      {
+        "image_versions2": {
+          "candidates": [
+            {
+              "height": 2144,
+              "url": "https://media.example.test/asset-919",
+              "width": 1206,
+              "url_wrapped": "https://media.example.test/asset-920",
+              "url_downloadable": "https://media.example.test/asset-921"
+            },
+            {
+              "height": 1920,
+              "url": "https://media.example.test/asset-922",
+              "width": 1080,
+              "url_wrapped": "https://media.example.test/asset-923",
+              "url_downloadable": "https://media.example.test/asset-924"
+            },
+            {
+              "height": 1280,
+              "url": "https://media.example.test/asset-925",
+              "width": 720,
+              "url_wrapped": "https://media.example.test/asset-926",
+              "url_downloadable": "https://media.example.test/asset-927"
+            },
+            {
+              "height": 1138,
+              "url": "https://media.example.test/asset-928",
+              "width": 640,
+              "url_wrapped": "https://media.example.test/asset-929",
+              "url_downloadable": "https://media.example.test/asset-930"
+            },
+            {
+              "height": 853,
+              "url": "https://media.example.test/asset-931",
+              "width": 480,
+              "url_wrapped": "https://media.example.test/asset-932",
+              "url_downloadable": "https://media.example.test/asset-933"
+            },
+            {
+              "height": 569,
+              "url": "https://media.example.test/asset-934",
+              "width": 320,
+              "url_wrapped": "https://media.example.test/asset-935",
+              "url_downloadable": "https://media.example.test/asset-936"
+            },
+            {
+              "height": 427,
+              "url": "https://media.example.test/asset-937",
+              "width": 240,
+              "url_wrapped": "https://media.example.test/asset-938",
+              "url_downloadable": "https://media.example.test/asset-939"
+            },
+            {
+              "height": 1080,
+              "url": "https://media.example.test/asset-940",
+              "width": 1080,
+              "url_wrapped": "https://media.example.test/asset-941",
+              "url_downloadable": "https://media.example.test/asset-942"
+            },
+            {
+              "height": 750,
+              "url": "https://media.example.test/asset-943",
+              "width": 750,
+              "url_wrapped": "https://media.example.test/asset-944",
+              "url_downloadable": "https://media.example.test/asset-945"
+            },
+            {
+              "height": 640,
+              "url": "https://media.example.test/asset-946",
+              "width": 640,
+              "url_wrapped": "https://media.example.test/asset-947",
+              "url_downloadable": "https://media.example.test/asset-948"
+            },
+            {
+              "height": 480,
+              "url": "https://media.example.test/asset-949",
+              "width": 480,
+              "url_wrapped": "https://media.example.test/asset-950",
+              "url_downloadable": "https://media.example.test/asset-951"
+            },
+            {
+              "height": 320,
+              "url": "https://media.example.test/asset-952",
+              "width": 320,
+              "url_wrapped": "https://media.example.test/asset-953",
+              "url_downloadable": "https://media.example.test/asset-954"
+            },
+            {
+              "height": 240,
+              "url": "https://media.example.test/asset-955",
+              "width": 240,
+              "url_wrapped": "https://media.example.test/asset-956",
+              "url_downloadable": "https://media.example.test/asset-957"
+            },
+            {
+              "height": 150,
+              "url": "https://media.example.test/asset-958",
+              "width": 150,
+              "url_wrapped": "https://media.example.test/asset-959",
+              "url_downloadable": "https://media.example.test/asset-960"
+            }
+          ]
+        },
+        "original_height": 2144,
+        "original_width": 1206,
+        "pk": "100960",
+        "taken_at": 1788538796,
+        "user": {
+          "id": "100000",
+          "is_private": false,
+          "profile_pic_url": "https://media.example.test/asset-881",
+          "username": "fixture_account",
+          "profile_pic_url_wrapped": "https://media.example.test/asset-882",
+          "profile_pic_url_downloadable": "https://media.example.test/asset-883"
+        }
+      }
+    ]
+  }
+}

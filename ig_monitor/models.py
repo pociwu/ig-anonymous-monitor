@@ -16,6 +16,20 @@ class TerminalState(StrEnum):
     MEDIA = "media"
     EMPTY = "empty"
     UNKNOWN = "unknown"
+    PARTIAL = "partial"
+    FAILED = "failed"
+    BLOCKED = "blocked"
+
+
+COLLECTIONS = ("posts", "stories", "highlights", "reels")
+
+
+@dataclass(slots=True)
+class CollectionObservation:
+    state: TerminalState
+    error: str | None = None
+    cursor: str | None = None
+    complete: bool = False
 
 
 @dataclass(slots=True)
@@ -30,6 +44,14 @@ class MediaCandidate:
     width: int | None = None
     height: int | None = None
     source_rank: int = 0
+    source: str = "legacy"
+    source_media_id: str | None = None
+    parent_id: str | None = None
+    album_id: str | None = None
+    album_title: str | None = None
+    caption: str | None = None
+    owner_id: str | None = None
+    owner_username: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -67,6 +89,9 @@ class ScrapeResult:
     media: list[MediaCandidate] = field(default_factory=list)
     posts_state: TerminalState = TerminalState.UNKNOWN
     stories_state: TerminalState = TerminalState.UNKNOWN
+    collections: dict[str, CollectionObservation] = field(default_factory=dict)
+    source: str = "legacy"
+    profile_id: str | None = None
 
 
 @dataclass(slots=True)

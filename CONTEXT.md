@@ -5,6 +5,15 @@
 **Anonymous profile monitoring**: 不使用 Instagram 登入憑證，透過匿名檢視來源取得公開個人檔案狀態與可見媒體的既有巡檢流程。
 _Avoid_: 公開 API 巡檢
 
+**Unattended anonymous monitoring**: 不依賴操作人員在巡檢期間完成驗證碼、提供臨時存取憑證或手動恢復工作階段的 Anonymous profile monitoring。
+_Avoid_: 人工驗證後批次抓取、半自動巡檢
+
+**Anonymous source cooldown**: 匿名檢視來源因驗證或限流而暫停所有目標請求、等待下一次自動嘗試的狀態；與需要人工解除的 Collector risk hold 不同。
+_Avoid_: Collector risk hold、單一帳號失敗
+
+**Anonymous source validation**: 正式媒體收集啟用前，以隔離資料檢驗匿名來源的內容完整性、歸屬及無人值守能力的驗收；驗收通過與操作人員核准正式啟用是不同狀態。
+_Avoid_: 正式啟用、Collector canary
+
 **Authenticated Instagram enrichment**: 使用專用 Instagram 登入帳號與持久化工作階段，補充 Anonymous profile monitoring 無法提供的 Instagram 資料；本階段由 `instagrapi` 提供。
 _Avoid_: Threads API、官方 Instagram API
 
@@ -212,7 +221,19 @@ _Avoid_: 每次雙向抓取、部分共同名單
 
 **Duplicate record**: 已確認與 Canonical media 相同、但為避免日後重新下載而保留的不可見媒體紀錄；不會再次存檔、發送附件或出現在儀表板。
 
-**Media collection**: 帳號媒體依來源分成 Posts、Stories 與 Highlights；每個來源再分為照片與影片。相同 Canonical media 可保留多個來源關聯，但只保存與顯示一份內容。
+**Media collection**: 帳號可見媒體依內容分類分成 Posts、Stories、Highlights 與 Reels；每個分類再分為照片與影片。相同 Canonical media 共用一份內容，但保留各分類、貼文與精選專輯的歸屬及順序，不因媒體去重而遺失這些關聯。
+
+**Highlight album**: Instagram 帳號將限時動態整理成的具名精選集合；專輯與其中的個別照片或影片是不同層級的內容。
+_Avoid_: 單則精選媒體、一般貼文輪播
+
+**Anonymous collection baseline**: 匿名來源開始收集一個 Monitored Instagram account 時，依約定範圍取得的起始媒體集合；只涵蓋來源可取得的內容，不代表完整 Instagram 歷史。
+_Avoid_: Post baseline、完整歷史備份
+
+**Incomplete anonymous collection**: 某個帳號的一類媒體因請求失敗、驗證、限流或分頁未完成而未達約定收集範圍的觀測；不能作為該類內容為空或既有媒體已刪除的證據。
+_Avoid_: 空集合、已刪除媒體、完整收集
+
+**Ungrouped legacy media**: 已由舊匿名來源取得，但缺少可驗證父貼文或精選專輯歸屬的媒體；保留既有分類與檔案，不推測其輪播或專輯關係。
+_Avoid_: 待刪除媒體、Media quarantine review
 
 **Anonymous source contamination**: 匿名檢視來源把完全相同或感知內容相同的媒體錯配至至少三個不同 Monitored Instagram account 的事故狀態；只供跨帳號事故檢測，不改變一般 Duplicate media 的單帳號定義。
 _Avoid_: 一般重複媒體、Instagram 共同貼文

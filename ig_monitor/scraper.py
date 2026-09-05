@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import urljoin
 
-from .config import BrowserConfig
+from .config import BrowserConfig, account_username
 from .models import MediaCandidate, PrivacyState, ProfileSnapshot, ScrapeFailure, ScrapeResult, TerminalState
 from .utils import normalize_text, stable_key
 
@@ -20,6 +20,14 @@ LOG = logging.getLogger("ig_monitor.scraper")
 
 
 class ProfileScraper:
+    media_referer = "https://insta-stories-viewer.com/"
+
+    def __new__(cls, config: BrowserConfig):
+        if cls is ProfileScraper and config.anonymous_source == "anonyig":
+            from .anonyig import AnonyIGScraper
+            return object.__new__(AnonyIGScraper)
+        return object.__new__(cls)
+
     def __init__(self, config: BrowserConfig):
         self.config = config
         self._playwright = None
@@ -33,8 +41,6 @@ class ProfileScraper:
         self._browser = await self._playwright.chromium.launch(headless=self.config.headless)
         self._context = await self._browser.new_context(
             locale="en-US",
-            user_agent=("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
-                        "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"),
             viewport={"width": 1440, "height": 1000},
         )
         return self
@@ -50,18 +56,38 @@ class ProfileScraper:
     async def download(self, url: str, referer: str) -> tuple[bytes, str | None]:
         if not self._context:
             raise RuntimeError("scraper 尚未啟動")
+        guard = getattr(self, "source_guard", None)
+        if guard and guard():
+            raise ScrapeFailure("匿名來源全域冷卻中", "下載媒體", blocker="source_cooldown")
         response = await self._context.request.get(url, headers={"Referer": referer}, timeout=60_000)
+        if response.status == 429:
+            raise ScrapeFailure("媒體來源要求降低請求頻率", "下載媒體", blocker="rate_limit")
+        data = await response.body()
+        content_type = response.headers.get("content-type")
+        prefix = data[:200].lower()
+        if "text/html" in (content_type or "").lower() or b"<html" in prefix or b"<!doctype html" in prefix:
+            page = data[:131072].lower()
+            if any(marker in page for marker in (
+                b"verify you are human", b"cf-chl-", b"challenge-platform",
+                b"cf-turnstile", b"captcha verification",
+            )):
+                raise ScrapeFailure("媒體來源要求互動驗證", "下載媒體", blocker="captcha")
+            if b"too many requests" in page or b"rate limit exceeded" in page:
+                raise ScrapeFailure("媒體來源要求降低請求頻率", "下載媒體", blocker="rate_limit")
         if not response.ok:
-            raise RuntimeError(f"HTTP {response.status}: {url[:160]}")
-        return await response.body(), response.headers.get("content-type")
+            raise RuntimeError(f"媒體下載 HTTP {response.status}")
+        return data, content_type
 
     async def scrape(self, url: str) -> ScrapeResult:
+        url = f"https://insta-stories-viewer.com/{account_username(url)}/"
         last: ScrapeFailure | None = None
         for attempt in range(self.config.retry_count + 1):
             try:
                 return await self._scrape_once(url)
             except ScrapeFailure as exc:
                 last = exc
+                if exc.blocker:
+                    raise
                 if attempt < self.config.retry_count:
                     await asyncio.sleep(2)
         assert last is not None
@@ -69,6 +95,7 @@ class ProfileScraper:
 
     async def scrape_profile_only(self, url: str) -> ProfileSnapshot:
         """Read profile metadata without activating or expanding any media tab."""
+        url = f"https://insta-stories-viewer.com/{account_username(url)}/"
         if not self._context:
             raise RuntimeError("scraper is not started")
         page = await self._context.new_page()
@@ -427,23 +454,16 @@ class ProfileScraper:
 
     @staticmethod
     def _best_candidates(items: list[MediaCandidate]) -> list[MediaCandidate]:
-        high_quality_categories = {item.category for item in items if item.source_rank >= 100}
-        items = [item for item in items if item.category not in high_quality_categories or item.source_rank >= 100]
-        by_url: dict[str, MediaCandidate] = {}
+        # Quality selection applies to an observed member, never a whole category.
+        # A URL shared by two posts/albums/categories does not erase either membership.
+        best: dict[tuple, MediaCandidate] = {}
         for item in items:
-            url_key = item.url.rstrip("/ ")
-            current = by_url.get(url_key)
-            score = item.source_rank + (item.width or 0) + (item.height or 0) + (10 if item.logical_id else 0)
-            current_score = (current.source_rank + (current.width or 0) + (current.height or 0)
-                             + (10 if current.logical_id else 0)) if current else -1
-            if score > current_score:
-                by_url[url_key] = item
-        best: dict[tuple[str, str, int, str], MediaCandidate] = {}
-        for item in by_url.values():
-            identity = (item.category, item.logical_id or item.media_key, item.position if item.logical_id else 0, item.kind)
+            identity = (item.source, item.category, item.parent_id, item.album_id,
+                        item.source_media_id or item.logical_id or item.url.rstrip("/ "),
+                        item.position, item.kind)
             current = best.get(identity)
-            score = item.source_rank + (item.width or 0) + (item.height or 0)
-            current_score = current.source_rank + (current.width or 0) + (current.height or 0) if current else -1
+            score = (item.source_rank, (item.width or 0) * (item.height or 0))
+            current_score = (current.source_rank, (current.width or 0) * (current.height or 0)) if current else (-1, -1)
             if score > current_score:
                 best[identity] = item
         return list(best.values())

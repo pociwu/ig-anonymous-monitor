@@ -1,0 +1,25 @@
+{
+  "stage": "initial",
+  "path": "/api/v1/instagram/userInfo",
+  "status": 200,
+  "payload": {
+    "result": [
+      {
+        "user": {
+          "pk": "100000",
+          "is_private": false,
+          "username": "fixture_account",
+          "profile_pic_url": "https://media.example.test/asset-3",
+          "biography": "Fixture text",
+          "full_name": "Fixture text",
+          "follower_count": 104402496,
+          "id": "100000",
+          "following_count": 91,
+          "media_count": 4912,
+          "profile_pic_url_wrapped": "https://media.example.test/asset-8",
+          "profile_pic_url_downloadable": "https://media.example.test/asset-9"
+        }
+      }
+    ]
+  }
+}

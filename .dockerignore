@@ -6,6 +6,9 @@
 .env
 collector-secrets
 .pytest_cache
+.pytest-tmp
+.validation
+debug.log
 .testvenv
 __pycache__
 *.egg-info

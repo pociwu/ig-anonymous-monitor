@@ -1,5 +1,5 @@
 accounts:
-  - url: https://insta-stories-viewer.com/sin_9311/
+  - url: https://www.instagram.com/sin_9311/
     enabled: true
     label: sin_9311
     relationship_tracking: true
@@ -13,9 +13,14 @@ paths:
   diagnostics_dir: ./data/diagnostics
 
 browser:
+  # Account URLs identify Instagram accounts; this selects the anonymous source.
+  # AnonyIG remains subject to isolated validation before production media enablement.
+  anonymous_source: anonyig
   headless: true
   timeout_seconds: 45
   retry_count: 1
+  # Bounded work per category; unfinished collections retain resumable progress.
+  max_pages_per_collection: 4
   # Use a fixed location so systemd can find Playwright Chromium.
   browsers_path: ./data/ms-playwright
 

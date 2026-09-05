@@ -8,9 +8,9 @@ from pathlib import Path
 from typing import Protocol
 from urllib.parse import urlparse
 
-from .config import BrowserConfig, InstagramEnrichmentConfig
+from .config import BrowserConfig, InstagramEnrichmentConfig, canonical_account_url
 from .db import Database
-from .models import ProfileSnapshot
+from .models import ProfileSnapshot, ScrapeFailure
 from .relationships import WorkOutcome
 
 
@@ -31,15 +31,21 @@ def _is_instagram_avatar_url(url: str | None) -> bool:
 class PlaywrightMemberProfileSource:
     browser: BrowserConfig
     avatar_root: Path
+    db: Database | None = None
 
     async def fetch_profile(
         self, profile_id: str, username: str, avatar_url: str | None
     ) -> ProfileSnapshot:
         from .media import save_avatar
         from .scraper import ProfileScraper
-        profile_url = f"https://insta-stories-viewer.com/{username}/"
+        modern = getattr(self.browser, "anonymous_source", "legacy") == "anonyig"
+        profile_url = canonical_account_url(username) if modern else f"https://insta-stories-viewer.com/{username}/"
         async with ProfileScraper(self.browser) as scraper:
+            if self.db:
+                scraper.source_guard = lambda: bool(self.db.source_cooldown(self.browser.anonymous_source))
             snapshot = await scraper.scrape_profile_only(profile_url)
+            if modern and str(getattr(scraper, "last_profile_id", "")) != str(profile_id):
+                raise ScrapeFailure("成員來源 ID 與關係名單身分不一致", "驗證成員身分")
             if _is_instagram_avatar_url(avatar_url):
                 try:
                     digest, path = await save_avatar(
@@ -52,7 +58,8 @@ class PlaywrightMemberProfileSource:
                     pass
             if snapshot.avatar_path is None and snapshot.privacy.value == "public" and snapshot.avatar_url:
                 digest, path = await save_avatar(
-                    scraper, self.avatar_root, profile_id, snapshot.avatar_url, profile_url
+                    scraper, self.avatar_root, profile_id, snapshot.avatar_url,
+                    getattr(scraper, "media_referer", None) or profile_url,
                 )
                 snapshot.avatar_sha256 = digest
                 snapshot.avatar_path = path
@@ -73,6 +80,9 @@ class MemberEnrichmentWorker:
     def run_once(self, now: datetime) -> WorkOutcome:
         if not self.config.enabled:
             return WorkOutcome("disabled")
+        source_name = getattr(getattr(self.source, "browser", None), "anonymous_source", None)
+        if source_name and self.db.source_cooldown(source_name, now):
+            return WorkOutcome("source_cooldown")
         if self.db.member_enrichment_count_for_taipei_day(now) >= self.config.daily_member_enrichments:
             return WorkOutcome("daily_budget")
         next_at = self.db.get_meta("member_enrichment_next_at")
@@ -94,6 +104,8 @@ class MemberEnrichmentWorker:
             self._set_next_at(now)
             return WorkOutcome("completed", job["id"])
         except Exception as exc:
+            if isinstance(exc, ScrapeFailure) and exc.blocker and source_name:
+                self.db.record_source_block(source_name, str(exc), now)
             retry_at = now + timedelta(hours=self.config.member_retry_min_hours)
             self.db.retry_member_enrichment_job(
                 job["id"], retry_at.isoformat(timespec="seconds"), type(exc).__name__

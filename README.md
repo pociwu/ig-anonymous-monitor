@@ -1,5 +1,11 @@
 # IG Anonymous Monitor
 
+## 匿名來源遷移（尚未正式啟用媒體）
+
+新增 AnonyIG 適配器與 Posts／Stories／Highlights／Reels 頁面、輪播／精選專輯分組及舊資料續接。
+正式媒體新增與下載仍預設關閉。AnonyIG 的 Reels 獨立完整性、任意歷史游標恢復及 Docker 長期驗證仍有限制，不能將目前版本視為已完成來源驗收。
+請先閱讀[隔離驗證與遷移說明](docs/anonyig-migration-validation.md)，不要直接開啟正式下載。
+
 ## Docker Compose 部署
 
 正式部署改用 Docker Compose，支援 Ubuntu 22.04/24.04 的 amd64 與 arm64。映像包含

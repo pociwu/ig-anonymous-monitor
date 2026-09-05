@@ -9,6 +9,7 @@ from urllib.parse import urlparse
 
 from .config import DedupConfig
 from .db import Database
+from .models import ScrapeFailure
 from .dedup import MediaFingerprint, fingerprint_bytes, fingerprint_file, is_similar, quality_rank, row_fingerprint
 from .scraper import ProfileScraper
 from .utils import extension_for, safe_name, sha256_bytes
@@ -57,7 +58,11 @@ async def download_account_media(db: Database, scraper: ProfileScraper, account:
     items = db.pending_media(account["id"], limit)
     for item in items:
         try:
-            data, content_type = await scraper.download(item["url"], account["url"])
+            source = getattr(getattr(scraper, "config", None), "anonymous_source", None)
+            if source and db.source_cooldown(source):
+                raise ScrapeFailure("匿名來源全域冷卻中", "下載媒體", blocker="source_cooldown")
+            referer = getattr(scraper, "media_referer", None) or account.get("effective_url") or account["url"]
+            data, content_type = await scraper.download(item["url"], referer)
             _validate_payload(data, content_type, item["kind"])
             digest = sha256_bytes(data)
             duplicate = db.downloaded_by_hash(account["id"], digest)
@@ -117,6 +122,8 @@ async def download_account_media(db: Database, scraper: ProfileScraper, account:
             stats["videos" if item["kind"] == "video" else "photos"] += 1
             stats["attachments"].append({"kind": item["kind"], "path": str(path)})
         except Exception as exc:
+            if isinstance(exc, ScrapeFailure) and exc.blocker:
+                raise
             db.mark_media_failed(item["id"], str(exc))
             stats["failed"] += 1
     counts = db.media_counts(account["id"])

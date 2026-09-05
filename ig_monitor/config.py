@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlparse
@@ -39,6 +40,10 @@ class BrowserConfig:
     timeout_seconds: int
     retry_count: int
     browsers_path: Path
+    anonymous_source: str = "anonyig"
+    initial_posts: int = 12
+    initial_reels: int = 12
+    max_pages_per_collection: int = 4
 
 
 @dataclass(frozen=True, slots=True)
@@ -164,12 +169,25 @@ def _section(data: dict, name: str) -> dict:
 
 
 def normalize_account_url(value: object) -> str:
-    url = str(value)
+    url = str(value).strip()
     parsed = urlparse(url)
     parts = [p for p in parsed.path.split("/") if p]
-    if parsed.scheme != "https" or parsed.hostname != "insta-stories-viewer.com" or len(parts) != 1:
+    hosts = {"insta-stories-viewer.com", "instagram.com", "www.instagram.com"}
+    if (parsed.scheme != "https" or parsed.hostname not in hosts or len(parts) != 1
+            or parsed.username or parsed.password or parsed.netloc.lower() != parsed.hostname
+            or not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_.]{0,29}", parts[0])
+            or parts[0].casefold() in {"p", "reel", "reels", "stories", "explore", "accounts"}):
         raise ValueError(f"帳號網址格式錯誤：{url}")
-    return f"https://insta-stories-viewer.com/{parts[0]}/"
+    host = "insta-stories-viewer.com" if parsed.hostname == "insta-stories-viewer.com" else "www.instagram.com"
+    return f"https://{host}/{parts[0].lower()}/"
+
+
+def account_username(value: object) -> str:
+    return normalize_account_url(value).rstrip("/").rsplit("/", 1)[-1]
+
+
+def canonical_account_url(username: str) -> str:
+    return normalize_account_url(f"https://www.instagram.com/{username}/")
 
 
 def load_config(
@@ -196,9 +214,10 @@ def load_config(
         if not isinstance(item, dict) or not item.get("url"):
             raise ValueError("每個 accounts 項目都必須包含 url")
         url = normalize_account_url(item["url"])
-        if url in seen:
+        identity = account_username(url)
+        if identity in seen:
             raise ValueError(f"重複網址：{url}")
-        seen.add(url)
+        seen.add(identity)
         key = url.rstrip("/").rsplit("/", 1)[-1]
         accounts.append(AccountConfig(
             url,
@@ -228,7 +247,13 @@ def load_config(
         raise ValueError("browser.timeout_seconds 不得小於 10")
     browser_cfg = BrowserConfig(bool(browser.get("headless", True)), timeout,
                                 max(0, int(browser.get("retry_count", 1))),
-                                _resolve(base, str(browser.get("browsers_path", "./data/ms-playwright"))))
+                                _resolve(base, str(browser.get("browsers_path", "./data/ms-playwright"))),
+                                str(browser.get("anonymous_source", "anonyig")),
+                                12, 12, int(browser.get("max_pages_per_collection", 4)))
+    if browser_cfg.anonymous_source not in {"anonyig", "legacy"}:
+        raise ValueError("browser.anonymous_source 必須是 anonyig 或 legacy")
+    if not 1 <= browser_cfg.max_pages_per_collection <= 20:
+        raise ValueError("browser.max_pages_per_collection 必須介於 1 與 20")
 
     schedule = _section(raw, "schedule")
     delay_min = int(schedule.get("account_delay_min_seconds", 10))

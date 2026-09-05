@@ -1,0 +1,84 @@
+{
+  "stage": "highlights",
+  "path": "/api/v1/instagram/highlights",
+  "status": 200,
+  "payload": {
+    "result": [
+      {
+        "id": "100961",
+        "title": "Roman",
+        "cover_media": {
+          "cropped_image_version": {
+            "url": "https://media.example.test/asset-963",
+            "url_wrapped": "https://media.example.test/asset-964",
+            "url_downloadable": "https://media.example.test/asset-965"
+          }
+        },
+        "user": {
+          "username": "fixture_account",
+          "id": "100000"
+        }
+      },
+      {
+        "id": "100965",
+        "title": "Wallpapers",
+        "cover_media": {
+          "cropped_image_version": {
+            "url": "https://media.example.test/asset-967",
+            "url_wrapped": "https://media.example.test/asset-968",
+            "url_downloadable": "https://media.example.test/asset-969"
+          }
+        },
+        "user": {
+          "username": "fixture_account",
+          "id": "100000"
+        }
+      },
+      {
+        "id": "100969",
+        "title": "Artemis III",
+        "cover_media": {
+          "cropped_image_version": {
+            "url": "https://media.example.test/asset-971",
+            "url_wrapped": "https://media.example.test/asset-972",
+            "url_downloadable": "https://media.example.test/asset-973"
+          }
+        },
+        "user": {
+          "username": "fixture_account",
+          "id": "100000"
+        }
+      },
+      {
+        "id": "100973",
+        "title": "Artemis II",
+        "cover_media": {
+          "cropped_image_version": {
+            "url": "https://media.example.test/asset-975",
+            "url_wrapped": "https://media.example.test/asset-976",
+            "url_downloadable": "https://media.example.test/asset-977"
+          }
+        },
+        "user": {
+          "username": "fixture_account",
+          "id": "100000"
+        }
+      },
+      {
+        "id": "100977",
+        "title": "MoonTunes",
+        "cover_media": {
+          "cropped_image_version": {
+            "url": "https://media.example.test/asset-979",
+            "url_wrapped": "https://media.example.test/asset-980",
+            "url_downloadable": "https://media.example.test/asset-981"
+          }
+        },
+        "user": {
+          "username": "fixture_account",
+          "id": "100000"
+        }
+      }
+    ]
+  }
+}

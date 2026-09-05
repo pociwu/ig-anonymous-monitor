@@ -9,3 +9,5 @@ downloads/
 .conda/
 .testvenv/
 *.egg-info/
+.pytest-tmp/
+.validation/

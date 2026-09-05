@@ -1,0 +1,2725 @@
+{
+  "stage": "initial",
+  "path": "/api/v1/instagram/postsV2",
+  "status": 200,
+  "payload": {
+    "result": {
+      "count": 12,
+      "page_info": {
+        "has_next_page": true,
+        "end_cursor": "100009"
+      },
+      "edges": [
+        {
+          "node": {
+            "id": "100010",
+            "__typename": "GraphImage",
+            "is_video": false,
+            "dimensions": {
+              "height": 1129,
+              "width": 1280
+            },
+            "shortcode": "100011",
+            "display_url": "https://media.example.test/asset-13",
+            "display_resources": [
+              {
+                "src": "https://media.example.test/asset-13",
+                "config_width": 1280,
+                "config_height": 1129,
+                "url_wrapped": "https://media.example.test/asset-14",
+                "url_downloadable": "https://media.example.test/asset-15"
+              },
+              {
+                "src": "https://media.example.test/asset-16",
+                "config_width": 1080,
+                "config_height": 953,
+                "url_wrapped": "https://media.example.test/asset-17",
+                "url_downloadable": "https://media.example.test/asset-18"
+              },
+              {
+                "src": "https://media.example.test/asset-19",
+                "config_width": 720,
+                "config_height": 635,
+                "url_wrapped": "https://media.example.test/asset-20",
+                "url_downloadable": "https://media.example.test/asset-21"
+              },
+              {
+                "src": "https://media.example.test/asset-22",
+                "config_width": 640,
+                "config_height": 565,
+                "url_wrapped": "https://media.example.test/asset-23",
+                "url_downloadable": "https://media.example.test/asset-24"
+              },
+              {
+                "src": "https://media.example.test/asset-25",
+                "config_width": 480,
+                "config_height": 423,
+                "url_wrapped": "https://media.example.test/asset-26",
+                "url_downloadable": "https://media.example.test/asset-27"
+              },
+              {
+                "src": "https://media.example.test/asset-28",
+                "config_width": 320,
+                "config_height": 282,
+                "url_wrapped": "https://media.example.test/asset-29",
+                "url_downloadable": "https://media.example.test/asset-30"
+              },
+              {
+                "src": "https://media.example.test/asset-31",
+                "config_width": 240,
+                "config_height": 212,
+                "url_wrapped": "https://media.example.test/asset-32",
+                "url_downloadable": "https://media.example.test/asset-33"
+              },
+              {
+                "src": "https://media.example.test/asset-34",
+                "config_width": 1080,
+                "config_height": 1080,
+                "url_wrapped": "https://media.example.test/asset-35",
+                "url_downloadable": "https://media.example.test/asset-36"
+              },
+              {
+                "src": "https://media.example.test/asset-37",
+                "config_width": 750,
+                "config_height": 750,
+                "url_wrapped": "https://media.example.test/asset-38",
+                "url_downloadable": "https://media.example.test/asset-39"
+              },
+              {
+                "src": "https://media.example.test/asset-40",
+                "config_width": 640,
+                "config_height": 640,
+                "url_wrapped": "https://media.example.test/asset-41",
+                "url_downloadable": "https://media.example.test/asset-42"
+              },
+              {
+                "src": "https://media.example.test/asset-43",
+                "config_width": 480,
+                "config_height": 480,
+                "url_wrapped": "https://media.example.test/asset-44",
+                "url_downloadable": "https://media.example.test/asset-45"
+              },
+              {
+                "src": "https://media.example.test/asset-46",
+                "config_width": 320,
+                "config_height": 320,
+                "url_wrapped": "https://media.example.test/asset-47",
+                "url_downloadable": "https://media.example.test/asset-48"
+              },
+              {
+                "src": "https://media.example.test/asset-49",
+                "config_width": 240,
+                "config_height": 240,
+                "url_wrapped": "https://media.example.test/asset-50",
+                "url_downloadable": "https://media.example.test/asset-51"
+              },
+              {
+                "src": "https://media.example.test/asset-52",
+                "config_width": 150,
+                "config_height": 150,
+                "url_wrapped": "https://media.example.test/asset-53",
+                "url_downloadable": "https://media.example.test/asset-54"
+              }
+            ],
+            "edge_media_to_caption": {
+              "edges": [
+                {
+                  "node": {
+                    "text": "Fixture text"
+                  }
+                }
+              ]
+            },
+            "taken_at_timestamp": 1787148707,
+            "owner": {
+              "username": "fixture_account"
+            }
+          }
+        },
+        {
+          "node": {
+            "id": "100054",
+            "__typename": "GraphVideo",
+            "is_video": true,
+            "dimensions": {
+              "height": 952,
+              "width": 536
+            },
+            "shortcode": "100055",
+            "display_url": "https://media.example.test/asset-57",
+            "display_resources": [
+              {
+                "src": "https://media.example.test/asset-57",
+                "config_width": 720,
+                "config_height": 1279,
+                "url_wrapped": "https://media.example.test/asset-58",
+                "url_downloadable": "https://media.example.test/asset-59"
+              },
+              {
+                "src": "https://media.example.test/asset-60",
+                "config_width": 640,
+                "config_height": 1137,
+                "url_wrapped": "https://media.example.test/asset-61",
+                "url_downloadable": "https://media.example.test/asset-62"
+              },
+              {
+                "src": "https://media.example.test/asset-63",
+                "config_width": 480,
+                "config_height": 853,
+                "url_wrapped": "https://media.example.test/asset-64",
+                "url_downloadable": "https://media.example.test/asset-65"
+              },
+              {
+                "src": "https://media.example.test/asset-66",
+                "config_width": 320,
+                "config_height": 568,
+                "url_wrapped": "https://media.example.test/asset-67",
+                "url_downloadable": "https://media.example.test/asset-68"
+              },
+              {
+                "src": "https://media.example.test/asset-69",
+                "config_width": 240,
+                "config_height": 426,
+                "url_wrapped": "https://media.example.test/asset-70",
+                "url_downloadable": "https://media.example.test/asset-71"
+              },
+              {
+                "src": "https://media.example.test/asset-72",
+                "config_width": 720,
+                "config_height": 720,
+                "url_wrapped": "https://media.example.test/asset-73",
+                "url_downloadable": "https://media.example.test/asset-74"
+              },
+              {
+                "src": "https://media.example.test/asset-72",
+                "config_width": 720,
+                "config_height": 720,
+                "url_wrapped": "https://media.example.test/asset-73",
+                "url_downloadable": "https://media.example.test/asset-74"
+              },
+              {
+                "src": "https://media.example.test/asset-75",
+                "config_width": 640,
+                "config_height": 640,
+                "url_wrapped": "https://media.example.test/asset-76",
+                "url_downloadable": "https://media.example.test/asset-77"
+              },
+              {
+                "src": "https://media.example.test/asset-78",
+                "config_width": 480,
+                "config_height": 480,
+                "url_wrapped": "https://media.example.test/asset-79",
+                "url_downloadable": "https://media.example.test/asset-80"
+              },
+              {
+                "src": "https://media.example.test/asset-81",
+                "config_width": 320,
+                "config_height": 320,
+                "url_wrapped": "https://media.example.test/asset-82",
+                "url_downloadable": "https://media.example.test/asset-83"
+              },
+              {
+                "src": "https://media.example.test/asset-84",
+                "config_width": 240,
+                "config_height": 240,
+                "url_wrapped": "https://media.example.test/asset-85",
+                "url_downloadable": "https://media.example.test/asset-86"
+              },
+              {
+                "src": "https://media.example.test/asset-87",
+                "config_width": 150,
+                "config_height": 150,
+                "url_wrapped": "https://media.example.test/asset-88",
+                "url_downloadable": "https://media.example.test/asset-89"
+              }
+            ],
+            "video_url": "https://media.example.test/asset-90",
+            "edge_media_to_caption": {
+              "edges": [
+                {
+                  "node": {
+                    "text": "Fixture text"
+                  }
+                }
+              ]
+            },
+            "taken_at_timestamp": 1787081860,
+            "owner": {
+              "username": "other_owner"
+            },
+            "video_url_downloadable": "https://media.example.test/asset-91",
+            "video_url_wrapped": "https://media.example.test/asset-91"
+          }
+        },
+        {
+          "node": {
+            "id": "100091",
+            "__typename": "GraphImage",
+            "is_video": false,
+            "dimensions": {
+              "height": 810,
+              "width": 1440
+            },
+            "shortcode": "100092",
+            "display_url": "https://media.example.test/asset-94",
+            "display_resources": [
+              {
+                "src": "https://media.example.test/asset-94",
+                "config_width": 1440,
+                "config_height": 810,
+                "url_wrapped": "https://media.example.test/asset-95",
+                "url_downloadable": "https://media.example.test/asset-96"
+              },
+              {
+                "src": "https://media.example.test/asset-97",
+                "config_width": 1080,
+                "config_height": 608,
+                "url_wrapped": "https://media.example.test/asset-98",
+                "url_downloadable": "https://media.example.test/asset-99"
+              },
+              {
+                "src": "https://media.example.test/asset-100",
+                "config_width": 720,
+                "config_height": 405,
+                "url_wrapped": "https://media.example.test/asset-101",
+                "url_downloadable": "https://media.example.test/asset-102"
+              },
+              {
+                "src": "https://media.example.test/asset-103",
+                "config_width": 640,
+                "config_height": 360,
+                "url_wrapped": "https://media.example.test/asset-104",
+                "url_downloadable": "https://media.example.test/asset-105"
+              },
+              {
+                "src": "https://media.example.test/asset-106",
+                "config_width": 480,
+                "config_height": 270,
+                "url_wrapped": "https://media.example.test/asset-107",
+                "url_downloadable": "https://media.example.test/asset-108"
+              },
+              {
+                "src": "https://media.example.test/asset-109",
+                "config_width": 320,
+                "config_height": 180,
+                "url_wrapped": "https://media.example.test/asset-110",
+                "url_downloadable": "https://media.example.test/asset-111"
+              },
+              {
+                "src": "https://media.example.test/asset-112",
+                "config_width": 240,
+                "config_height": 135,
+                "url_wrapped": "https://media.example.test/asset-113",
+                "url_downloadable": "https://media.example.test/asset-114"
+              },
+              {
+                "src": "https://media.example.test/asset-115",
+                "config_width": 810,
+                "config_height": 810,
+                "url_wrapped": "https://media.example.test/asset-116",
+                "url_downloadable": "https://media.example.test/asset-117"
+              },
+              {
+                "src": "https://media.example.test/asset-118",
+                "config_width": 750,
+                "config_height": 750,
+                "url_wrapped": "https://media.example.test/asset-119",
+                "url_downloadable": "https://media.example.test/asset-120"
+              },
+              {
+                "src": "https://media.example.test/asset-121",
+                "config_width": 640,
+                "config_height": 640,
+                "url_wrapped": "https://media.example.test/asset-122",
+                "url_downloadable": "https://media.example.test/asset-123"
+              },
+              {
+                "src": "https://media.example.test/asset-124",
+                "config_width": 480,
+                "config_height": 480,
+                "url_wrapped": "https://media.example.test/asset-125",
+                "url_downloadable": "https://media.example.test/asset-126"
+              },
+              {
+                "src": "https://media.example.test/asset-127",
+                "config_width": 320,
+                "config_height": 320,
+                "url_wrapped": "https://media.example.test/asset-128",
+                "url_downloadable": "https://media.example.test/asset-129"
+              },
+              {
+                "src": "https://media.example.test/asset-130",
+                "config_width": 240,
+                "config_height": 240,
+                "url_wrapped": "https://media.example.test/asset-131",
+                "url_downloadable": "https://media.example.test/asset-132"
+              },
+              {
+                "src": "https://media.example.test/asset-133",
+                "config_width": 150,
+                "config_height": 150,
+                "url_wrapped": "https://media.example.test/asset-134",
+                "url_downloadable": "https://media.example.test/asset-135"
+              }
+            ],
+            "edge_media_to_caption": {
+              "edges": [
+                {
+                  "node": {
+                    "text": "Fixture text"
+                  }
+                }
+              ]
+            },
+            "taken_at_timestamp": 1786570138,
+            "owner": {
+              "username": "fixture_account"
+            }
+          }
+        },
+        {
+          "node": {
+            "id": "100135",
+            "__typename": "GraphSidecar",
+            "is_video": false,
+            "dimensions": {
+              "height": 810,
+              "width": 1440
+            },
+            "shortcode": "100136",
+            "display_url": "https://media.example.test/asset-138",
+            "display_resources": [
+              {
+                "src": "https://media.example.test/asset-138",
+                "config_width": 1440,
+                "config_height": 810,
+                "url_wrapped": "https://media.example.test/asset-139",
+                "url_downloadable": "https://media.example.test/asset-140"
+              },
+              {
+                "src": "https://media.example.test/asset-141",
+                "config_width": 1080,
+                "config_height": 608,
+                "url_wrapped": "https://media.example.test/asset-142",
+                "url_downloadable": "https://media.example.test/asset-143"
+              },
+              {
+                "src": "https://media.example.test/asset-144",
+                "config_width": 720,
+                "config_height": 405,
+                "url_wrapped": "https://media.example.test/asset-145",
+                "url_downloadable": "https://media.example.test/asset-146"
+              },
+              {
+                "src": "https://media.example.test/asset-147",
+                "config_width": 640,
+                "config_height": 360,
+                "url_wrapped": "https://media.example.test/asset-148",
+                "url_downloadable": "https://media.example.test/asset-149"
+              },
+              {
+                "src": "https://media.example.test/asset-150",
+                "config_width": 480,
+                "config_height": 270,
+                "url_wrapped": "https://media.example.test/asset-151",
+                "url_downloadable": "https://media.example.test/asset-152"
+              },
+              {
+                "src": "https://media.example.test/asset-153",
+                "config_width": 320,
+                "config_height": 180,
+                "url_wrapped": "https://media.example.test/asset-154",
+                "url_downloadable": "https://media.example.test/asset-155"
+              },
+              {
+                "src": "https://media.example.test/asset-156",
+                "config_width": 240,
+                "config_height": 135,
+                "url_wrapped": "https://media.example.test/asset-157",
+                "url_downloadable": "https://media.example.test/asset-158"
+              },
+              {
+                "src": "https://media.example.test/asset-159",
+                "config_width": 810,
+                "config_height": 810,
+                "url_wrapped": "https://media.example.test/asset-160",
+                "url_downloadable": "https://media.example.test/asset-161"
+              },
+              {
+                "src": "https://media.example.test/asset-162",
+                "config_width": 750,
+                "config_height": 750,
+                "url_wrapped": "https://media.example.test/asset-163",
+                "url_downloadable": "https://media.example.test/asset-164"
+              },
+              {
+                "src": "https://media.example.test/asset-165",
+                "config_width": 640,
+                "config_height": 640,
+                "url_wrapped": "https://media.example.test/asset-166",
+                "url_downloadable": "https://media.example.test/asset-167"
+              },
+              {
+                "src": "https://media.example.test/asset-168",
+                "config_width": 480,
+                "config_height": 480,
+                "url_wrapped": "https://media.example.test/asset-169",
+                "url_downloadable": "https://media.example.test/asset-170"
+              },
+              {
+                "src": "https://media.example.test/asset-171",
+                "config_width": 320,
+                "config_height": 320,
+                "url_wrapped": "https://media.example.test/asset-172",
+                "url_downloadable": "https://media.example.test/asset-173"
+              },
+              {
+                "src": "https://media.example.test/asset-174",
+                "config_width": 240,
+                "config_height": 240,
+                "url_wrapped": "https://media.example.test/asset-175",
+                "url_downloadable": "https://media.example.test/asset-176"
+              },
+              {
+                "src": "https://media.example.test/asset-177",
+                "config_width": 150,
+                "config_height": 150,
+                "url_wrapped": "https://media.example.test/asset-178",
+                "url_downloadable": "https://media.example.test/asset-179"
+              }
+            ],
+            "edge_media_to_caption": {
+              "edges": [
+                {
+                  "node": {
+                    "text": "Fixture text"
+                  }
+                }
+              ]
+            },
+            "edge_sidecar_to_children": {
+              "edges": [
+                {
+                  "node": {
+                    "id": "100179",
+                    "__typename": "GraphImage",
+                    "is_video": false,
+                    "dimensions": {
+                      "height": 810,
+                      "width": 1440
+                    },
+                    "display_url": "https://media.example.test/asset-138",
+                    "display_resources": [
+                      {
+                        "src": "https://media.example.test/asset-138",
+                        "config_width": 1440,
+                        "config_height": 810,
+                        "url_wrapped": "https://media.example.test/asset-139",
+                        "url_downloadable": "https://media.example.test/asset-140"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-141",
+                        "config_width": 1080,
+                        "config_height": 608,
+                        "url_wrapped": "https://media.example.test/asset-142",
+                        "url_downloadable": "https://media.example.test/asset-143"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-144",
+                        "config_width": 720,
+                        "config_height": 405,
+                        "url_wrapped": "https://media.example.test/asset-145",
+                        "url_downloadable": "https://media.example.test/asset-146"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-147",
+                        "config_width": 640,
+                        "config_height": 360,
+                        "url_wrapped": "https://media.example.test/asset-148",
+                        "url_downloadable": "https://media.example.test/asset-149"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-150",
+                        "config_width": 480,
+                        "config_height": 270,
+                        "url_wrapped": "https://media.example.test/asset-151",
+                        "url_downloadable": "https://media.example.test/asset-152"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-153",
+                        "config_width": 320,
+                        "config_height": 180,
+                        "url_wrapped": "https://media.example.test/asset-154",
+                        "url_downloadable": "https://media.example.test/asset-155"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-156",
+                        "config_width": 240,
+                        "config_height": 135,
+                        "url_wrapped": "https://media.example.test/asset-157",
+                        "url_downloadable": "https://media.example.test/asset-158"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-159",
+                        "config_width": 810,
+                        "config_height": 810,
+                        "url_wrapped": "https://media.example.test/asset-160",
+                        "url_downloadable": "https://media.example.test/asset-161"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-162",
+                        "config_width": 750,
+                        "config_height": 750,
+                        "url_wrapped": "https://media.example.test/asset-163",
+                        "url_downloadable": "https://media.example.test/asset-164"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-165",
+                        "config_width": 640,
+                        "config_height": 640,
+                        "url_wrapped": "https://media.example.test/asset-166",
+                        "url_downloadable": "https://media.example.test/asset-167"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-168",
+                        "config_width": 480,
+                        "config_height": 480,
+                        "url_wrapped": "https://media.example.test/asset-169",
+                        "url_downloadable": "https://media.example.test/asset-170"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-171",
+                        "config_width": 320,
+                        "config_height": 320,
+                        "url_wrapped": "https://media.example.test/asset-172",
+                        "url_downloadable": "https://media.example.test/asset-173"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-174",
+                        "config_width": 240,
+                        "config_height": 240,
+                        "url_wrapped": "https://media.example.test/asset-175",
+                        "url_downloadable": "https://media.example.test/asset-176"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-177",
+                        "config_width": 150,
+                        "config_height": 150,
+                        "url_wrapped": "https://media.example.test/asset-178",
+                        "url_downloadable": "https://media.example.test/asset-179"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "node": {
+                    "id": "100180",
+                    "__typename": "GraphImage",
+                    "is_video": false,
+                    "dimensions": {
+                      "height": 810,
+                      "width": 1440
+                    },
+                    "display_url": "https://media.example.test/asset-182",
+                    "display_resources": [
+                      {
+                        "src": "https://media.example.test/asset-182",
+                        "config_width": 1440,
+                        "config_height": 810,
+                        "url_wrapped": "https://media.example.test/asset-183",
+                        "url_downloadable": "https://media.example.test/asset-184"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-185",
+                        "config_width": 1080,
+                        "config_height": 608,
+                        "url_wrapped": "https://media.example.test/asset-186",
+                        "url_downloadable": "https://media.example.test/asset-187"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-188",
+                        "config_width": 720,
+                        "config_height": 405,
+                        "url_wrapped": "https://media.example.test/asset-189",
+                        "url_downloadable": "https://media.example.test/asset-190"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-191",
+                        "config_width": 640,
+                        "config_height": 360,
+                        "url_wrapped": "https://media.example.test/asset-192",
+                        "url_downloadable": "https://media.example.test/asset-193"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-194",
+                        "config_width": 480,
+                        "config_height": 270,
+                        "url_wrapped": "https://media.example.test/asset-195",
+                        "url_downloadable": "https://media.example.test/asset-196"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-197",
+                        "config_width": 320,
+                        "config_height": 180,
+                        "url_wrapped": "https://media.example.test/asset-198",
+                        "url_downloadable": "https://media.example.test/asset-199"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-200",
+                        "config_width": 240,
+                        "config_height": 135,
+                        "url_wrapped": "https://media.example.test/asset-201",
+                        "url_downloadable": "https://media.example.test/asset-202"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-203",
+                        "config_width": 810,
+                        "config_height": 810,
+                        "url_wrapped": "https://media.example.test/asset-204",
+                        "url_downloadable": "https://media.example.test/asset-205"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-206",
+                        "config_width": 750,
+                        "config_height": 750,
+                        "url_wrapped": "https://media.example.test/asset-207",
+                        "url_downloadable": "https://media.example.test/asset-208"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-209",
+                        "config_width": 640,
+                        "config_height": 640,
+                        "url_wrapped": "https://media.example.test/asset-210",
+                        "url_downloadable": "https://media.example.test/asset-211"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-212",
+                        "config_width": 480,
+                        "config_height": 480,
+                        "url_wrapped": "https://media.example.test/asset-213",
+                        "url_downloadable": "https://media.example.test/asset-214"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-215",
+                        "config_width": 320,
+                        "config_height": 320,
+                        "url_wrapped": "https://media.example.test/asset-216",
+                        "url_downloadable": "https://media.example.test/asset-217"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-218",
+                        "config_width": 240,
+                        "config_height": 240,
+                        "url_wrapped": "https://media.example.test/asset-219",
+                        "url_downloadable": "https://media.example.test/asset-220"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-221",
+                        "config_width": 150,
+                        "config_height": 150,
+                        "url_wrapped": "https://media.example.test/asset-222",
+                        "url_downloadable": "https://media.example.test/asset-223"
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            "taken_at_timestamp": 1788455776,
+            "owner": {
+              "username": "fixture_account"
+            }
+          }
+        },
+        {
+          "node": {
+            "id": "100223",
+            "__typename": "GraphSidecar",
+            "is_video": false,
+            "dimensions": {
+              "height": 959,
+              "width": 1439
+            },
+            "shortcode": "100224",
+            "display_url": "https://media.example.test/asset-226",
+            "display_resources": [
+              {
+                "src": "https://media.example.test/asset-226",
+                "config_width": 1439,
+                "config_height": 959,
+                "url_wrapped": "https://media.example.test/asset-227",
+                "url_downloadable": "https://media.example.test/asset-228"
+              },
+              {
+                "src": "https://media.example.test/asset-229",
+                "config_width": 1080,
+                "config_height": 720,
+                "url_wrapped": "https://media.example.test/asset-230",
+                "url_downloadable": "https://media.example.test/asset-231"
+              },
+              {
+                "src": "https://media.example.test/asset-232",
+                "config_width": 720,
+                "config_height": 480,
+                "url_wrapped": "https://media.example.test/asset-233",
+                "url_downloadable": "https://media.example.test/asset-234"
+              },
+              {
+                "src": "https://media.example.test/asset-235",
+                "config_width": 640,
+                "config_height": 427,
+                "url_wrapped": "https://media.example.test/asset-236",
+                "url_downloadable": "https://media.example.test/asset-237"
+              },
+              {
+                "src": "https://media.example.test/asset-238",
+                "config_width": 480,
+                "config_height": 320,
+                "url_wrapped": "https://media.example.test/asset-239",
+                "url_downloadable": "https://media.example.test/asset-240"
+              },
+              {
+                "src": "https://media.example.test/asset-241",
+                "config_width": 320,
+                "config_height": 213,
+                "url_wrapped": "https://media.example.test/asset-242",
+                "url_downloadable": "https://media.example.test/asset-243"
+              },
+              {
+                "src": "https://media.example.test/asset-244",
+                "config_width": 240,
+                "config_height": 160,
+                "url_wrapped": "https://media.example.test/asset-245",
+                "url_downloadable": "https://media.example.test/asset-246"
+              },
+              {
+                "src": "https://media.example.test/asset-247",
+                "config_width": 959,
+                "config_height": 959,
+                "url_wrapped": "https://media.example.test/asset-248",
+                "url_downloadable": "https://media.example.test/asset-249"
+              },
+              {
+                "src": "https://media.example.test/asset-250",
+                "config_width": 750,
+                "config_height": 750,
+                "url_wrapped": "https://media.example.test/asset-251",
+                "url_downloadable": "https://media.example.test/asset-252"
+              },
+              {
+                "src": "https://media.example.test/asset-253",
+                "config_width": 640,
+                "config_height": 640,
+                "url_wrapped": "https://media.example.test/asset-254",
+                "url_downloadable": "https://media.example.test/asset-255"
+              },
+              {
+                "src": "https://media.example.test/asset-256",
+                "config_width": 480,
+                "config_height": 480,
+                "url_wrapped": "https://media.example.test/asset-257",
+                "url_downloadable": "https://media.example.test/asset-258"
+              },
+              {
+                "src": "https://media.example.test/asset-259",
+                "config_width": 320,
+                "config_height": 320,
+                "url_wrapped": "https://media.example.test/asset-260",
+                "url_downloadable": "https://media.example.test/asset-261"
+              },
+              {
+                "src": "https://media.example.test/asset-262",
+                "config_width": 240,
+                "config_height": 240,
+                "url_wrapped": "https://media.example.test/asset-263",
+                "url_downloadable": "https://media.example.test/asset-264"
+              },
+              {
+                "src": "https://media.example.test/asset-265",
+                "config_width": 150,
+                "config_height": 150,
+                "url_wrapped": "https://media.example.test/asset-266",
+                "url_downloadable": "https://media.example.test/asset-267"
+              }
+            ],
+            "edge_media_to_caption": {
+              "edges": [
+                {
+                  "node": {
+                    "text": "Fixture text"
+                  }
+                }
+              ]
+            },
+            "edge_sidecar_to_children": {
+              "edges": [
+                {
+                  "node": {
+                    "id": "100267",
+                    "__typename": "GraphImage",
+                    "is_video": false,
+                    "dimensions": {
+                      "height": 959,
+                      "width": 1439
+                    },
+                    "display_url": "https://media.example.test/asset-226",
+                    "display_resources": [
+                      {
+                        "src": "https://media.example.test/asset-226",
+                        "config_width": 1439,
+                        "config_height": 959,
+                        "url_wrapped": "https://media.example.test/asset-227",
+                        "url_downloadable": "https://media.example.test/asset-228"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-229",
+                        "config_width": 1080,
+                        "config_height": 720,
+                        "url_wrapped": "https://media.example.test/asset-230",
+                        "url_downloadable": "https://media.example.test/asset-231"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-232",
+                        "config_width": 720,
+                        "config_height": 480,
+                        "url_wrapped": "https://media.example.test/asset-233",
+                        "url_downloadable": "https://media.example.test/asset-234"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-235",
+                        "config_width": 640,
+                        "config_height": 427,
+                        "url_wrapped": "https://media.example.test/asset-236",
+                        "url_downloadable": "https://media.example.test/asset-237"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-238",
+                        "config_width": 480,
+                        "config_height": 320,
+                        "url_wrapped": "https://media.example.test/asset-239",
+                        "url_downloadable": "https://media.example.test/asset-240"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-241",
+                        "config_width": 320,
+                        "config_height": 213,
+                        "url_wrapped": "https://media.example.test/asset-242",
+                        "url_downloadable": "https://media.example.test/asset-243"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-244",
+                        "config_width": 240,
+                        "config_height": 160,
+                        "url_wrapped": "https://media.example.test/asset-245",
+                        "url_downloadable": "https://media.example.test/asset-246"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-247",
+                        "config_width": 959,
+                        "config_height": 959,
+                        "url_wrapped": "https://media.example.test/asset-248",
+                        "url_downloadable": "https://media.example.test/asset-249"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-250",
+                        "config_width": 750,
+                        "config_height": 750,
+                        "url_wrapped": "https://media.example.test/asset-251",
+                        "url_downloadable": "https://media.example.test/asset-252"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-253",
+                        "config_width": 640,
+                        "config_height": 640,
+                        "url_wrapped": "https://media.example.test/asset-254",
+                        "url_downloadable": "https://media.example.test/asset-255"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-256",
+                        "config_width": 480,
+                        "config_height": 480,
+                        "url_wrapped": "https://media.example.test/asset-257",
+                        "url_downloadable": "https://media.example.test/asset-258"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-259",
+                        "config_width": 320,
+                        "config_height": 320,
+                        "url_wrapped": "https://media.example.test/asset-260",
+                        "url_downloadable": "https://media.example.test/asset-261"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-262",
+                        "config_width": 240,
+                        "config_height": 240,
+                        "url_wrapped": "https://media.example.test/asset-263",
+                        "url_downloadable": "https://media.example.test/asset-264"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-265",
+                        "config_width": 150,
+                        "config_height": 150,
+                        "url_wrapped": "https://media.example.test/asset-266",
+                        "url_downloadable": "https://media.example.test/asset-267"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "node": {
+                    "id": "100268",
+                    "__typename": "GraphImage",
+                    "is_video": false,
+                    "dimensions": {
+                      "height": 960,
+                      "width": 1440
+                    },
+                    "display_url": "https://media.example.test/asset-270",
+                    "display_resources": [
+                      {
+                        "src": "https://media.example.test/asset-270",
+                        "config_width": 1440,
+                        "config_height": 960,
+                        "url_wrapped": "https://media.example.test/asset-271",
+                        "url_downloadable": "https://media.example.test/asset-272"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-273",
+                        "config_width": 1080,
+                        "config_height": 720,
+                        "url_wrapped": "https://media.example.test/asset-274",
+                        "url_downloadable": "https://media.example.test/asset-275"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-276",
+                        "config_width": 720,
+                        "config_height": 480,
+                        "url_wrapped": "https://media.example.test/asset-277",
+                        "url_downloadable": "https://media.example.test/asset-278"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-279",
+                        "config_width": 640,
+                        "config_height": 427,
+                        "url_wrapped": "https://media.example.test/asset-280",
+                        "url_downloadable": "https://media.example.test/asset-281"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-282",
+                        "config_width": 480,
+                        "config_height": 320,
+                        "url_wrapped": "https://media.example.test/asset-283",
+                        "url_downloadable": "https://media.example.test/asset-284"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-285",
+                        "config_width": 320,
+                        "config_height": 213,
+                        "url_wrapped": "https://media.example.test/asset-286",
+                        "url_downloadable": "https://media.example.test/asset-287"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-288",
+                        "config_width": 240,
+                        "config_height": 160,
+                        "url_wrapped": "https://media.example.test/asset-289",
+                        "url_downloadable": "https://media.example.test/asset-290"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-291",
+                        "config_width": 960,
+                        "config_height": 960,
+                        "url_wrapped": "https://media.example.test/asset-292",
+                        "url_downloadable": "https://media.example.test/asset-293"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-294",
+                        "config_width": 750,
+                        "config_height": 750,
+                        "url_wrapped": "https://media.example.test/asset-295",
+                        "url_downloadable": "https://media.example.test/asset-296"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-297",
+                        "config_width": 640,
+                        "config_height": 640,
+                        "url_wrapped": "https://media.example.test/asset-298",
+                        "url_downloadable": "https://media.example.test/asset-299"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-300",
+                        "config_width": 480,
+                        "config_height": 480,
+                        "url_wrapped": "https://media.example.test/asset-301",
+                        "url_downloadable": "https://media.example.test/asset-302"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-303",
+                        "config_width": 320,
+                        "config_height": 320,
+                        "url_wrapped": "https://media.example.test/asset-304",
+                        "url_downloadable": "https://media.example.test/asset-305"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-306",
+                        "config_width": 240,
+                        "config_height": 240,
+                        "url_wrapped": "https://media.example.test/asset-307",
+                        "url_downloadable": "https://media.example.test/asset-308"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-309",
+                        "config_width": 150,
+                        "config_height": 150,
+                        "url_wrapped": "https://media.example.test/asset-310",
+                        "url_downloadable": "https://media.example.test/asset-311"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "node": {
+                    "id": "100311",
+                    "__typename": "GraphImage",
+                    "is_video": false,
+                    "dimensions": {
+                      "height": 959,
+                      "width": 1439
+                    },
+                    "display_url": "https://media.example.test/asset-313",
+                    "display_resources": [
+                      {
+                        "src": "https://media.example.test/asset-313",
+                        "config_width": 1439,
+                        "config_height": 959,
+                        "url_wrapped": "https://media.example.test/asset-314",
+                        "url_downloadable": "https://media.example.test/asset-315"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-316",
+                        "config_width": 1080,
+                        "config_height": 720,
+                        "url_wrapped": "https://media.example.test/asset-317",
+                        "url_downloadable": "https://media.example.test/asset-318"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-319",
+                        "config_width": 720,
+                        "config_height": 480,
+                        "url_wrapped": "https://media.example.test/asset-320",
+                        "url_downloadable": "https://media.example.test/asset-321"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-322",
+                        "config_width": 640,
+                        "config_height": 427,
+                        "url_wrapped": "https://media.example.test/asset-323",
+                        "url_downloadable": "https://media.example.test/asset-324"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-325",
+                        "config_width": 480,
+                        "config_height": 320,
+                        "url_wrapped": "https://media.example.test/asset-326",
+                        "url_downloadable": "https://media.example.test/asset-327"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-328",
+                        "config_width": 320,
+                        "config_height": 213,
+                        "url_wrapped": "https://media.example.test/asset-329",
+                        "url_downloadable": "https://media.example.test/asset-330"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-331",
+                        "config_width": 240,
+                        "config_height": 160,
+                        "url_wrapped": "https://media.example.test/asset-332",
+                        "url_downloadable": "https://media.example.test/asset-333"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-334",
+                        "config_width": 959,
+                        "config_height": 959,
+                        "url_wrapped": "https://media.example.test/asset-335",
+                        "url_downloadable": "https://media.example.test/asset-336"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-337",
+                        "config_width": 750,
+                        "config_height": 750,
+                        "url_wrapped": "https://media.example.test/asset-338",
+                        "url_downloadable": "https://media.example.test/asset-339"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-340",
+                        "config_width": 640,
+                        "config_height": 640,
+                        "url_wrapped": "https://media.example.test/asset-341",
+                        "url_downloadable": "https://media.example.test/asset-342"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-343",
+                        "config_width": 480,
+                        "config_height": 480,
+                        "url_wrapped": "https://media.example.test/asset-344",
+                        "url_downloadable": "https://media.example.test/asset-345"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-346",
+                        "config_width": 320,
+                        "config_height": 320,
+                        "url_wrapped": "https://media.example.test/asset-347",
+                        "url_downloadable": "https://media.example.test/asset-348"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-349",
+                        "config_width": 240,
+                        "config_height": 240,
+                        "url_wrapped": "https://media.example.test/asset-350",
+                        "url_downloadable": "https://media.example.test/asset-351"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-352",
+                        "config_width": 150,
+                        "config_height": 150,
+                        "url_wrapped": "https://media.example.test/asset-353",
+                        "url_downloadable": "https://media.example.test/asset-354"
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            "taken_at_timestamp": 1788383529,
+            "owner": {
+              "username": "fixture_account"
+            }
+          }
+        },
+        {
+          "node": {
+            "id": "100354",
+            "__typename": "GraphVideo",
+            "is_video": true,
+            "dimensions": {
+              "height": 960,
+              "width": 540
+            },
+            "shortcode": "100355",
+            "display_url": "https://media.example.test/asset-357",
+            "display_resources": [
+              {
+                "src": "https://media.example.test/asset-357",
+                "config_width": 720,
+                "config_height": 1280,
+                "url_wrapped": "https://media.example.test/asset-358",
+                "url_downloadable": "https://media.example.test/asset-359"
+              },
+              {
+                "src": "https://media.example.test/asset-360",
+                "config_width": 640,
+                "config_height": 1138,
+                "url_wrapped": "https://media.example.test/asset-361",
+                "url_downloadable": "https://media.example.test/asset-362"
+              },
+              {
+                "src": "https://media.example.test/asset-363",
+                "config_width": 480,
+                "config_height": 853,
+                "url_wrapped": "https://media.example.test/asset-364",
+                "url_downloadable": "https://media.example.test/asset-365"
+              },
+              {
+                "src": "https://media.example.test/asset-366",
+                "config_width": 320,
+                "config_height": 569,
+                "url_wrapped": "https://media.example.test/asset-367",
+                "url_downloadable": "https://media.example.test/asset-368"
+              },
+              {
+                "src": "https://media.example.test/asset-369",
+                "config_width": 240,
+                "config_height": 427,
+                "url_wrapped": "https://media.example.test/asset-370",
+                "url_downloadable": "https://media.example.test/asset-371"
+              },
+              {
+                "src": "https://media.example.test/asset-372",
+                "config_width": 720,
+                "config_height": 720,
+                "url_wrapped": "https://media.example.test/asset-373",
+                "url_downloadable": "https://media.example.test/asset-374"
+              },
+              {
+                "src": "https://media.example.test/asset-372",
+                "config_width": 720,
+                "config_height": 720,
+                "url_wrapped": "https://media.example.test/asset-373",
+                "url_downloadable": "https://media.example.test/asset-374"
+              },
+              {
+                "src": "https://media.example.test/asset-375",
+                "config_width": 640,
+                "config_height": 640,
+                "url_wrapped": "https://media.example.test/asset-376",
+                "url_downloadable": "https://media.example.test/asset-377"
+              },
+              {
+                "src": "https://media.example.test/asset-378",
+                "config_width": 480,
+                "config_height": 480,
+                "url_wrapped": "https://media.example.test/asset-379",
+                "url_downloadable": "https://media.example.test/asset-380"
+              },
+              {
+                "src": "https://media.example.test/asset-381",
+                "config_width": 320,
+                "config_height": 320,
+                "url_wrapped": "https://media.example.test/asset-382",
+                "url_downloadable": "https://media.example.test/asset-383"
+              },
+              {
+                "src": "https://media.example.test/asset-384",
+                "config_width": 240,
+                "config_height": 240,
+                "url_wrapped": "https://media.example.test/asset-385",
+                "url_downloadable": "https://media.example.test/asset-386"
+              },
+              {
+                "src": "https://media.example.test/asset-387",
+                "config_width": 150,
+                "config_height": 150,
+                "url_wrapped": "https://media.example.test/asset-388",
+                "url_downloadable": "https://media.example.test/asset-389"
+              }
+            ],
+            "video_url": "https://media.example.test/asset-390",
+            "edge_media_to_caption": {
+              "edges": [
+                {
+                  "node": {
+                    "text": "Fixture text"
+                  }
+                }
+              ]
+            },
+            "taken_at_timestamp": 1788296881,
+            "owner": {
+              "username": "other_owner"
+            },
+            "video_url_downloadable": "https://media.example.test/asset-391",
+            "video_url_wrapped": "https://media.example.test/asset-391"
+          }
+        },
+        {
+          "node": {
+            "id": "100391",
+            "__typename": "GraphImage",
+            "is_video": false,
+            "dimensions": {
+              "height": 1364,
+              "width": 2048
+            },
+            "shortcode": "100392",
+            "display_url": "https://media.example.test/asset-394",
+            "display_resources": [
+              {
+                "src": "https://media.example.test/asset-394",
+                "config_width": 2048,
+                "config_height": 1364,
+                "url_wrapped": "https://media.example.test/asset-395",
+                "url_downloadable": "https://media.example.test/asset-396"
+              },
+              {
+                "src": "https://media.example.test/asset-397",
+                "config_width": 1080,
+                "config_height": 719,
+                "url_wrapped": "https://media.example.test/asset-398",
+                "url_downloadable": "https://media.example.test/asset-399"
+              },
+              {
+                "src": "https://media.example.test/asset-400",
+                "config_width": 720,
+                "config_height": 480,
+                "url_wrapped": "https://media.example.test/asset-401",
+                "url_downloadable": "https://media.example.test/asset-402"
+              },
+              {
+                "src": "https://media.example.test/asset-403",
+                "config_width": 640,
+                "config_height": 426,
+                "url_wrapped": "https://media.example.test/asset-404",
+                "url_downloadable": "https://media.example.test/asset-405"
+              },
+              {
+                "src": "https://media.example.test/asset-406",
+                "config_width": 480,
+                "config_height": 320,
+                "url_wrapped": "https://media.example.test/asset-407",
+                "url_downloadable": "https://media.example.test/asset-408"
+              },
+              {
+                "src": "https://media.example.test/asset-409",
+                "config_width": 320,
+                "config_height": 213,
+                "url_wrapped": "https://media.example.test/asset-410",
+                "url_downloadable": "https://media.example.test/asset-411"
+              },
+              {
+                "src": "https://media.example.test/asset-412",
+                "config_width": 240,
+                "config_height": 160,
+                "url_wrapped": "https://media.example.test/asset-413",
+                "url_downloadable": "https://media.example.test/asset-414"
+              },
+              {
+                "src": "https://media.example.test/asset-415",
+                "config_width": 1080,
+                "config_height": 1080,
+                "url_wrapped": "https://media.example.test/asset-416",
+                "url_downloadable": "https://media.example.test/asset-417"
+              },
+              {
+                "src": "https://media.example.test/asset-418",
+                "config_width": 750,
+                "config_height": 750,
+                "url_wrapped": "https://media.example.test/asset-419",
+                "url_downloadable": "https://media.example.test/asset-420"
+              },
+              {
+                "src": "https://media.example.test/asset-421",
+                "config_width": 640,
+                "config_height": 640,
+                "url_wrapped": "https://media.example.test/asset-422",
+                "url_downloadable": "https://media.example.test/asset-423"
+              },
+              {
+                "src": "https://media.example.test/asset-424",
+                "config_width": 480,
+                "config_height": 480,
+                "url_wrapped": "https://media.example.test/asset-425",
+                "url_downloadable": "https://media.example.test/asset-426"
+              },
+              {
+                "src": "https://media.example.test/asset-427",
+                "config_width": 320,
+                "config_height": 320,
+                "url_wrapped": "https://media.example.test/asset-428",
+                "url_downloadable": "https://media.example.test/asset-429"
+              },
+              {
+                "src": "https://media.example.test/asset-430",
+                "config_width": 240,
+                "config_height": 240,
+                "url_wrapped": "https://media.example.test/asset-431",
+                "url_downloadable": "https://media.example.test/asset-432"
+              },
+              {
+                "src": "https://media.example.test/asset-433",
+                "config_width": 150,
+                "config_height": 150,
+                "url_wrapped": "https://media.example.test/asset-434",
+                "url_downloadable": "https://media.example.test/asset-435"
+              }
+            ],
+            "edge_media_to_caption": {
+              "edges": [
+                {
+                  "node": {
+                    "text": "Fixture text"
+                  }
+                }
+              ]
+            },
+            "taken_at_timestamp": 1788277410,
+            "owner": {
+              "username": "fixture_account"
+            }
+          }
+        },
+        {
+          "node": {
+            "id": "100435",
+            "__typename": "GraphVideo",
+            "is_video": true,
+            "dimensions": {
+              "height": 960,
+              "width": 540
+            },
+            "shortcode": "100436",
+            "display_url": "https://media.example.test/asset-438",
+            "display_resources": [
+              {
+                "src": "https://media.example.test/asset-438",
+                "config_width": 720,
+                "config_height": 1280,
+                "url_wrapped": "https://media.example.test/asset-439",
+                "url_downloadable": "https://media.example.test/asset-440"
+              },
+              {
+                "src": "https://media.example.test/asset-441",
+                "config_width": 640,
+                "config_height": 1138,
+                "url_wrapped": "https://media.example.test/asset-442",
+                "url_downloadable": "https://media.example.test/asset-443"
+              },
+              {
+                "src": "https://media.example.test/asset-444",
+                "config_width": 480,
+                "config_height": 853,
+                "url_wrapped": "https://media.example.test/asset-445",
+                "url_downloadable": "https://media.example.test/asset-446"
+              },
+              {
+                "src": "https://media.example.test/asset-447",
+                "config_width": 320,
+                "config_height": 569,
+                "url_wrapped": "https://media.example.test/asset-448",
+                "url_downloadable": "https://media.example.test/asset-449"
+              },
+              {
+                "src": "https://media.example.test/asset-450",
+                "config_width": 240,
+                "config_height": 427,
+                "url_wrapped": "https://media.example.test/asset-451",
+                "url_downloadable": "https://media.example.test/asset-452"
+              },
+              {
+                "src": "https://media.example.test/asset-453",
+                "config_width": 720,
+                "config_height": 720,
+                "url_wrapped": "https://media.example.test/asset-454",
+                "url_downloadable": "https://media.example.test/asset-455"
+              },
+              {
+                "src": "https://media.example.test/asset-453",
+                "config_width": 720,
+                "config_height": 720,
+                "url_wrapped": "https://media.example.test/asset-454",
+                "url_downloadable": "https://media.example.test/asset-455"
+              },
+              {
+                "src": "https://media.example.test/asset-456",
+                "config_width": 640,
+                "config_height": 640,
+                "url_wrapped": "https://media.example.test/asset-457",
+                "url_downloadable": "https://media.example.test/asset-458"
+              },
+              {
+                "src": "https://media.example.test/asset-459",
+                "config_width": 480,
+                "config_height": 480,
+                "url_wrapped": "https://media.example.test/asset-460",
+                "url_downloadable": "https://media.example.test/asset-461"
+              },
+              {
+                "src": "https://media.example.test/asset-462",
+                "config_width": 320,
+                "config_height": 320,
+                "url_wrapped": "https://media.example.test/asset-463",
+                "url_downloadable": "https://media.example.test/asset-464"
+              },
+              {
+                "src": "https://media.example.test/asset-465",
+                "config_width": 240,
+                "config_height": 240,
+                "url_wrapped": "https://media.example.test/asset-466",
+                "url_downloadable": "https://media.example.test/asset-467"
+              },
+              {
+                "src": "https://media.example.test/asset-468",
+                "config_width": 150,
+                "config_height": 150,
+                "url_wrapped": "https://media.example.test/asset-469",
+                "url_downloadable": "https://media.example.test/asset-470"
+              }
+            ],
+            "video_url": "https://media.example.test/asset-471",
+            "edge_media_to_caption": {
+              "edges": [
+                {
+                  "node": {
+                    "text": "Fixture text"
+                  }
+                }
+              ]
+            },
+            "taken_at_timestamp": 1788275127,
+            "owner": {
+              "username": "other_owner"
+            },
+            "video_url_downloadable": "https://media.example.test/asset-472",
+            "video_url_wrapped": "https://media.example.test/asset-472"
+          }
+        },
+        {
+          "node": {
+            "id": "100472",
+            "__typename": "GraphVideo",
+            "is_video": true,
+            "dimensions": {
+              "height": 1080,
+              "width": 1916
+            },
+            "shortcode": "100473",
+            "display_url": "https://media.example.test/asset-475",
+            "display_resources": [
+              {
+                "src": "https://media.example.test/asset-475",
+                "config_width": 720,
+                "config_height": 405,
+                "url_wrapped": "https://media.example.test/asset-476",
+                "url_downloadable": "https://media.example.test/asset-477"
+              },
+              {
+                "src": "https://media.example.test/asset-478",
+                "config_width": 640,
+                "config_height": 360,
+                "url_wrapped": "https://media.example.test/asset-479",
+                "url_downloadable": "https://media.example.test/asset-480"
+              },
+              {
+                "src": "https://media.example.test/asset-481",
+                "config_width": 480,
+                "config_height": 270,
+                "url_wrapped": "https://media.example.test/asset-482",
+                "url_downloadable": "https://media.example.test/asset-483"
+              },
+              {
+                "src": "https://media.example.test/asset-484",
+                "config_width": 320,
+                "config_height": 180,
+                "url_wrapped": "https://media.example.test/asset-485",
+                "url_downloadable": "https://media.example.test/asset-486"
+              },
+              {
+                "src": "https://media.example.test/asset-487",
+                "config_width": 240,
+                "config_height": 135,
+                "url_wrapped": "https://media.example.test/asset-488",
+                "url_downloadable": "https://media.example.test/asset-489"
+              },
+              {
+                "src": "https://media.example.test/asset-490",
+                "config_width": 405,
+                "config_height": 405,
+                "url_wrapped": "https://media.example.test/asset-491",
+                "url_downloadable": "https://media.example.test/asset-492"
+              },
+              {
+                "src": "https://media.example.test/asset-490",
+                "config_width": 405,
+                "config_height": 405,
+                "url_wrapped": "https://media.example.test/asset-491",
+                "url_downloadable": "https://media.example.test/asset-492"
+              },
+              {
+                "src": "https://media.example.test/asset-490",
+                "config_width": 405,
+                "config_height": 405,
+                "url_wrapped": "https://media.example.test/asset-491",
+                "url_downloadable": "https://media.example.test/asset-492"
+              },
+              {
+                "src": "https://media.example.test/asset-490",
+                "config_width": 405,
+                "config_height": 405,
+                "url_wrapped": "https://media.example.test/asset-491",
+                "url_downloadable": "https://media.example.test/asset-492"
+              },
+              {
+                "src": "https://media.example.test/asset-493",
+                "config_width": 320,
+                "config_height": 320,
+                "url_wrapped": "https://media.example.test/asset-494",
+                "url_downloadable": "https://media.example.test/asset-495"
+              },
+              {
+                "src": "https://media.example.test/asset-496",
+                "config_width": 240,
+                "config_height": 240,
+                "url_wrapped": "https://media.example.test/asset-497",
+                "url_downloadable": "https://media.example.test/asset-498"
+              },
+              {
+                "src": "https://media.example.test/asset-499",
+                "config_width": 150,
+                "config_height": 150,
+                "url_wrapped": "https://media.example.test/asset-500",
+                "url_downloadable": "https://media.example.test/asset-501"
+              }
+            ],
+            "video_url": "https://media.example.test/asset-502",
+            "edge_media_to_caption": {
+              "edges": [
+                {
+                  "node": {
+                    "text": "Fixture text"
+                  }
+                }
+              ]
+            },
+            "taken_at_timestamp": 1788218607,
+            "owner": {
+              "username": "fixture_account"
+            },
+            "video_url_downloadable": "https://media.example.test/asset-503",
+            "video_url_wrapped": "https://media.example.test/asset-503"
+          }
+        },
+        {
+          "node": {
+            "id": "100503",
+            "__typename": "GraphVideo",
+            "is_video": true,
+            "dimensions": {
+              "height": 960,
+              "width": 540
+            },
+            "shortcode": "100504",
+            "display_url": "https://media.example.test/asset-506",
+            "display_resources": [
+              {
+                "src": "https://media.example.test/asset-506",
+                "config_width": 1080,
+                "config_height": 1920,
+                "url_wrapped": "https://media.example.test/asset-507",
+                "url_downloadable": "https://media.example.test/asset-508"
+              },
+              {
+                "src": "https://media.example.test/asset-509",
+                "config_width": 720,
+                "config_height": 1280,
+                "url_wrapped": "https://media.example.test/asset-510",
+                "url_downloadable": "https://media.example.test/asset-511"
+              },
+              {
+                "src": "https://media.example.test/asset-512",
+                "config_width": 640,
+                "config_height": 1138,
+                "url_wrapped": "https://media.example.test/asset-513",
+                "url_downloadable": "https://media.example.test/asset-514"
+              },
+              {
+                "src": "https://media.example.test/asset-515",
+                "config_width": 480,
+                "config_height": 853,
+                "url_wrapped": "https://media.example.test/asset-516",
+                "url_downloadable": "https://media.example.test/asset-517"
+              },
+              {
+                "src": "https://media.example.test/asset-518",
+                "config_width": 320,
+                "config_height": 569,
+                "url_wrapped": "https://media.example.test/asset-519",
+                "url_downloadable": "https://media.example.test/asset-520"
+              },
+              {
+                "src": "https://media.example.test/asset-521",
+                "config_width": 240,
+                "config_height": 427,
+                "url_wrapped": "https://media.example.test/asset-522",
+                "url_downloadable": "https://media.example.test/asset-523"
+              },
+              {
+                "src": "https://media.example.test/asset-524",
+                "config_width": 1080,
+                "config_height": 1080,
+                "url_wrapped": "https://media.example.test/asset-525",
+                "url_downloadable": "https://media.example.test/asset-526"
+              },
+              {
+                "src": "https://media.example.test/asset-527",
+                "config_width": 750,
+                "config_height": 750,
+                "url_wrapped": "https://media.example.test/asset-528",
+                "url_downloadable": "https://media.example.test/asset-529"
+              },
+              {
+                "src": "https://media.example.test/asset-530",
+                "config_width": 640,
+                "config_height": 640,
+                "url_wrapped": "https://media.example.test/asset-531",
+                "url_downloadable": "https://media.example.test/asset-532"
+              },
+              {
+                "src": "https://media.example.test/asset-533",
+                "config_width": 480,
+                "config_height": 480,
+                "url_wrapped": "https://media.example.test/asset-534",
+                "url_downloadable": "https://media.example.test/asset-535"
+              },
+              {
+                "src": "https://media.example.test/asset-536",
+                "config_width": 320,
+                "config_height": 320,
+                "url_wrapped": "https://media.example.test/asset-537",
+                "url_downloadable": "https://media.example.test/asset-538"
+              },
+              {
+                "src": "https://media.example.test/asset-539",
+                "config_width": 240,
+                "config_height": 240,
+                "url_wrapped": "https://media.example.test/asset-540",
+                "url_downloadable": "https://media.example.test/asset-541"
+              },
+              {
+                "src": "https://media.example.test/asset-542",
+                "config_width": 150,
+                "config_height": 150,
+                "url_wrapped": "https://media.example.test/asset-543",
+                "url_downloadable": "https://media.example.test/asset-544"
+              }
+            ],
+            "video_url": "https://media.example.test/asset-545",
+            "edge_media_to_caption": {
+              "edges": [
+                {
+                  "node": {
+                    "text": "Fixture text"
+                  }
+                }
+              ]
+            },
+            "taken_at_timestamp": 1788213469,
+            "owner": {
+              "username": "fixture_account"
+            },
+            "video_url_downloadable": "https://media.example.test/asset-546",
+            "video_url_wrapped": "https://media.example.test/asset-546"
+          }
+        },
+        {
+          "node": {
+            "id": "100546",
+            "__typename": "GraphSidecar",
+            "is_video": false,
+            "dimensions": {
+              "height": 1365,
+              "width": 2048
+            },
+            "shortcode": "100547",
+            "display_url": "https://media.example.test/asset-549",
+            "display_resources": [
+              {
+                "src": "https://media.example.test/asset-549",
+                "config_width": 2048,
+                "config_height": 1365,
+                "url_wrapped": "https://media.example.test/asset-550",
+                "url_downloadable": "https://media.example.test/asset-551"
+              },
+              {
+                "src": "https://media.example.test/asset-552",
+                "config_width": 1080,
+                "config_height": 720,
+                "url_wrapped": "https://media.example.test/asset-553",
+                "url_downloadable": "https://media.example.test/asset-554"
+              },
+              {
+                "src": "https://media.example.test/asset-555",
+                "config_width": 720,
+                "config_height": 480,
+                "url_wrapped": "https://media.example.test/asset-556",
+                "url_downloadable": "https://media.example.test/asset-557"
+              },
+              {
+                "src": "https://media.example.test/asset-558",
+                "config_width": 640,
+                "config_height": 427,
+                "url_wrapped": "https://media.example.test/asset-559",
+                "url_downloadable": "https://media.example.test/asset-560"
+              },
+              {
+                "src": "https://media.example.test/asset-561",
+                "config_width": 480,
+                "config_height": 320,
+                "url_wrapped": "https://media.example.test/asset-562",
+                "url_downloadable": "https://media.example.test/asset-563"
+              },
+              {
+                "src": "https://media.example.test/asset-564",
+                "config_width": 320,
+                "config_height": 213,
+                "url_wrapped": "https://media.example.test/asset-565",
+                "url_downloadable": "https://media.example.test/asset-566"
+              },
+              {
+                "src": "https://media.example.test/asset-567",
+                "config_width": 240,
+                "config_height": 160,
+                "url_wrapped": "https://media.example.test/asset-568",
+                "url_downloadable": "https://media.example.test/asset-569"
+              },
+              {
+                "src": "https://media.example.test/asset-570",
+                "config_width": 1080,
+                "config_height": 1080,
+                "url_wrapped": "https://media.example.test/asset-571",
+                "url_downloadable": "https://media.example.test/asset-572"
+              },
+              {
+                "src": "https://media.example.test/asset-573",
+                "config_width": 750,
+                "config_height": 750,
+                "url_wrapped": "https://media.example.test/asset-574",
+                "url_downloadable": "https://media.example.test/asset-575"
+              },
+              {
+                "src": "https://media.example.test/asset-576",
+                "config_width": 640,
+                "config_height": 640,
+                "url_wrapped": "https://media.example.test/asset-577",
+                "url_downloadable": "https://media.example.test/asset-578"
+              },
+              {
+                "src": "https://media.example.test/asset-579",
+                "config_width": 480,
+                "config_height": 480,
+                "url_wrapped": "https://media.example.test/asset-580",
+                "url_downloadable": "https://media.example.test/asset-581"
+              },
+              {
+                "src": "https://media.example.test/asset-582",
+                "config_width": 320,
+                "config_height": 320,
+                "url_wrapped": "https://media.example.test/asset-583",
+                "url_downloadable": "https://media.example.test/asset-584"
+              },
+              {
+                "src": "https://media.example.test/asset-585",
+                "config_width": 240,
+                "config_height": 240,
+                "url_wrapped": "https://media.example.test/asset-586",
+                "url_downloadable": "https://media.example.test/asset-587"
+              },
+              {
+                "src": "https://media.example.test/asset-588",
+                "config_width": 150,
+                "config_height": 150,
+                "url_wrapped": "https://media.example.test/asset-589",
+                "url_downloadable": "https://media.example.test/asset-590"
+              }
+            ],
+            "edge_media_to_caption": {
+              "edges": [
+                {
+                  "node": {
+                    "text": "Fixture text"
+                  }
+                }
+              ]
+            },
+            "edge_sidecar_to_children": {
+              "edges": [
+                {
+                  "node": {
+                    "id": "100590",
+                    "__typename": "GraphImage",
+                    "is_video": false,
+                    "dimensions": {
+                      "height": 1365,
+                      "width": 2048
+                    },
+                    "display_url": "https://media.example.test/asset-549",
+                    "display_resources": [
+                      {
+                        "src": "https://media.example.test/asset-549",
+                        "config_width": 2048,
+                        "config_height": 1365,
+                        "url_wrapped": "https://media.example.test/asset-550",
+                        "url_downloadable": "https://media.example.test/asset-551"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-552",
+                        "config_width": 1080,
+                        "config_height": 720,
+                        "url_wrapped": "https://media.example.test/asset-553",
+                        "url_downloadable": "https://media.example.test/asset-554"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-555",
+                        "config_width": 720,
+                        "config_height": 480,
+                        "url_wrapped": "https://media.example.test/asset-556",
+                        "url_downloadable": "https://media.example.test/asset-557"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-558",
+                        "config_width": 640,
+                        "config_height": 427,
+                        "url_wrapped": "https://media.example.test/asset-559",
+                        "url_downloadable": "https://media.example.test/asset-560"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-561",
+                        "config_width": 480,
+                        "config_height": 320,
+                        "url_wrapped": "https://media.example.test/asset-562",
+                        "url_downloadable": "https://media.example.test/asset-563"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-564",
+                        "config_width": 320,
+                        "config_height": 213,
+                        "url_wrapped": "https://media.example.test/asset-565",
+                        "url_downloadable": "https://media.example.test/asset-566"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-567",
+                        "config_width": 240,
+                        "config_height": 160,
+                        "url_wrapped": "https://media.example.test/asset-568",
+                        "url_downloadable": "https://media.example.test/asset-569"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-570",
+                        "config_width": 1080,
+                        "config_height": 1080,
+                        "url_wrapped": "https://media.example.test/asset-571",
+                        "url_downloadable": "https://media.example.test/asset-572"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-573",
+                        "config_width": 750,
+                        "config_height": 750,
+                        "url_wrapped": "https://media.example.test/asset-574",
+                        "url_downloadable": "https://media.example.test/asset-575"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-576",
+                        "config_width": 640,
+                        "config_height": 640,
+                        "url_wrapped": "https://media.example.test/asset-577",
+                        "url_downloadable": "https://media.example.test/asset-578"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-579",
+                        "config_width": 480,
+                        "config_height": 480,
+                        "url_wrapped": "https://media.example.test/asset-580",
+                        "url_downloadable": "https://media.example.test/asset-581"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-582",
+                        "config_width": 320,
+                        "config_height": 320,
+                        "url_wrapped": "https://media.example.test/asset-583",
+                        "url_downloadable": "https://media.example.test/asset-584"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-585",
+                        "config_width": 240,
+                        "config_height": 240,
+                        "url_wrapped": "https://media.example.test/asset-586",
+                        "url_downloadable": "https://media.example.test/asset-587"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-588",
+                        "config_width": 150,
+                        "config_height": 150,
+                        "url_wrapped": "https://media.example.test/asset-589",
+                        "url_downloadable": "https://media.example.test/asset-590"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "node": {
+                    "id": "100591",
+                    "__typename": "GraphImage",
+                    "is_video": false,
+                    "dimensions": {
+                      "height": 1365,
+                      "width": 2048
+                    },
+                    "display_url": "https://media.example.test/asset-593",
+                    "display_resources": [
+                      {
+                        "src": "https://media.example.test/asset-593",
+                        "config_width": 2048,
+                        "config_height": 1365,
+                        "url_wrapped": "https://media.example.test/asset-594",
+                        "url_downloadable": "https://media.example.test/asset-595"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-596",
+                        "config_width": 1080,
+                        "config_height": 720,
+                        "url_wrapped": "https://media.example.test/asset-597",
+                        "url_downloadable": "https://media.example.test/asset-598"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-599",
+                        "config_width": 720,
+                        "config_height": 480,
+                        "url_wrapped": "https://media.example.test/asset-600",
+                        "url_downloadable": "https://media.example.test/asset-601"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-602",
+                        "config_width": 640,
+                        "config_height": 427,
+                        "url_wrapped": "https://media.example.test/asset-603",
+                        "url_downloadable": "https://media.example.test/asset-604"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-605",
+                        "config_width": 480,
+                        "config_height": 320,
+                        "url_wrapped": "https://media.example.test/asset-606",
+                        "url_downloadable": "https://media.example.test/asset-607"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-608",
+                        "config_width": 320,
+                        "config_height": 213,
+                        "url_wrapped": "https://media.example.test/asset-609",
+                        "url_downloadable": "https://media.example.test/asset-610"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-611",
+                        "config_width": 240,
+                        "config_height": 160,
+                        "url_wrapped": "https://media.example.test/asset-612",
+                        "url_downloadable": "https://media.example.test/asset-613"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-614",
+                        "config_width": 1080,
+                        "config_height": 1080,
+                        "url_wrapped": "https://media.example.test/asset-615",
+                        "url_downloadable": "https://media.example.test/asset-616"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-617",
+                        "config_width": 750,
+                        "config_height": 750,
+                        "url_wrapped": "https://media.example.test/asset-618",
+                        "url_downloadable": "https://media.example.test/asset-619"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-620",
+                        "config_width": 640,
+                        "config_height": 640,
+                        "url_wrapped": "https://media.example.test/asset-621",
+                        "url_downloadable": "https://media.example.test/asset-622"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-623",
+                        "config_width": 480,
+                        "config_height": 480,
+                        "url_wrapped": "https://media.example.test/asset-624",
+                        "url_downloadable": "https://media.example.test/asset-625"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-626",
+                        "config_width": 320,
+                        "config_height": 320,
+                        "url_wrapped": "https://media.example.test/asset-627",
+                        "url_downloadable": "https://media.example.test/asset-628"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-629",
+                        "config_width": 240,
+                        "config_height": 240,
+                        "url_wrapped": "https://media.example.test/asset-630",
+                        "url_downloadable": "https://media.example.test/asset-631"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-632",
+                        "config_width": 150,
+                        "config_height": 150,
+                        "url_wrapped": "https://media.example.test/asset-633",
+                        "url_downloadable": "https://media.example.test/asset-634"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "node": {
+                    "id": "100634",
+                    "__typename": "GraphImage",
+                    "is_video": false,
+                    "dimensions": {
+                      "height": 1365,
+                      "width": 2048
+                    },
+                    "display_url": "https://media.example.test/asset-636",
+                    "display_resources": [
+                      {
+                        "src": "https://media.example.test/asset-636",
+                        "config_width": 2048,
+                        "config_height": 1365,
+                        "url_wrapped": "https://media.example.test/asset-637",
+                        "url_downloadable": "https://media.example.test/asset-638"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-639",
+                        "config_width": 1080,
+                        "config_height": 720,
+                        "url_wrapped": "https://media.example.test/asset-640",
+                        "url_downloadable": "https://media.example.test/asset-641"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-642",
+                        "config_width": 720,
+                        "config_height": 480,
+                        "url_wrapped": "https://media.example.test/asset-643",
+                        "url_downloadable": "https://media.example.test/asset-644"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-645",
+                        "config_width": 640,
+                        "config_height": 427,
+                        "url_wrapped": "https://media.example.test/asset-646",
+                        "url_downloadable": "https://media.example.test/asset-647"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-648",
+                        "config_width": 480,
+                        "config_height": 320,
+                        "url_wrapped": "https://media.example.test/asset-649",
+                        "url_downloadable": "https://media.example.test/asset-650"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-651",
+                        "config_width": 320,
+                        "config_height": 213,
+                        "url_wrapped": "https://media.example.test/asset-652",
+                        "url_downloadable": "https://media.example.test/asset-653"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-654",
+                        "config_width": 240,
+                        "config_height": 160,
+                        "url_wrapped": "https://media.example.test/asset-655",
+                        "url_downloadable": "https://media.example.test/asset-656"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-657",
+                        "config_width": 1080,
+                        "config_height": 1080,
+                        "url_wrapped": "https://media.example.test/asset-658",
+                        "url_downloadable": "https://media.example.test/asset-659"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-660",
+                        "config_width": 750,
+                        "config_height": 750,
+                        "url_wrapped": "https://media.example.test/asset-661",
+                        "url_downloadable": "https://media.example.test/asset-662"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-663",
+                        "config_width": 640,
+                        "config_height": 640,
+                        "url_wrapped": "https://media.example.test/asset-664",
+                        "url_downloadable": "https://media.example.test/asset-665"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-666",
+                        "config_width": 480,
+                        "config_height": 480,
+                        "url_wrapped": "https://media.example.test/asset-667",
+                        "url_downloadable": "https://media.example.test/asset-668"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-669",
+                        "config_width": 320,
+                        "config_height": 320,
+                        "url_wrapped": "https://media.example.test/asset-670",
+                        "url_downloadable": "https://media.example.test/asset-671"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-672",
+                        "config_width": 240,
+                        "config_height": 240,
+                        "url_wrapped": "https://media.example.test/asset-673",
+                        "url_downloadable": "https://media.example.test/asset-674"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-675",
+                        "config_width": 150,
+                        "config_height": 150,
+                        "url_wrapped": "https://media.example.test/asset-676",
+                        "url_downloadable": "https://media.example.test/asset-677"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "node": {
+                    "id": "100677",
+                    "__typename": "GraphImage",
+                    "is_video": false,
+                    "dimensions": {
+                      "height": 1365,
+                      "width": 2048
+                    },
+                    "display_url": "https://media.example.test/asset-679",
+                    "display_resources": [
+                      {
+                        "src": "https://media.example.test/asset-679",
+                        "config_width": 2048,
+                        "config_height": 1365,
+                        "url_wrapped": "https://media.example.test/asset-680",
+                        "url_downloadable": "https://media.example.test/asset-681"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-682",
+                        "config_width": 1080,
+                        "config_height": 720,
+                        "url_wrapped": "https://media.example.test/asset-683",
+                        "url_downloadable": "https://media.example.test/asset-684"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-685",
+                        "config_width": 720,
+                        "config_height": 480,
+                        "url_wrapped": "https://media.example.test/asset-686",
+                        "url_downloadable": "https://media.example.test/asset-687"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-688",
+                        "config_width": 640,
+                        "config_height": 427,
+                        "url_wrapped": "https://media.example.test/asset-689",
+                        "url_downloadable": "https://media.example.test/asset-690"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-691",
+                        "config_width": 480,
+                        "config_height": 320,
+                        "url_wrapped": "https://media.example.test/asset-692",
+                        "url_downloadable": "https://media.example.test/asset-693"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-694",
+                        "config_width": 320,
+                        "config_height": 213,
+                        "url_wrapped": "https://media.example.test/asset-695",
+                        "url_downloadable": "https://media.example.test/asset-696"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-697",
+                        "config_width": 240,
+                        "config_height": 160,
+                        "url_wrapped": "https://media.example.test/asset-698",
+                        "url_downloadable": "https://media.example.test/asset-699"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-700",
+                        "config_width": 1080,
+                        "config_height": 1080,
+                        "url_wrapped": "https://media.example.test/asset-701",
+                        "url_downloadable": "https://media.example.test/asset-702"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-703",
+                        "config_width": 750,
+                        "config_height": 750,
+                        "url_wrapped": "https://media.example.test/asset-704",
+                        "url_downloadable": "https://media.example.test/asset-705"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-706",
+                        "config_width": 640,
+                        "config_height": 640,
+                        "url_wrapped": "https://media.example.test/asset-707",
+                        "url_downloadable": "https://media.example.test/asset-708"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-709",
+                        "config_width": 480,
+                        "config_height": 480,
+                        "url_wrapped": "https://media.example.test/asset-710",
+                        "url_downloadable": "https://media.example.test/asset-711"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-712",
+                        "config_width": 320,
+                        "config_height": 320,
+                        "url_wrapped": "https://media.example.test/asset-713",
+                        "url_downloadable": "https://media.example.test/asset-714"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-715",
+                        "config_width": 240,
+                        "config_height": 240,
+                        "url_wrapped": "https://media.example.test/asset-716",
+                        "url_downloadable": "https://media.example.test/asset-717"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-718",
+                        "config_width": 150,
+                        "config_height": 150,
+                        "url_wrapped": "https://media.example.test/asset-719",
+                        "url_downloadable": "https://media.example.test/asset-720"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "node": {
+                    "id": "100720",
+                    "__typename": "GraphImage",
+                    "is_video": false,
+                    "dimensions": {
+                      "height": 1365,
+                      "width": 2048
+                    },
+                    "display_url": "https://media.example.test/asset-722",
+                    "display_resources": [
+                      {
+                        "src": "https://media.example.test/asset-722",
+                        "config_width": 2048,
+                        "config_height": 1365,
+                        "url_wrapped": "https://media.example.test/asset-723",
+                        "url_downloadable": "https://media.example.test/asset-724"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-725",
+                        "config_width": 1080,
+                        "config_height": 720,
+                        "url_wrapped": "https://media.example.test/asset-726",
+                        "url_downloadable": "https://media.example.test/asset-727"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-728",
+                        "config_width": 720,
+                        "config_height": 480,
+                        "url_wrapped": "https://media.example.test/asset-729",
+                        "url_downloadable": "https://media.example.test/asset-730"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-731",
+                        "config_width": 640,
+                        "config_height": 427,
+                        "url_wrapped": "https://media.example.test/asset-732",
+                        "url_downloadable": "https://media.example.test/asset-733"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-734",
+                        "config_width": 480,
+                        "config_height": 320,
+                        "url_wrapped": "https://media.example.test/asset-735",
+                        "url_downloadable": "https://media.example.test/asset-736"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-737",
+                        "config_width": 320,
+                        "config_height": 213,
+                        "url_wrapped": "https://media.example.test/asset-738",
+                        "url_downloadable": "https://media.example.test/asset-739"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-740",
+                        "config_width": 240,
+                        "config_height": 160,
+                        "url_wrapped": "https://media.example.test/asset-741",
+                        "url_downloadable": "https://media.example.test/asset-742"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-743",
+                        "config_width": 1080,
+                        "config_height": 1080,
+                        "url_wrapped": "https://media.example.test/asset-744",
+                        "url_downloadable": "https://media.example.test/asset-745"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-746",
+                        "config_width": 750,
+                        "config_height": 750,
+                        "url_wrapped": "https://media.example.test/asset-747",
+                        "url_downloadable": "https://media.example.test/asset-748"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-749",
+                        "config_width": 640,
+                        "config_height": 640,
+                        "url_wrapped": "https://media.example.test/asset-750",
+                        "url_downloadable": "https://media.example.test/asset-751"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-752",
+                        "config_width": 480,
+                        "config_height": 480,
+                        "url_wrapped": "https://media.example.test/asset-753",
+                        "url_downloadable": "https://media.example.test/asset-754"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-755",
+                        "config_width": 320,
+                        "config_height": 320,
+                        "url_wrapped": "https://media.example.test/asset-756",
+                        "url_downloadable": "https://media.example.test/asset-757"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-758",
+                        "config_width": 240,
+                        "config_height": 240,
+                        "url_wrapped": "https://media.example.test/asset-759",
+                        "url_downloadable": "https://media.example.test/asset-760"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-761",
+                        "config_width": 150,
+                        "config_height": 150,
+                        "url_wrapped": "https://media.example.test/asset-762",
+                        "url_downloadable": "https://media.example.test/asset-763"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "node": {
+                    "id": "100763",
+                    "__typename": "GraphImage",
+                    "is_video": false,
+                    "dimensions": {
+                      "height": 1365,
+                      "width": 2048
+                    },
+                    "display_url": "https://media.example.test/asset-765",
+                    "display_resources": [
+                      {
+                        "src": "https://media.example.test/asset-765",
+                        "config_width": 2048,
+                        "config_height": 1365,
+                        "url_wrapped": "https://media.example.test/asset-766",
+                        "url_downloadable": "https://media.example.test/asset-767"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-768",
+                        "config_width": 1080,
+                        "config_height": 720,
+                        "url_wrapped": "https://media.example.test/asset-769",
+                        "url_downloadable": "https://media.example.test/asset-770"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-771",
+                        "config_width": 720,
+                        "config_height": 480,
+                        "url_wrapped": "https://media.example.test/asset-772",
+                        "url_downloadable": "https://media.example.test/asset-773"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-774",
+                        "config_width": 640,
+                        "config_height": 427,
+                        "url_wrapped": "https://media.example.test/asset-775",
+                        "url_downloadable": "https://media.example.test/asset-776"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-777",
+                        "config_width": 480,
+                        "config_height": 320,
+                        "url_wrapped": "https://media.example.test/asset-778",
+                        "url_downloadable": "https://media.example.test/asset-779"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-780",
+                        "config_width": 320,
+                        "config_height": 213,
+                        "url_wrapped": "https://media.example.test/asset-781",
+                        "url_downloadable": "https://media.example.test/asset-782"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-783",
+                        "config_width": 240,
+                        "config_height": 160,
+                        "url_wrapped": "https://media.example.test/asset-784",
+                        "url_downloadable": "https://media.example.test/asset-785"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-786",
+                        "config_width": 1080,
+                        "config_height": 1080,
+                        "url_wrapped": "https://media.example.test/asset-787",
+                        "url_downloadable": "https://media.example.test/asset-788"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-789",
+                        "config_width": 750,
+                        "config_height": 750,
+                        "url_wrapped": "https://media.example.test/asset-790",
+                        "url_downloadable": "https://media.example.test/asset-791"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-792",
+                        "config_width": 640,
+                        "config_height": 640,
+                        "url_wrapped": "https://media.example.test/asset-793",
+                        "url_downloadable": "https://media.example.test/asset-794"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-795",
+                        "config_width": 480,
+                        "config_height": 480,
+                        "url_wrapped": "https://media.example.test/asset-796",
+                        "url_downloadable": "https://media.example.test/asset-797"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-798",
+                        "config_width": 320,
+                        "config_height": 320,
+                        "url_wrapped": "https://media.example.test/asset-799",
+                        "url_downloadable": "https://media.example.test/asset-800"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-801",
+                        "config_width": 240,
+                        "config_height": 240,
+                        "url_wrapped": "https://media.example.test/asset-802",
+                        "url_downloadable": "https://media.example.test/asset-803"
+                      },
+                      {
+                        "src": "https://media.example.test/asset-804",
+                        "config_width": 150,
+                        "config_height": 150,
+                        "url_wrapped": "https://media.example.test/asset-805",
+                        "url_downloadable": "https://media.example.test/asset-806"
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            "taken_at_timestamp": 1788188641,
+            "owner": {
+              "username": "other_owner"
+            }
+          }
+        },
+        {
+          "node": {
+            "id": "100806",
+            "__typename": "GraphImage",
+            "is_video": false,
+            "dimensions": {
+              "height": 4096,
+              "width": 4096
+            },
+            "shortcode": "100807",
+            "display_url": "https://media.example.test/asset-809",
+            "display_resources": [
+              {
+                "src": "https://media.example.test/asset-809",
+                "config_width": 4096,
+                "config_height": 4096,
+                "url_wrapped": "https://media.example.test/asset-810",
+                "url_downloadable": "https://media.example.test/asset-811"
+              },
+              {
+                "src": "https://media.example.test/asset-812",
+                "config_width": 1080,
+                "config_height": 1080,
+                "url_wrapped": "https://media.example.test/asset-813",
+                "url_downloadable": "https://media.example.test/asset-814"
+              },
+              {
+                "src": "https://media.example.test/asset-815",
+                "config_width": 720,
+                "config_height": 720,
+                "url_wrapped": "https://media.example.test/asset-816",
+                "url_downloadable": "https://media.example.test/asset-817"
+              },
+              {
+                "src": "https://media.example.test/asset-818",
+                "config_width": 640,
+                "config_height": 640,
+                "url_wrapped": "https://media.example.test/asset-819",
+                "url_downloadable": "https://media.example.test/asset-820"
+              },
+              {
+                "src": "https://media.example.test/asset-821",
+                "config_width": 480,
+                "config_height": 480,
+                "url_wrapped": "https://media.example.test/asset-822",
+                "url_downloadable": "https://media.example.test/asset-823"
+              },
+              {
+                "src": "https://media.example.test/asset-824",
+                "config_width": 320,
+                "config_height": 320,
+                "url_wrapped": "https://media.example.test/asset-825",
+                "url_downloadable": "https://media.example.test/asset-826"
+              },
+              {
+                "src": "https://media.example.test/asset-827",
+                "config_width": 240,
+                "config_height": 240,
+                "url_wrapped": "https://media.example.test/asset-828",
+                "url_downloadable": "https://media.example.test/asset-829"
+              },
+              {
+                "src": "https://media.example.test/asset-812",
+                "config_width": 1080,
+                "config_height": 1080,
+                "url_wrapped": "https://media.example.test/asset-813",
+                "url_downloadable": "https://media.example.test/asset-814"
+              },
+              {
+                "src": "https://media.example.test/asset-830",
+                "config_width": 750,
+                "config_height": 750,
+                "url_wrapped": "https://media.example.test/asset-831",
+                "url_downloadable": "https://media.example.test/asset-832"
+              },
+              {
+                "src": "https://media.example.test/asset-818",
+                "config_width": 640,
+                "config_height": 640,
+                "url_wrapped": "https://media.example.test/asset-819",
+                "url_downloadable": "https://media.example.test/asset-820"
+              },
+              {
+                "src": "https://media.example.test/asset-821",
+                "config_width": 480,
+                "config_height": 480,
+                "url_wrapped": "https://media.example.test/asset-822",
+                "url_downloadable": "https://media.example.test/asset-823"
+              },
+              {
+                "src": "https://media.example.test/asset-824",
+                "config_width": 320,
+                "config_height": 320,
+                "url_wrapped": "https://media.example.test/asset-825",
+                "url_downloadable": "https://media.example.test/asset-826"
+              },
+              {
+                "src": "https://media.example.test/asset-827",
+                "config_width": 240,
+                "config_height": 240,
+                "url_wrapped": "https://media.example.test/asset-828",
+                "url_downloadable": "https://media.example.test/asset-829"
+              },
+              {
+                "src": "https://media.example.test/asset-833",
+                "config_width": 150,
+                "config_height": 150,
+                "url_wrapped": "https://media.example.test/asset-834",
+                "url_downloadable": "https://media.example.test/asset-835"
+              }
+            ],
+            "edge_media_to_caption": {
+              "edges": [
+                {
+                  "node": {
+                    "text": "Fixture text"
+                  }
+                }
+              ]
+            },
+            "taken_at_timestamp": 1788184590,
+            "owner": {
+              "username": "other_owner"
+            }
+          }
+        }
+      ],
+      "version": "v2"
+    }
+  }
+}

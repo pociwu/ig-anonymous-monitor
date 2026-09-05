@@ -27,12 +27,12 @@ def run(config_path: Path, poll_seconds: int) -> None:
         worker = MemberEnrichmentWorker(
             db, config.instagram_enrichment,
             PlaywrightMemberProfileSource(
-                config.browser, config.paths.download_root / "relationship-members"
+                config.browser, config.paths.download_root / "relationship-members", db
             ),
         )
         while not stopped:
             outcome = worker.run_once(datetime.now(UTC))
-            if outcome.status not in ("idle", "spacing", "daily_budget", "disabled"):
+            if outcome.status not in ("idle", "spacing", "daily_budget", "disabled", "source_cooldown"):
                 logging.info("member enrichment status=%s job=%s", outcome.status, outcome.job_id)
             time.sleep(max(1, poll_seconds))
     finally:

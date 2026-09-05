@@ -1,0 +1,34 @@
+# Standalone validation topology. Do not merge with compose.yaml.
+name: ig-monitor-anonyig-validation
+
+x-validation: &validation
+  build:
+    context: .
+  image: ig-anonymous-monitor:validation
+  init: true
+  working_dir: /app
+  environment:
+    PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
+    IG_MONITOR_RUNTIME: docker-validation
+    PYTHONUNBUFFERED: "1"
+    TZ: Asia/Taipei
+  volumes:
+    - ./validation.example.yaml:/validation-config/settings.yaml:ro
+    - validation-state:/validation
+  read_only: true
+  tmpfs:
+    - /tmp
+  shm_size: 1gb
+
+services:
+  validate:
+    <<: *validation
+    command: [python, -m, ig_monitor, --config, /validation-config/settings.yaml]
+  dashboard:
+    <<: *validation
+    command: [python, -m, ig_monitor.dashboard, --db, /validation/data/state.sqlite3, --host, 0.0.0.0, --port, "8888"]
+    ports:
+      - "127.0.0.1:8889:8888"
+
+volumes:
+  validation-state:

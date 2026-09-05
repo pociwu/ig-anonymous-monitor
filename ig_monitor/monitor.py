@@ -8,11 +8,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from .config import AppConfig
+from .config import AppConfig, account_username
 from .apify import ApifyClient, ApifyError, IdentityResult
 from .db import Database
 from .media import download_account_media, save_avatar
-from .models import PrivacyState, ScrapeFailure
+from .models import COLLECTIONS, PrivacyState, ScrapeFailure, ScrapeResult, TerminalState
 from .relationships import RelationshipTrigger
 from .scraper import ProfileScraper
 from .telegram import TelegramSender
@@ -32,7 +32,14 @@ async def check_accounts(config: AppConfig) -> int:
                                                    config.schedule.account_delay_max_seconds))
             try:
                 result = await scraper.scrape(account.url)
-                avatar, _ = await scraper.download(result.snapshot.avatar_url, account.url)
+                if any(value.state in {TerminalState.FAILED, TerminalState.BLOCKED, TerminalState.UNKNOWN}
+                       or value.error for value in result.collections.values()):
+                    raise ScrapeFailure("一個或多個媒體分類未完成驗證", "檢查分類",
+                                        blocker="source_blocked" if any(
+                                            value.state == TerminalState.BLOCKED
+                                            for value in result.collections.values()) else None)
+                avatar, _ = await scraper.download(result.snapshot.avatar_url,
+                                                    getattr(scraper, "media_referer", None) or account.url)
                 result.snapshot.avatar_sha256 = sha256_bytes(avatar)
                 LOG.info("CHECK %s: %s, posts=%d followers=%d following=%d media=%d",
                          account.label, result.snapshot.privacy.value, result.snapshot.posts,
@@ -40,6 +47,8 @@ async def check_accounts(config: AppConfig) -> int:
             except Exception as exc:
                 failures += 1
                 LOG.error("CHECK %s 失敗：%s", account.label, exc)
+                if isinstance(exc, ScrapeFailure) and exc.blocker:
+                    break
     return 1 if failures else 0
 
 
@@ -57,7 +66,15 @@ class Monitor:
     async def run(self) -> int:
         self.db.sync_accounts(self.config.accounts)
         run_id = self.db.start_run()
+        source = self.config.browser.anonymous_source
+        cooldown = self.db.source_cooldown(source)
+        if cooldown:
+            LOG.warning("匿名來源 %s 冷卻中，下次允許：%s", source, cooldown["next_allowed_at"])
+            await self.telegram.deliver_pending(self.db)
+            self.db.finish_run(run_id, "cooldown", f"source={source}, next_allowed_at={cooldown['next_allowed_at']}")
+            return 0
         failures = 0
+        source_access_succeeded = False
         opened: set[int] = set()
         enabled = self.db.enabled_accounts()
         LOG.info("開始監控 %d 個帳號", len(enabled))
@@ -70,22 +87,61 @@ class Monitor:
                     LOG.warning("Apify identity resolution disabled for this run: %s", exc)
                     self.apify = None
             async with ProfileScraper(self.config.browser) as scraper:
+                scraper.source_guard = lambda: bool(self.db.source_cooldown(source))
                 for index, account in enumerate(enabled):
+                    if self.db.source_cooldown(source):
+                        break
                     if index:
                         delay = random.uniform(self.config.schedule.account_delay_min_seconds,
                                                self.config.schedule.account_delay_max_seconds)
                         LOG.info("等待 %.1f 秒後檢查下一個帳號", delay)
                         await asyncio.sleep(delay)
+                    if self.db.source_cooldown(source):
+                        break
+                    blocked = None
                     try:
                         target_url = account.get("effective_url") or account["url"]
-                        result = await scraper.scrape(target_url)
-                        avatar_hash, avatar_path = await save_avatar(
-                            scraper, self.config.paths.download_root, account["account_key"],
-                            result.snapshot.avatar_url, account["url"],
-                        )
+                        if getattr(scraper, "supports_progress", False):
+                            progress = self.db.collection_observations(account["id"], source)
+                            cursors = {key: value["cursor"] for key, value in progress.items()
+                                       if value.get("cursor")} if self.config.schedule.media_download_enabled else {}
+                            known = {key: self.db.known_source_ids(account["id"], key, source)
+                                     for key in COLLECTIONS} if self.config.schedule.media_download_enabled else {}
+                            completed = {key for key, value in progress.items()
+                                         if value.get("baseline_complete")} if self.config.schedule.media_download_enabled else set()
+                            result = await scraper.scrape(target_url, cursors=cursors, known_ids=known,
+                                                          completed_categories=completed)
+                        else:
+                            result = await scraper.scrape(target_url)
+                        blocked = next((value.error or "來源要求驗證或限流"
+                                        for value in result.collections.values()
+                                        if value.state == TerminalState.BLOCKED), None)
+                        if blocked:
+                            self.db.record_source_block(source, blocked)
+                        self._validate_source_identity(account, target_url, result)
+                        old = self.db.snapshot_from_row(account)
+                        if blocked:
+                            # No more source requests, including avatar or media downloads.
+                            avatar_hash = old.avatar_sha256 if old else None
+                            avatar_path = old.avatar_path if old else None
+                        else:
+                            referer = getattr(scraper, "media_referer", None) or target_url
+                            try:
+                                avatar_hash, avatar_path = await save_avatar(
+                                    scraper, self.config.paths.download_root, account["account_key"],
+                                    result.snapshot.avatar_url, referer,
+                                )
+                            except ScrapeFailure as exc:
+                                if not exc.blocker:
+                                    raise
+                                # Keep already verified collections even if the subsequent
+                                # avatar request reveals a source-wide challenge.
+                                blocked = str(exc)
+                                self.db.record_source_block(source, blocked)
+                                avatar_hash = old.avatar_sha256 if old else None
+                                avatar_path = old.avatar_path if old else None
                         result.snapshot.avatar_sha256 = avatar_hash
                         result.snapshot.avatar_path = avatar_path
-                        old = self.db.snapshot_from_row(account)
                         events: list[tuple[str, str, dict]] = []
                         if account["failure_notified"]:
                             events.append((f"recovery:{account['id']}:{result.snapshot.observed_at}", "recovery",
@@ -109,6 +165,21 @@ class Monitor:
                                     opened.add(account["id"])
                         recorded_media = result.media if self.config.schedule.media_download_enabled else []
                         self.db.record_success(account["id"], result.snapshot, events, recorded_media)
+                        if result.profile_id:
+                            self.db.set_meta(f"anonymous_profile_id:{account['id']}:{source}", result.profile_id)
+                        if result.collections:
+                            self.db.record_collection_observations(
+                                account["id"], account["label"], result.collections, source,
+                                persist_progress=self.config.schedule.media_download_enabled,
+                            )
+                        if blocked:
+                            self.db.record_source_block(source, blocked)
+                            failures += 1
+                        elif any(value.error or value.state in {TerminalState.FAILED, TerminalState.UNKNOWN}
+                                 for value in result.collections.values()):
+                            failures += 1
+                        if not blocked and result.source == source:
+                            source_access_succeeded = True
                         observed_at = (
                             datetime.fromisoformat(result.snapshot.observed_at)
                             if result.snapshot.observed_at else datetime.now(UTC)
@@ -116,7 +187,7 @@ class Monitor:
                         self.relationship_trigger.observe_profile(
                             account["id"], old, result.snapshot, observed_at
                         )
-                        if self.apify and not account.get("instagram_profile_id"):
+                        if self.apify and not blocked and not account.get("instagram_profile_id"):
                             await self._enrol_identity(account, result.snapshot.username)
                         if self.config.schedule.media_download_enabled:
                             LOG.info("%s 載入成功：%s，發現媒體 %d", account["label"],
@@ -124,10 +195,16 @@ class Monitor:
                         else:
                             LOG.warning("%s 載入成功：%s；媒體記錄與下載目前已暫停，忽略候選 %d 筆",
                                         account["label"], result.snapshot.privacy.value, len(result.media))
+                        if blocked:
+                            break
                     except ScrapeFailure as exc:
                         failures += 1
                         save_diagnostic(self.config.paths.diagnostics_dir, account["account_key"], exc.html,
                                         exc.screenshot, str(exc), self.config.retention.diagnostic_runs)
+                        if exc.blocker or blocked:
+                            self.db.record_source_block(source, str(exc))
+                            LOG.error("%s：來源暫停，%s", account["label"], exc)
+                            break
                         count = self.db.record_failure(account["id"], account["label"], str(exc), exc.blocker)
                         if self.apify and account.get("instagram_profile_id"):
                             await self._recover_username(account)
@@ -136,17 +213,28 @@ class Monitor:
                         failures += 1
                         count = self.db.record_failure(account["id"], account["label"], str(exc), None)
                         LOG.exception("%s 處理失敗（連續 %d 次）", account["label"], count)
+                        if self.db.source_cooldown(source):
+                            break
 
                 if self.config.schedule.media_download_enabled:
                     refreshed = {row["id"]: row for row in self.db.enabled_accounts()}
                     for account_id, account in refreshed.items():
+                        if self.db.source_cooldown(source):
+                            break
                         current = self.db.snapshot_from_row(account)
                         if account["fail_count"] or current is None or current.privacy != PrivacyState.PUBLIC:
                             continue
-                        stats = await download_account_media(self.db, scraper, account,
-                                                             self.config.paths.download_root,
-                                                             self.config.schedule.media_limit_per_account,
-                                                             self.config.dedup)
+                        try:
+                            stats = await download_account_media(self.db, scraper, account,
+                                                                 self.config.paths.download_root,
+                                                                 self.config.schedule.media_limit_per_account,
+                                                                 self.config.dedup)
+                        except ScrapeFailure as exc:
+                            if not exc.blocker:
+                                raise
+                            self.db.record_source_block(source, str(exc))
+                            failures += 1
+                            break
                         attachments = stats.pop("attachments", [])
                         if self.config.telegram.send_new_media:
                             stats["attachments"] = attachments[:self.config.telegram.max_new_media_attachments]
@@ -159,12 +247,15 @@ class Monitor:
                 else:
                     LOG.warning("媒體記錄與下載已由 schedule.media_download_enabled=false 暫停")
 
+            if source_access_succeeded and not self.db.source_cooldown(source):
+                self.db.record_source_recovery(source)
             self._enqueue_heartbeat_if_due()
             self.db.enqueue_relationship_watchdogs(datetime.now(UTC))
             self._backup_if_due()
             sent, send_failed = await self.telegram.deliver_pending(self.db)
             LOG.info("Telegram：成功 %d、失敗 %d", sent, send_failed)
-            status = "partial" if failures or send_failed else "success"
+            status = ("partial" if failures or send_failed else
+                      "cooldown" if self.db.source_cooldown(source) else "success")
             self.db.finish_run(run_id, status, f"account_failures={failures}, telegram_failures={send_failed}")
             return 1 if failures else 0
         except Exception as exc:
@@ -174,6 +265,20 @@ class Monitor:
     @staticmethod
     def _json_value(value):
         return value.value if hasattr(value, "value") else value
+
+    def _validate_source_identity(self, account: dict, target_url: str, result: ScrapeResult) -> None:
+        if result.source == "legacy":
+            return
+        expected_id = account.get("instagram_profile_id") or self.db.get_meta(
+            f"anonymous_profile_id:{account['id']}:{result.source}"
+        )
+        if expected_id and result.profile_id != str(expected_id):
+            raise ScrapeFailure("來源帳號 ID 與既有身分不一致，未保存此次資料", "驗證帳號身分")
+        same_id = bool(expected_id and result.profile_id == str(expected_id))
+        if result.snapshot.username.casefold() != account_username(target_url) and not same_id:
+            raise ScrapeFailure("來源使用者名稱與查詢目標不一致，未保存此次資料", "驗證帳號身分")
+        if not result.profile_id:
+            raise ScrapeFailure("來源缺少可驗證帳號 ID，未保存此次資料", "驗證帳號身分")
 
     async def _enrol_identity(self, account: dict, username: str) -> None:
         identity = await self._resolve_identity(account, username)

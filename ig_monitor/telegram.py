@@ -143,10 +143,21 @@ def format_event(kind: str, payload: dict[str, Any]) -> str:
                 lines.append(f"{FIELD_LABELS.get(field, field)}：{_value(field, pair[0])} → {_value(field, pair[1])}")
         return "\n".join(lines)
     if kind == "failure":
+        if payload.get("scope") == "source":
+            return (f"匿名來源 {label} 暫停請求\n原因：{payload.get('error', '驗證或限流')}\n"
+                    f"下次自動嘗試：{payload.get('next_allowed_at', '依退避排程')}\n"
+                    "既有資料保留，不需要人工驗證。")
+        if payload.get("scope") == "collection":
+            return (f"{label}：媒體分類連續 {payload.get('fail_count', 3)} 次未更新\n"
+                    f"錯誤：{payload.get('error', '未知')}\n既有內容保留，其他分類獨立更新。")
         blocker = f"\n判定原因：{payload['blocker']}" if payload.get("blocker") else ""
         return (f"{label}：連續無法取得（{payload.get('fail_count', 3)} 次）\n"
                 f"可能改名、刪除或網站異常\n錯誤：{payload.get('error', '未知')}" + blocker)
     if kind == "recovery":
+        if payload.get("scope") == "source":
+            return f"匿名來源 {label} 已恢復，解除請求冷卻。"
+        if payload.get("scope") == "collection":
+            return f"{label}：媒體分類已恢復更新。"
         return f"帳號 {label} 已恢復監控"
     if kind == "username_change":
         return (

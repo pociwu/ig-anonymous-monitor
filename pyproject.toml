@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "ig-anonymous-monitor"
 version = "0.1.0"
-description = "Monitor insta-stories-viewer profiles and notify Telegram"
+description = "Monitor public Instagram profiles through anonymous sources and notify Telegram"
 requires-python = ">=3.11"
 dependencies = [
   "Flask>=3.0,<4",

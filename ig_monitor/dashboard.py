@@ -7,6 +7,7 @@ import math
 import os
 import sqlite3
 import subprocess
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import urlparse
@@ -59,12 +60,12 @@ CARD_PAGE = """<!doctype html>
 <section class="manage">
 <h2>新增監控帳號</h2>
 <form method="post" action="{{ url_for('add_account') }}">
-  <input type="url" name="url" required placeholder="https://insta-stories-viewer.com/username/" autocomplete="off">
+  <input type="url" name="url" required placeholder="https://www.instagram.com/username/" autocomplete="off">
   <input type="text" name="label" maxlength="100" placeholder="顯示標籤（選填）">
   <button type="submit">驗證並新增</button>
 </form>
 {% if error %}<p class="error">{{ error }}</p>{% endif %}
-<p class="muted">新增前會實際載入頁面；驗證可能需要約 45～90 秒。最多監控 16 個帳號。</p>
+<p class="muted">請輸入 Instagram 個人檔案連結，也相容舊版來源連結。新增前會實際驗證公開資料，可能需要約 45～90 秒。最多監控 16 個帳號。</p>
 </section>
 {% endif %}
 <h2>巡檢帳號</h2>
@@ -158,23 +159,45 @@ DETAIL_PAGE = """<!doctype html>
 </div>
 </details>
 <h2>照片與影片</h2>
+<p class="muted">匿名來源：AnonyIG（正式環境驗證中）。此處僅顯示已保存的本地媒體；分類巡檢成功不代表正式媒體下載已啟用。時間顯示：台北時間（UTC+08:00）。</p>
+<style>.gallery-time{display:inline-block;white-space:nowrap}.collection-times{display:flex;flex-wrap:wrap;gap:4px 18px}.collection-times>span{display:inline-block}</style>
+<style>.lightbox-nav{z-index:1}.carousel-controls{display:flex;justify-content:space-between;gap:8px;padding:6px 10px}.carousel-controls button{font:inherit;font-size:.8rem;border:1px solid #475569;border-radius:8px;background:#172033;color:#e5e7eb;padding:7px 9px;cursor:pointer}.carousel-controls button:disabled{opacity:.35;cursor:not-allowed}.carousel-controls button:focus-visible{outline:3px solid #a78bfa;outline-offset:2px}</style>
+<style>.gallery-entry[hidden],.collection-state[hidden],.gallery-empty[hidden]{display:none}.group-heading{padding:14px 14px 0;margin:0;overflow-wrap:anywhere}.group-caption{white-space:pre-wrap;overflow-wrap:anywhere}.media-children{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;gap:2px}.media-child{flex:0 0 100%;min-width:0;scroll-snap-align:start}.media-child img,.media-child video{object-fit:contain}.media-position{padding:5px 10px;color:#cbd5e1;font-size:.8rem}.collection-state{background:#172033;border:1px solid #334155;border-radius:12px;padding:14px;margin:12px 0;overflow-wrap:anywhere}.collection-state[data-state="partial"],.collection-state[data-state="blocked"],.collection-state[data-state="error"],.collection-state[data-state="unknown"]{border-color:#b45309}.collection-state p{margin:6px 0}.gallery-empty{grid-column:1/-1}.album-contents{padding-top:12px}.album-contents summary{cursor:pointer;padding:0 14px 12px}.legacy-note{margin:0 0 12px}@media(max-width:600px){.gallery{grid-template-columns:1fr}}</style>
 <nav class="tabs source-tabs">
-<button class="active" data-source="posts">貼文 {{ counts.posts.all }}</button>
-<button data-source="stories">Stories {{ counts.stories.all }}</button>
-<button data-source="highlights">Highlights {{ counts.highlights.all }}</button>
+<button class="active" data-source="posts" aria-pressed="true">貼文 {{ account.gallery_counts.posts.all }}</button>
+<button data-source="stories" aria-pressed="false">限時動態 {{ account.gallery_counts.stories.all }}</button>
+<button data-source="highlights" aria-pressed="false">精選動態 {{ account.gallery_counts.highlights.all }}</button>
+<button data-source="reels" aria-pressed="false">Reels 短片 {{ account.gallery_counts.reels.all }}</button>
+<button data-source="legacy" aria-pressed="false">舊版媒體 {{ account.gallery_counts.legacy.all }}</button>
 </nav>
+{% for category, observation in account.collection_observations.items() %}
+<section class="collection-state" data-status-source="{{ category }}" data-state="{{ observation.display_state }}" {% if category != 'posts' %}hidden{% endif %}>
+<strong>{{ observation.label }}</strong><p>{{ observation.message }}</p>
+<p class="muted collection-times"><span>最後成功：{% if observation.last_success_at %}<time class="gallery-time" datetime="{{ observation.last_success_at }}">{{ observation.last_success_at|taipei_time }}</time>{% else %}尚未成功{% endif %}</span><span>最後嘗試：{% if observation.last_attempt_at %}<time class="gallery-time" datetime="{{ observation.last_attempt_at }}">{{ observation.last_attempt_at|taipei_time }}</time>{% else %}尚未嘗試{% endif %}</span></p>
+{% if observation.error %}<p>原因：{{ observation.error }}</p>{% endif %}
+</section>{% endfor %}
+<p class="muted legacy-note" data-status-source="legacy" hidden>保留原分類與檔案；缺少可靠貼文或專輯歸屬的舊資料不推測分組。</p>
+<p class="muted">數量以貼文、限時動態、精選專輯或短片為單位；照片／影片篩選會保留符合條件卡片的全部內容與原始順序。</p>
 <nav class="tabs kind-tabs">
-<button class="active" data-kind="all">全部</button>
-<button data-kind="image">照片</button>
-<button data-kind="video">影片</button>
+<button class="active" data-kind="all" aria-pressed="true">全部</button>
+<button data-kind="image" aria-pressed="false">照片</button>
+<button data-kind="video" aria-pressed="false">影片</button>
 </nav>
 <section class="gallery">
-{% for item in media %}<article class="media" data-sources="{{ item.categories|join(' ') }}" data-kind="{{ item.kind }}">
-{% if item.kind == 'video' %}<video controls preload="metadata" src="{{ url_for('media_asset', media_id=item.id) }}"></video>
-{% else %}<a class="media-photo" href="{{ url_for('media_asset', media_id=item.id) }}"><img loading="lazy" src="{{ url_for('media_asset', media_id=item.id) }}" alt="IG photo"></a>{% endif %}
-<div class="caption">{{ item.categories|join(' · ') }}{% if item.published_at %} · {{ item.published_at }}{% endif %}</div>
+{% for group in account.gallery %}<article class="media gallery-entry" data-collection="{{ group.category }}" data-sources="{{ group.categories|join(' ') }}" data-kinds="{{ group.kinds|join(' ') }}" data-group-id="{{ group.group_id }}" {% if group.category != 'posts' %}hidden{% endif %}>
+{% if group.category == 'highlights' %}<h3 class="group-heading">{{ group.album_title or '未命名精選專輯' }}</h3><details class="album-contents" open><summary>專輯內容 · 本地已下載 {{ group.children|length }} 個媒體</summary>{% endif %}
+<div class="media-children" aria-label="依來源順序排列的媒體">
+{% for item in group.children %}<div class="media-child" data-media-id="{{ item.id }}" data-position="{{ item.position }}">
+{% if item.kind == 'video' %}<video controls preload="metadata" src="{{ url_for('media_asset', media_id=item.id) }}" aria-label="{{ '精選動態' if group.category == 'highlights' else '影片' }} {{ loop.index }}"></video>
+{% else %}<a class="media-photo" href="{{ url_for('media_asset', media_id=item.id) }}"><img loading="lazy" src="{{ url_for('media_asset', media_id=item.id) }}" alt="{{ group.album_title or '照片' }} {{ loop.index }}"></a>{% endif %}
+{% if group.children|length > 1 %}<div class="media-position">本地 {{ loop.index }} / {{ group.children|length }} · 來源第 {{ item.position + 1 }} 項 · 左右滑動瀏覽</div>{% endif %}
+</div>{% endfor %}</div>
+{% if group.children|length > 1 %}<nav class="carousel-controls" aria-label="輪播媒體切換"><button type="button" data-carousel-step="-1" disabled>← 上一項</button><button type="button" data-carousel-step="1">下一項 →</button></nav>{% endif %}
+{% if group.category == 'highlights' %}</details>{% endif %}
+<div class="caption"><div>{{ group.category_labels|join(' · ') }}{% if group.published_at %} · <time class="gallery-time" datetime="{{ group.published_at }}">{{ group.published_at|taipei_time }}</time>{% endif %}</div>{% if group.caption %}<div class="group-caption">{{ group.caption }}</div>{% endif %}</div>
 </article>
-{% else %}<p class="muted">目前沒有已下載的照片或影片。</p>{% endfor %}
+{% endfor %}
+<p class="muted gallery-empty" id="gallery-empty" role="status" hidden></p>
 </section>
 <div class="lightbox" id="photo-lightbox" role="dialog" aria-modal="true" aria-label="照片檢視器" hidden>
 <button class="lightbox-backdrop" type="button" data-lightbox-action="close" aria-label="關閉照片檢視器"></button>
@@ -190,25 +213,48 @@ DETAIL_PAGE = """<!doctype html>
 </div>
 <script>
 let selectedSource='posts',selectedKind='all';
+const galleryCounts={{ account.gallery_counts|tojson }};
+const collectionObservations={{ account.collection_observations|tojson }};
+function updateCarouselControls(card){
+ const track=card.querySelector('.media-children'),previous=card.querySelector('[data-carousel-step="-1"]'),next=card.querySelector('[data-carousel-step="1"]');
+ if(!previous||!next||!track.clientWidth)return;
+ previous.disabled=track.scrollLeft<=2;next.disabled=track.scrollLeft+track.clientWidth>=track.scrollWidth-2;
+}
+document.querySelectorAll('.gallery-entry').forEach(card=>{
+ const track=card.querySelector('.media-children');
+ card.querySelectorAll('[data-carousel-step]').forEach(button=>button.addEventListener('click',()=>{
+  const width=track.firstElementChild.getBoundingClientRect().width+2;
+  track.scrollBy({left:Number(button.dataset.carouselStep)*width,behavior:'smooth'});
+ }));
+ track.addEventListener('scroll',()=>updateCarouselControls(card),{passive:true});
+ card.querySelector('details')?.addEventListener('toggle',()=>updateCarouselControls(card));
+});
+window.addEventListener('resize',()=>document.querySelectorAll('.gallery-entry:not([hidden])').forEach(updateCarouselControls));
 function filterMedia(){
- document.querySelectorAll('.media').forEach(el=>{
-  const sourceMatch=el.dataset.sources.split(' ').includes(selectedSource);
-  const kindMatch=selectedKind==='all'||el.dataset.kind===selectedKind;
+ let visible=0;
+ document.querySelectorAll('.gallery-entry').forEach(el=>{
+  const sourceMatch=el.dataset.collection===selectedSource;
+  const kindMatch=selectedKind==='all'||el.dataset.kinds.split(' ').includes(selectedKind);
   el.hidden=!(sourceMatch&&kindMatch);
+  if(!el.hidden){visible++;updateCarouselControls(el)}
+  else el.querySelectorAll('video').forEach(video=>video.pause());
  });
- const c={{ counts|tojson }}[selectedSource];
- document.querySelector('[data-kind="all"]').textContent=`全部 ${c.all}`;
- document.querySelector('[data-kind="image"]').textContent=`照片 ${c.image}`;
- document.querySelector('[data-kind="video"]').textContent=`影片 ${c.video}`;
+ document.querySelectorAll('[data-status-source]').forEach(el=>{el.hidden=el.dataset.statusSource!==selectedSource});
+ const c=galleryCounts[selectedSource];
+ document.querySelector('.kind-tabs [data-kind="all"]').textContent=`全部 ${c.all}`;
+ document.querySelector('.kind-tabs [data-kind="image"]').textContent=`照片 ${c.image}`;
+ document.querySelector('.kind-tabs [data-kind="video"]').textContent=`影片 ${c.video}`;
+ const empty=document.getElementById('gallery-empty');empty.hidden=visible>0;
+ empty.textContent=selectedKind!=='all'&&c.all?'目前沒有符合此媒體類型的卡片。':selectedSource==='legacy'?'目前沒有未分組的舊版媒體。':collectionObservations[selectedSource].empty_message;
 }
 document.querySelectorAll('[data-source]').forEach(button=>button.addEventListener('click',()=>{
  selectedSource=button.dataset.source;
- document.querySelectorAll('[data-source]').forEach(x=>x.classList.toggle('active',x===button));
+ document.querySelectorAll('[data-source]').forEach(x=>{x.classList.toggle('active',x===button);x.setAttribute('aria-pressed',String(x===button))});
  filterMedia();
 }));
-document.querySelectorAll('[data-kind]').forEach(button=>button.addEventListener('click',()=>{
+document.querySelectorAll('.kind-tabs [data-kind]').forEach(button=>button.addEventListener('click',()=>{
  selectedKind=button.dataset.kind;
- document.querySelectorAll('[data-kind]').forEach(x=>x.classList.toggle('active',x===button));
+ document.querySelectorAll('.kind-tabs [data-kind]').forEach(x=>{x.classList.toggle('active',x===button);x.setAttribute('aria-pressed',String(x===button))});
  filterMedia();
 }));
 filterMedia();
@@ -220,7 +266,7 @@ const slideshowButton=document.getElementById('lightbox-slideshow');
 const previousButton=lightbox.querySelector('[data-lightbox-action="previous"]');
 const nextButton=lightbox.querySelector('[data-lightbox-action="next"]');
 let lightboxIndex=0,slideshowTimer=null,lightboxReturnFocus=null;
-function visiblePhotos(){return [...document.querySelectorAll('.media:not([hidden]) .media-photo')]}
+function visiblePhotos(){return [...document.querySelectorAll('.media:not([hidden]) .media-photo')].filter(photo=>!photo.closest('details')||photo.closest('details').open)}
 function stopSlideshow(){
  if(slideshowTimer){clearInterval(slideshowTimer);slideshowTimer=null}
  slideshowButton.textContent='播放投影片';
@@ -232,7 +278,7 @@ function renderLightbox(index){
  lightboxIndex=(index%photos.length+photos.length)%photos.length;
  const photo=photos[lightboxIndex],thumbnail=photo.querySelector('img');
  lightboxImage.src=photo.href;
- lightboxImage.alt=thumbnail?.alt||'IG photo';
+ lightboxImage.alt=thumbnail?.alt||'照片';
  lightboxCaption.textContent=photo.closest('.media')?.querySelector('.caption')?.textContent.trim()||'';
  lightboxCounter.textContent=`${lightboxIndex+1} / ${photos.length}`;
  const single=photos.length<2;
@@ -487,6 +533,8 @@ def account_detail_data(
             FROM media m JOIN media_sources ms ON ms.media_id=m.id
             WHERE m.account_id=? AND m.status='downloaded' AND m.duplicate_of_id IS NULL
               AND m.local_path IS NOT NULL
+              AND NOT EXISTS(SELECT 1 FROM media_quarantine mq
+                             WHERE mq.media_id=m.id AND mq.decision='pending')
             GROUP BY m.id,m.kind,m.published_at,m.local_path,m.downloaded_at
             ORDER BY COALESCE(m.published_at,m.downloaded_at) DESC,m.id DESC
         """, (account_id,)).fetchall()
@@ -503,6 +551,14 @@ def account_detail_data(
             for category in categories:
                 counts[category]["all"] += 1
                 counts[category][item["kind"]] += 1
+        from .anonymous_store import read_collection_observations, read_gallery_memberships
+
+        account["gallery"], account["gallery_counts"] = _group_gallery(
+            media, read_gallery_memberships(connection, account_id)
+        )
+        account["collection_observations"] = _collection_statuses(
+            read_collection_observations(connection, account_id, source="anonyig")
+        )
         return account, media, counts
     finally:
         connection.close()
@@ -726,7 +782,7 @@ def relationship_member_data(db_path: Path, profile_id: str) -> dict[str, Any] |
 def _empty_collection_counts() -> dict[str, dict[str, int]]:
     return {
         name: {"all": 0, "image": 0, "video": 0}
-        for name in ("posts", "stories", "highlights")
+        for name in ("posts", "stories", "highlights", "reels", "legacy")
     }
 
 
@@ -736,7 +792,139 @@ def _collection_name(value: str) -> str:
         return "highlights"
     if "stor" in lowered:
         return "stories"
-    return "posts"
+    if "reel" in lowered:
+        return "reels"
+    if lowered in {"post", "posts"}:
+        return "posts"
+    return "legacy"
+
+
+_COLLECTION_LABELS = {
+    "posts": "貼文", "stories": "限時動態", "highlights": "精選動態",
+    "reels": "Reels 短片", "legacy": "舊版媒體",
+}
+
+
+def _format_taipei_time(value: str | None) -> str:
+    """Format aware observation timestamps without changing their stored/API values."""
+    if not value:
+        return "—"
+    try:
+        observed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return value
+    if observed.tzinfo is None:
+        # Legacy data without an offset do not establish a timezone.
+        return value
+    # Instagram-era Taipei uses UTC+8; avoid an extra Windows tzdata dependency.
+    taipei = timezone(timedelta(hours=8), "Asia/Taipei")
+    return observed.astimezone(taipei).strftime("%Y-%m-%d %H:%M")
+
+
+def _group_gallery(
+    media: list[dict[str, Any]], memberships: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], dict[str, dict[str, int]]]:
+    """Keep content membership separate from the canonical file and legacy metadata."""
+    groups: dict[tuple[str, str, str], dict[str, Any]] = {}
+    represented: dict[int, set[str]] = {}
+    seen: set[tuple[str, str, str, str, int, int]] = set()
+    for membership in memberships:
+        category = _collection_name(membership["category"])
+        group_id = membership.get("group_id")
+        if category == "legacy" or not group_id:
+            continue
+        path = membership.get("local_path")
+        if not path or not Path(path).is_file():
+            continue
+        source = membership["source"]
+        key = (source, category, str(group_id))
+        media_id = int(membership["media_id"])
+        position = int(membership.get("position") or 0)
+        source_media_id = str(membership.get("source_media_id") or "")
+        identity = (*key, source_media_id, position, media_id)
+        if identity in seen:
+            continue
+        seen.add(identity)
+        group = groups.setdefault(key, {
+            "category": category, "categories": [category], "source": source,
+            "group_id": str(group_id), "album_title": None, "caption": None,
+            "published_at": None, "children": [],
+        })
+        for field in ("album_title", "caption", "published_at"):
+            if not group[field] and membership.get(field):
+                group[field] = membership[field]
+        group["children"].append({
+            "id": media_id, "kind": membership["kind"], "position": position,
+            "source_media_id": source_media_id,
+        })
+        represented.setdefault(media_id, set()).add(category)
+
+    gallery = list(groups.values())
+    for group in gallery:
+        group["children"].sort(key=lambda item: (item["position"], item["source_media_id"], item["id"]))
+    gallery.sort(key=lambda group: (group["published_at"] or "", group["group_id"]), reverse=True)
+    for item in media:
+        categories = sorted(set(item["categories"]) - represented.get(item["id"], set()))
+        if not categories:
+            continue
+        gallery.append({
+            "category": "legacy", "categories": categories, "source": "legacy",
+            "group_id": f"legacy-{item['id']}", "album_title": None, "caption": None,
+            "published_at": item.get("published_at"),
+            "children": [{"id": item["id"], "kind": item["kind"], "position": 0}],
+        })
+
+    counts = _empty_collection_counts()
+    for group in gallery:
+        group["kinds"] = sorted({child["kind"] for child in group["children"]})
+        group["category_labels"] = [_COLLECTION_LABELS[value] for value in group["categories"]]
+        counts[group["category"]]["all"] += 1
+        for kind in group["kinds"]:
+            counts[group["category"]][kind] += 1
+    return gallery, counts
+
+
+def _collection_statuses(observations: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    labels = {
+        "media": "已更新", "complete": "已更新", "empty": "來源確認無內容",
+        "private": "私人帳號", "partial": "部分完成", "blocked": "來源受阻",
+        "error": "巡檢失敗", "unknown": "尚未確認",
+    }
+    messages = {
+        "media": "來源內容已更新，仍保留先前保存的資料。",
+        "complete": "來源內容已更新，仍保留先前保存的資料。",
+        "empty": "來源本次確認無內容，先前保存的資料不會因此刪除。",
+        "private": "來源回報私人帳號，先前保存的資料仍保留。",
+        "partial": "本次尚未完整取得此分類；已保存成功部分，先前資料仍保留。",
+        "blocked": "來源遇驗證或限流，系統將自動退避重試；不視為空集合。",
+        "error": "本次取得失敗，先前資料仍保留；不視為空集合。",
+        "unknown": "尚無完整巡檢結果，目前只顯示已保存內容。",
+    }
+    result = {}
+    for category in ("posts", "stories", "highlights", "reels"):
+        observation = observations.get(category, {})
+        state = observation.get("state", "unknown")
+        if state == "failed":
+            state = "error"
+        if state not in labels:
+            state = "unknown"
+        if observation.get("error") and state in {"media", "complete", "empty", "private"}:
+            state = "partial" if state in {"media", "complete"} else "error"
+        elif state in {"media", "complete", "empty"} and not observation.get("complete", False):
+            state = "partial"
+        success = state in {"media", "complete", "empty", "private"}
+        result[category] = {
+            "state": observation.get("state", "unknown"), "display_state": state,
+            "label": f"{_COLLECTION_LABELS[category]}：{labels[state]}",
+            "message": messages[state], "error": observation.get("error"),
+            "last_success_at": observation.get("last_success_at"),
+            "last_attempt_at": observation.get("last_attempt_at"),
+            "empty_message": (
+                "目前沒有可顯示的本地已下載媒體；來源結果與下載狀態請見上方說明。"
+                if success else "目前沒有可顯示的本地媒體；此分類尚未完整成功，不能判定來源沒有內容。"
+            ),
+        }
+    return result
 
 
 def _avatar_path(db_path: Path, account_id: int) -> Path | None:
@@ -799,6 +987,7 @@ def create_app(
     account_validator: AccountValidator | None = None,
 ) -> Flask:
     app = Flask(__name__)
+    app.jinja_env.filters["taipei_time"] = _format_taipei_time
     if config_path is not None and account_validator is None:
         account_validator = lambda url: validate_account_page(config_path, url)
     registry = (
