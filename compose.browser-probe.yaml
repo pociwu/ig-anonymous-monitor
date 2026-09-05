@@ -1,0 +1,31 @@
+# Standalone one-shot comparison; never merge with production or validation Compose.
+name: ig-monitor-anonyig-browser-probe
+
+services:
+  probe:
+    build:
+      context: .
+    image: ig-anonymous-monitor:browser-probe
+    init: true
+    user: pwuser
+    working_dir: /tmp
+    read_only: true
+    tmpfs:
+      - /tmp
+    shm_size: 1gb
+    environment:
+      PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
+      PYTHONUNBUFFERED: "1"
+      TZ: Asia/Taipei
+      IG_MONITOR_RUNTIME: browser-probe
+    entrypoint:
+      - timeout
+      - --signal=TERM
+      - --kill-after=5s
+      - 90s
+      - xvfb-run
+      - -a
+      - python
+      - -m
+      - ig_monitor.browser_probe
+    command: [--observe-seconds, "30"]

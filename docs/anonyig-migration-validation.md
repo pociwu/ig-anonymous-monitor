@@ -12,9 +12,9 @@
 
 上述限制未解除前，不應開啟正式媒體記錄／下載。研究證據與實測結果見 `docs/research/anonyig-adapter-validation.md`。
 
-## 已完成驗證（2026-09-05）
+## 已完成驗證（2026-09-06）
 
-- 全套回歸 **248 項通過**，包含桌面／手機瀏覽器 QA、驗證腳本跨平台快取路徑及阻擋診斷測試；這些測試不連線匿名來源或正式帳號。
+- 全套回歸 **294 項通過**，包含桌面／手機瀏覽器 QA、驗證腳本跨平台快取路徑、阻擋診斷與一次性瀏覽器對照測試；這些測試不連線匿名來源或正式帳號。
 - 瀏覽器 QA 驗證四類切換、輪播／燈箱、精選專輯、舊版媒體、手機寬度與 JavaScript 錯誤，使用隔離資料庫及人工圖片／影片。示範截圖位於 `.pytest-tmp/anonymous-dashboard/`，不是正式媒體庫。
 - 回歸包含相同媒體網址刷新、空基準後增量、作者證據保留、下載端驗證頁阻擋，以及跨工作程序的冷卻／恢復競態。
 - 另外完成兩次全新本機 headless 來源查詢及一張記憶體 JPEG 解碼驗證；詳見[來源實測報告](research/anonyig-adapter-validation.md)。未完成 Docker、影片實體下載或長期排程驗證。
@@ -121,6 +121,14 @@ docker compose -f compose.validation.yaml run --rm --no-deps validate
 `validate` 是單次工作，退出後不會自動在冷卻結束時重跑。
 請回傳含 `[ANONYIG-DIAG]` 的完整錯誤行；舊的通用錯誤無法事後補出 HTTP 狀態。
 本更新補強診斷與收到阻擋後的停止檢查，不代表已解除 Ubuntu 的來源阻擋，不改動正式下載設定。
+
+### 已確認 Turnstile 挑戰後的單次對照
+
+2026-09-06 的 Ubuntu 回報已確認 `postsV2` HTTP 422，且為
+`turnstile_required / response_challenge / json`。這是直接挑戰證據，但尚不知道是否能由網站自行恢復。
+操作人員已另外核准[同機瀏覽器一次性隔離對照](anonyig-browser-probe.md)：
+使用獨立 `compose.browser-probe.yaml`，不登入、不點驗證、不改既有抓取器或冷卻資料。
+請先等原冷卻結束，再依該文件執行；不要與本頁的 `validate` 同時跑。
 
 ## 回歸測試
 
