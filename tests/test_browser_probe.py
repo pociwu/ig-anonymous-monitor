@@ -22,6 +22,7 @@ TURNSTILE = {"challenge": {"type": "turnstile", "siteKey": "SECRET_SITE_KEY"}}
 class FakeRequest:
     def __init__(self, endpoint):
         self.url = f"https://anonyig.com/api/v1/instagram/{endpoint}?secret=SECRET_QUERY"
+        self.resource_type = "fetch"
 
 
 class FakeResponse:
@@ -67,10 +68,16 @@ class FakePage:
         self.context = self
 
     def on(self, event, callback):
-        self.listeners[event] = callback
+        self.listeners.setdefault(event, []).append(callback)
 
     def remove_listener(self, event, callback):
-        assert self.listeners.pop(event, None) == callback
+        self.listeners[event].remove(callback)
+        if not self.listeners[event]:
+            del self.listeners[event]
+
+    def emit(self, event, value):
+        for callback in tuple(self.listeners.get(event, [])):
+            callback(value)
 
     async def route(self, _pattern, handler):
         self.route_handler = handler
@@ -83,13 +90,12 @@ class FakePage:
         request = FakeRequest(endpoint)
         route = FakeRoute(request)
         self.routes.append(route)
-        if "request" in self.listeners:
-            self.listeners["request"](request)
+        self.emit("request", request)
         await self.route_handler(route, request)
         return request, route
 
     def respond(self, request, status, payload, **kwargs):
-        self.listeners["response"](FakeResponse(request, status, payload, **kwargs))
+        self.emit("response", FakeResponse(request, status, payload, **kwargs))
 
     async def api(self, endpoint, status=200, payload=None, **kwargs):
         request, route = await self.start(endpoint)
@@ -119,6 +125,10 @@ class FakePage:
 
     async def is_visible(self):
         return self.widget
+
+    async def evaluate(self, expression):
+        assert expression == "() => typeof globalThis.turnstile?.render === 'function'"
+        return False
 
     async def close(self):
         self.closed = True
@@ -268,6 +278,92 @@ def test_widget_inspection_failure_is_unknown_not_a_runtime_failure():
     assert "SECRET_" not in json.dumps(report)
 
 
+@pytest.mark.parametrize("sample", [True, False, "SECRET_NON_BOOLEAN"])
+def test_turnstile_presence_is_boolean_only_and_never_means_recovery(sample):
+    page = FakePage()
+
+    async def evaluate(expression):
+        assert expression == "() => typeof globalThis.turnstile?.render === 'function'"
+        return sample
+
+    page.evaluate = evaluate
+    report = asyncio.run(browser_probe.observe_page(page, observe_seconds=1))
+    assert report["outcome"] == "inconclusive"
+    assert report["diagnostics"]["turnstile_api_seen"] is (sample if type(sample) is bool else None)
+    assert "SECRET_" not in json.dumps(report)
+
+
+def test_turnstile_presence_timeout_does_not_extend_window_or_fail_probe():
+    async def scenario():
+        page = FakePage()
+
+        async def evaluate(_expression):
+            await asyncio.Event().wait()
+
+        page.evaluate = evaluate
+        report = await asyncio.wait_for(browser_probe.observe_page(page, observe_seconds=1), timeout=2)
+        assert report["outcome"] == "inconclusive"
+        assert report["diagnostics"]["turnstile_api_seen"] is None
+        assert not page.listeners
+
+    asyncio.run(scenario())
+
+
+def test_diagnostics_stop_before_context_teardown_and_presence_is_sticky():
+    page = FakePage()
+    samples = []
+    close = page.close
+
+    async def evaluate(_expression):
+        samples.append(True)
+        return len(samples) > 1
+
+    async def cleanup():
+        page.emit("requestfailed", SimpleNamespace(
+            url="https://challenges.cloudflare.com/turnstile/v0/api.js?SECRET_CLOSE_TOKEN",
+            failure="net::ERR_ABORTED",
+        ))
+        page.emit("weberror", SimpleNamespace(error=SimpleNamespace(name="Error")))
+        await close()
+
+    page.evaluate = evaluate
+    page.close = cleanup
+    report = asyncio.run(browser_probe.observe_page(page, observe_seconds=1))
+    diag = report["diagnostics"]
+    assert diag["turnstile_api_seen"] is True and len(samples) == 2
+    assert diag["resources"]["turnstile_script"]["failed"] == 0
+    assert sum(diag["js_errors"]["uncaught"].values()) == 0
+    assert not page.listeners
+    assert "SECRET_" not in json.dumps(report)
+
+
+@pytest.mark.parametrize("operation", ["start", "stop"])
+def test_diagnostic_failure_never_overwrites_source_stop_or_skips_cleanup(monkeypatch, operation):
+    async def script(page):
+        await page.api("postsV2", 429, TURNSTILE)
+
+    def fail(*_args):
+        raise RuntimeError("SECRET_DIAGNOSTIC_FAILURE")
+
+    monkeypatch.setattr(browser_probe.ProbeDiagnostics, operation, fail)
+    page = FakePage(script)
+    close = page.close
+
+    async def cleanup():
+        page.emit("console", SimpleNamespace(type="error"))
+        await close()
+
+    page.close = cleanup
+    report = asyncio.run(browser_probe.observe_page(page, observe_seconds=1))
+    assert report["outcome"] == "stopped_http"
+    assert report["events"][0]["status"] == 429
+    assert report["runtime_stage"] is None and report["runtime_kind"] is None
+    assert page.closed
+    assert report["diagnostics"]["collection_error"] is True
+    assert report["diagnostics"]["js_errors"]["console_errors"] == 0
+    assert "SECRET_" not in json.dumps(report)
+
+
 @pytest.mark.parametrize("value", [0, 46, True, 1.5, "30"])
 def test_observation_bounds_are_checked_before_any_page_action(value):
     page = FakePage()
@@ -402,6 +498,8 @@ def test_runtime_launch_deadline_is_bounded_and_browser_version_cannot_leak(monk
         assert report["outcome"] == "runtime_error"
         assert report["runtime_stage"] == "launch"
         assert report["runtime_kind"] == "timeout"
+        assert report["diagnostics"]["active"] is False
+        assert report["diagnostics"]["turnstile_api_seen"] is None
 
     asyncio.run(scenario())
 
@@ -427,6 +525,8 @@ def test_cli_invalid_observation_never_starts_browser_and_uses_error_exit(monkey
     report = json.loads(output.removeprefix("[ANONYIG-BROWSER-PROBE] "))
     assert report["outcome"] == "runtime_error"
     assert report["runtime_kind"] == "invalid_arguments"
+    assert report["diagnostics"]["active"] is False
+    assert report["diagnostics"]["turnstile_api_seen"] is None
 
 
 def test_owned_context_remains_guarded_until_sibling_pages_are_closed():

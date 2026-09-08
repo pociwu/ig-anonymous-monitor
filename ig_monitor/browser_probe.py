@@ -19,6 +19,7 @@ from urllib.parse import urlsplit
 from playwright.async_api import async_playwright
 
 from .anonyig import parse_posts_page, parse_profile
+from .browser_probe_diagnostics import ProbeDiagnostics
 
 
 MARKER = "[ANONYIG-BROWSER-PROBE] "
@@ -73,6 +74,7 @@ def _empty_report(outcome: str, kind: str | None = None, stage: str | None = Non
         "source": "anonyig", "outcome": outcome, "elapsed_ms": 0,
         "request_count": 0, "visible_challenge": None, "initial_data": False,
         "events": [], "runtime_stage": stage, "runtime_kind": kind,
+        "diagnostics": {**ProbeDiagnostics().snapshot(), "turnstile_api_seen": None, "collection_error": False},
     }
 
 
@@ -99,6 +101,9 @@ async def observe_page(page, *, observe_seconds: int = 30) -> dict[str, Any]:
     stopping = False
     request_count = 0
     visible_challenge: bool | None = None
+    turnstile_api_seen: bool | None = None
+    diagnostics = ProbeDiagnostics()
+    diagnostics_error = False
     listeners_installed = False
 
     def elapsed() -> int:
@@ -218,7 +223,30 @@ async def observe_page(page, *, observe_seconds: int = 30) -> dict[str, Any]:
             # An inaccessible iframe is unknown, not proof of human interaction.
             pass
 
+    async def inspect_api_presence(deadline: float) -> None:
+        nonlocal turnstile_api_seen
+        if turnstile_api_seen is True or stop.is_set():
+            return
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return
+        try:
+            # Observe a boolean only. Never call render/ready/getResponse or
+            # replace the website's functions, callbacks, or verification state.
+            sample = await _bounded(page.evaluate(
+                "() => typeof globalThis.turnstile?.render === 'function'"
+            ), min(0.2, remaining))
+            if type(sample) is bool:
+                turnstile_api_seen = sample
+        except Exception:
+            pass
+
     try:
+        try:
+            diagnostics.start(context)
+        except Exception:
+            # Auxiliary telemetry must not alter the existing source workflow.
+            diagnostics_error = True
         context.on("request", request_started)
         context.on("response", response_received)
         listeners_installed = True
@@ -236,6 +264,7 @@ async def observe_page(page, *, observe_seconds: int = 30) -> dict[str, Any]:
             active_stage = "observe"
             # Initial success never shortens this window; late failures matter.
             while not stop.is_set() and time.monotonic() < deadline:
+                await inspect_api_presence(deadline)
                 await inspect_widget(deadline)
                 remaining = deadline - time.monotonic()
                 if remaining <= 0 or stop.is_set():
@@ -258,6 +287,13 @@ async def observe_page(page, *, observe_seconds: int = 30) -> dict[str, Any]:
         # including any website-created siblings; never unroute a live context.
         stopping = True
         accepting = False
+        try:
+            # Do not count teardown-caused request failures as loading failures.
+            diagnostics.stop()
+        except Exception:
+            diagnostics_error = True
+        # Copy before browser teardown even if diagnostic listener removal failed.
+        diagnostics_snapshot = diagnostics.snapshot()
         if captures:
             _, pending = await asyncio.wait(set(captures), timeout=_BODY_TIMEOUT_SECONDS + 0.05)
             for task in pending:
@@ -291,6 +327,8 @@ async def observe_page(page, *, observe_seconds: int = 30) -> dict[str, Any]:
         "request_count": request_count, "visible_challenge": visible_challenge,
         "initial_data": initial_data, "events": [dict(event) for event in events],
         "runtime_stage": runtime_stage, "runtime_kind": runtime_kind,
+        "diagnostics": {**diagnostics_snapshot, "turnstile_api_seen": turnstile_api_seen,
+                        "collection_error": diagnostics_error or diagnostics_snapshot["collection_error"]},
     }
 
 

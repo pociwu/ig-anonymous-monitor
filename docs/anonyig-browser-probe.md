@@ -42,10 +42,15 @@ Turnstile 有非互動與隱形模式；可見元件也不一定代表需要人�
 在既有隔離 checkout：
 
 ```bash
-cd /srv/ig-monitor/ig-anonyig-validation
-git pull --ff-only
-docker compose -f compose.browser-probe.yaml build probe
-docker compose -f compose.browser-probe.yaml run --rm --no-deps probe
+git -C /srv/ig-monitor/ig-anonyig-validation pull --ff-only
+```
+
+確認更新成功後重建測試映像；建置成功且冷卻結束後，執行一次探測：
+
+```bash
+docker compose -f /srv/ig-monitor/ig-anonyig-validation/compose.browser-probe.yaml build probe
+docker compose -f /srv/ig-monitor/ig-anonyig-validation/compose.browser-probe.yaml run --rm --no-deps probe
+echo $?
 ```
 
 預設提交搜尋後觀察 30 秒；即使先取得成功回應，也繼續觀察到時窗結束，避免漏掉稍後的阻擋。
@@ -61,7 +66,7 @@ echo $?
 `echo $?` 要緊接在 `docker compose ... run` 後執行，才是那次測試的退出碼。
 若沒有標記而回傳 `124`／`137`，代表外部時限已介入，不能當成來源驗證結果；請一併回傳啟動錯誤。
 
-### 已建置映像：2026-09-09 啟動修正
+### 2026-09-09 啟動修正紀錄
 
 操作人員在 Ubuntu 22.04 ARM64 的原測試容器回報 `runtime_stage=launch`、
 `request_count=0`。同一映像的無導覽啟動檢查進一步重現
@@ -76,7 +81,8 @@ Crashpad 使用預設設定目錄，不直接沿用 Playwright 的 `--user-data-
 Compose 現已固定加入這個環境變數，保留 `pwuser`、`read_only` 與原有 `/tmp` tmpfs；
 沒有修改 `HOME`、停用 Crashpad、升級瀏覽器或變更正式抓取器。
 
-如果已建置包含 `ig_monitor.browser_probe` 的測試映像，這次只更新 Compose，**不需重建**。
+`0e0e9b8` 的啟動修正只有 Compose 設定需要更新，因此當時已建置的測試映像不需重建。
+**後續新增的資源／JavaScript 診斷包含 Python 程式變更，必須依上方命令重建映像。**
 以下使用完整路徑，避免重新登入後在家目錄或 `/srv/ig-monitor` 執行而找不到檔案：
 
 ```bash
@@ -122,10 +128,53 @@ echo $?
 `recovered_after_challenge` 表示觀測到資料恢復，不是直接證明 Cloudflare 內部權杖驗證成功；工具沒有讀取或驗證權杖。
 `userInfo` 的成功也不能替代被阻擋的 `postsV2`；其他端點未解決的阻擋不得被蓋過。
 `visible_challenge: true` 只表示本次曾看到可見元件，不表示結束時仍可見；
-`null` 表示沒有可用的可見性檢查結果。它不是「驗證成功」或「必須人工」的判決。
+`false` 只表示既有主頁 iframe selector 的首個匹配項未被觀測為可見；後續檢查失敗也可能保留這個值，
+不能解讀為「沒有驗證元件」或「不用驗證」。`null` 表示沒有可用的可見性檢查結果。
+這些值都不是「驗證成功」或「必須人工」的判決。
 `initial_data` 欄位只記錄是否曾取得兩種資料契約；若後續被阻擋，仍以 `outcome` 為準。
 執行摘要另外保留 `headless`、平台／架構白名單與只含數字的瀏覽器版本；
 環境失敗以固定 `runtime_stage`／`runtime_kind` 分類，不輸出原始例外或系統路徑。
+
+### 資源與 JavaScript 最小診斷
+
+2026-09-09 的同機完整探測已能啟動 Chromium，但 `userInfo`、`postsV2`、`posts`
+各回傳 `422 + turnstile`；30 秒內沒有初始資料，結果為 `challenge_unresolved`、退出碼 `2`。
+操作人員核准補上以下被動診斷，以區分資源未取得、JavaScript 錯誤或仍未恢復的情況；
+這不是已確認根因，也不會解決或操作驗證。
+
+同一個 `[ANONYIG-BROWSER-PROBE]` JSON 現在包含 `diagnostics`：
+若更新後摘要仍沒有此欄位，請先確認已重建並執行新版測試映像；不要連續重跑來源查詢。
+
+| 欄位 | 意義與限制 |
+| --- | --- |
+| `active` | 是否曾成功註冊診斷監聽；正常收尾後仍為 `true`。若為 `false`，零計數不代表沒有錯誤 |
+| `collection_error` | 診斷註冊、事件讀取或停止時發生錯誤，資料可能不完整；不覆寫原有來源結果，也不略過瀏覽器清理 |
+| `resources.turnstile_script` | 官方 `challenges.cloudflare.com/turnstile/v0/api.js` 載入紀錄，忽略查詢參數 |
+| `resources.challenge_resource` | 同一驗證網域下其他 `/turnstile/`、`/cdn-cgi/challenge-platform/` 資源紀錄 |
+| `resources.source_script` | AnonyIG 網域及其子網域的 script 資源，不追蹤其他來源的腳本 |
+| `js_errors.uncaught` | 整個 context 內頁面的未捕捉 JavaScript 錯誤，僅依標準錯誤名稱計數；未知名稱歸為 `other` |
+| `js_errors.console_errors`／`console_warnings` | console error／warning 的數量，不讀訊息文字、參數或位置；不能直接歸因於 Turnstile |
+| `turnstile_api_seen` | 主頁是否曾觀測到 `turnstile.render` 是函式；`true` 不等於呼叫過或驗證成功，`false` 表示至少一次檢查成功但從未看到，`null` 表示沒有可用檢查結果 |
+| `truncated` | 計數或狀態種類超出上限；此時數字只能當下限，不是完整事件數 |
+
+每個資源分類只聚合 `requested`、`responses`、`finished`、`failed`、`http_statuses`、`failure_kinds`。
+計數最多 99，HTTP 狀態保留最多 8 種；網路失敗只分為 `dns`、`tls`、`timeout`、`blocked`、
+`aborted`、`connection`、`other`。資源 HTTP 200 或 `finished` 只表示收到回應／下載結束，
+不保證腳本成功執行；HTTP 錯誤也可能觸發 `finished`。
+參考 [Playwright 請求事件語意](https://playwright.dev/python/docs/api/class-request)
+及 [Cloudflare 官方腳本與 API](https://developers.cloudflare.com/turnstile/get-started/client-side-rendering/)。
+
+診斷在導覽前註冊，涵蓋 context 中頁面的資源及錯誤，並在關閉 context 前停止計數，
+避免把關閉瀏覽器造成的中斷算成載入失敗。未捕捉錯誤與 console 計數並不涵蓋所有 worker 或被網站自行捕捉的例外。
+主頁 API 存在性只取得布林值，每次檢查最多 0.2 秒且受原觀察截止時間限制；
+不呼叫 `render`、`ready`、`getResponse`，也不包裝回呼或修改驗證狀態。
+
+若腳本未請求、下載失敗或有 JS 錯誤，這些欄位提供後續排查方向，而非單獨的根因判決。
+沒有錯誤紀錄也不能證明驗證成功。`runtime_stage=null`／`runtime_kind=null` 只代表探測流程未拋出執行錯誤，
+不代表網站 JavaScript 無錯誤。來源可用性仍以原 `outcome` 與初始資料契約為準。
+
+不保存或輸出資源 URL、查詢參數、訊息文字、stack、標頭、回應內容、cookies、siteKey 或權杖；
+不新增網路請求、不改 Service Worker 設定、不延長觀察、不點擊驗證，也不改正式來源的停止規則。
 
 ### 需要進一步對照時
 
@@ -150,12 +199,19 @@ docker compose -f compose.browser-probe.yaml run --rm --no-deps probe --headless
 2026-09-09：新增 Crashpad 設定的靜態回歸檢查；補入 Compose 設定前，部署契約測試
 2 項失敗、3 項通過，補入後 5 項全數通過。含離線 Chromium QA 的全專案回歸共 295 項通過。
 
+同日新增最小資源／JavaScript 診斷：71 項事件邊界測試、6 項新的真 Chromium 全網路攔截案例，
+以及接線、布林採樣截止時間與診斷失敗不干擾來源結果的回歸測試通過；全專案共 379 項通過。
+舊版在真瀏覽器案例先因缺少 `diagnostics` 欄位失敗，再驗證新增觀測；
+診斷 start／stop 故障注入也先重現覆蓋來源結果，再修正為獨立 `collection_error`。
+合成腳本的成功下載、網路失敗、HTTP 錯誤、執行錯誤、未請求及隱藏 iframe 錯誤均有覆蓋。
+這些案例驗證診斷能力與不干擾性，不模擬或宣稱解決真實 Turnstile。
+
 單元測試與選用瀏覽器 QA 使用合成資料。真 Chromium QA 會攔截所有網路請求，
 以本地 fixture 回應模擬自動恢復、持續挑戰、早發慢回應與請求上限；不連 AnonyIG 或 Cloudflare。
 
 ```powershell
 $env:IG_MONITOR_BROWSER_TESTS = '1'
-python -m pytest tests/test_browser_probe.py tests/test_browser_probe_deployment.py tests/test_browser_probe_browser.py -ra
+python -m pytest tests/test_browser_probe.py tests/test_browser_probe_deployment.py tests/test_browser_probe_browser.py tests/test_browser_probe_diagnostics.py tests/test_browser_probe_diagnostics_browser.py -ra
 ```
 
 Windows 開發主機的離線 Chromium 測試不等於 Ubuntu ARM64 + Xvfb 實測。
