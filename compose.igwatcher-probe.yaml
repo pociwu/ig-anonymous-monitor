@@ -1,0 +1,27 @@
+# Standalone one-shot HTTP probe; never merge with production or validation Compose.
+name: ig-monitor-igwatcher-probe
+
+services:
+  probe:
+    build:
+      context: .
+    image: ig-anonymous-monitor:igwatcher-probe
+    init: true
+    user: pwuser
+    working_dir: /tmp
+    read_only: true
+    tmpfs:
+      - /tmp
+    environment:
+      PYTHONUNBUFFERED: "1"
+      TZ: Asia/Taipei
+      IG_MONITOR_RUNTIME: igwatcher-probe
+    entrypoint:
+      - timeout
+      - --signal=TERM
+      - --kill-after=5s
+      - 180s
+      - python
+      - -m
+      - ig_monitor.igwatcher_probe
+    command: []
