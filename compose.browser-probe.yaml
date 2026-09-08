@@ -15,6 +15,8 @@ services:
     shm_size: 1gb
     environment:
       PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
+      # Crashpad uses the default config location, outside the temporary profile.
+      XDG_CONFIG_HOME: /tmp
       PYTHONUNBUFFERED: "1"
       TZ: Asia/Taipei
       IG_MONITOR_RUNTIME: browser-probe

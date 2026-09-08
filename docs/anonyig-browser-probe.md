@@ -21,6 +21,7 @@ Turnstile 有非互動與隱形模式；可見元件也不一定代表需要人�
 - 使用獨立 `compose.browser-probe.yaml`、專案名稱及映像標籤；不與正式或 validation Compose 合併。
 - 不掛載任何正式／驗證資料卷、設定檔、`.env`、登入憑證或媒體目錄；不對外開啟服務埠。
 - 容器使用 `pwuser`、唯讀檔案系統與臨時 `/tmp`；結束後移除容器，不保存 cookies 或瀏覽器工作階段。
+  `XDG_CONFIG_HOME=/tmp` 讓 Chromium 的預設設定與 Crashpad 目錄也位於可寫的臨時掛載內。
 - 沿用現有 Playwright 1.61 系列與 Docker 基底，預設以 **headed Chromium + Xvfb** 執行。
   Xvfb 是容器內的虛擬螢幕，不需要 Ubuntu 桌面，也不提供人工操作驗證畫面。
   [Playwright 的 Linux headed 執行說明](https://playwright.dev/python/docs/ci#running-headed)。
@@ -59,6 +60,51 @@ echo $?
 
 `echo $?` 要緊接在 `docker compose ... run` 後執行，才是那次測試的退出碼。
 若沒有標記而回傳 `124`／`137`，代表外部時限已介入，不能當成來源驗證結果；請一併回傳啟動錯誤。
+
+### 已建置映像：2026-09-09 啟動修正
+
+操作人員在 Ubuntu 22.04 ARM64 的原測試容器回報 `runtime_stage=launch`、
+`request_count=0`。同一映像的無導覽啟動檢查進一步重現
+`chrome_crashpad_handler: --database is required`、`SIGTRAP`，退出碼為 `1`。
+只新增 `-e XDG_CONFIG_HOME=/tmp`，其他設定與啟動命令不變後，回報
+`BROWSER_LAUNCH_OK`、退出碼 `0`。這是操作人員提供的同機啟動對照，不是 Windows 測試模擬的結果。
+
+Crashpad 使用預設設定目錄，不直接沿用 Playwright 的 `--user-data-dir` 暫存 profile；
+因此只有 profile 位於 `/tmp`，仍不足以讓唯讀容器完成啟動。
+參考 [Chromium 崩潰報告路徑](https://raw.githubusercontent.com/chromium/chromium/main/chrome/common/chrome_paths.cc)
+與 [Linux 預設設定目錄](https://chromium.googlesource.com/chromium/src/+/main/chrome/common/chrome_paths_linux.cc)。
+Compose 現已固定加入這個環境變數，保留 `pwuser`、`read_only` 與原有 `/tmp` tmpfs；
+沒有修改 `HOME`、停用 Crashpad、升級瀏覽器或變更正式抓取器。
+
+如果已建置包含 `ig_monitor.browser_probe` 的測試映像，這次只更新 Compose，**不需重建**。
+以下使用完整路徑，避免重新登入後在家目錄或 `/srv/ig-monitor` 執行而找不到檔案：
+
+```bash
+git -C /srv/ig-monitor/ig-anonyig-validation pull --ff-only
+```
+
+確認更新成功後，可先檢查新版 Compose 的啟動設定；這段不開啟網站，且不再需要手動傳入 `-e`：
+
+```bash
+docker compose -f /srv/ig-monitor/ig-anonyig-validation/compose.browser-probe.yaml run --rm --no-deps -T \
+  --entrypoint timeout probe --signal=TERM --kill-after=5s 30s \
+  xvfb-run -a python - <<'PY'
+from playwright.sync_api import sync_playwright
+with sync_playwright() as p:
+    browser = p.chromium.launch(channel="chromium", headless=False, timeout=15000)
+    print("BROWSER_LAUNCH_OK", flush=True)
+    browser.close()
+PY
+echo $?
+```
+
+啟動成功不代表來源驗收通過。等既有來源冷卻結束且沒有其他 AnonyIG 測試執行時，
+再執行一次完整探測並回傳最後的摘要與退出碼：
+
+```bash
+docker compose -f /srv/ig-monitor/ig-anonyig-validation/compose.browser-probe.yaml run --rm --no-deps probe
+echo $?
+```
 
 ## 結果
 
@@ -101,6 +147,9 @@ docker compose -f compose.browser-probe.yaml run --rm --no-deps probe --headless
 2026-09-06：34 項探測器單元測試、4 項部署契約測試與 8 項真 Chromium 離線案例通過；
 包含本工具的全專案回歸共 294 項通過。彈出視窗案例先重現未關閉的錯誤，再驗證整個 context 收尾修正。
 
+2026-09-09：新增 Crashpad 設定的靜態回歸檢查；補入 Compose 設定前，部署契約測試
+2 項失敗、3 項通過，補入後 5 項全數通過。含離線 Chromium QA 的全專案回歸共 295 項通過。
+
 單元測試與選用瀏覽器 QA 使用合成資料。真 Chromium QA 會攔截所有網路請求，
 以本地 fixture 回應模擬自動恢復、持續挑戰、早發慢回應與請求上限；不連 AnonyIG 或 Cloudflare。
 
@@ -110,4 +159,5 @@ python -m pytest tests/test_browser_probe.py tests/test_browser_probe_deployment
 ```
 
 Windows 開發主機的離線 Chromium 測試不等於 Ubuntu ARM64 + Xvfb 實測。
-實際 Docker 啟動與網站是否自行恢復，仍由上述 Ubuntu 一次性測試判定。
+本次設定的 Ubuntu ARM64 無導覽啟動已由操作人員確認；完整探測與網站是否自行恢復，
+仍須由 Ubuntu 一次性來源測試判定。部署契約測試只鎖定設定與隔離限制，不代替實際 Docker 啟動。

@@ -50,10 +50,21 @@ def test_browser_probe_runs_one_bounded_headed_session_and_keeps_arguments_overr
     assert service["command"] == ["--observe-seconds", "30"]
     assert service["environment"] == {
         "PLAYWRIGHT_BROWSERS_PATH": "/ms-playwright",
+        "XDG_CONFIG_HOME": "/tmp",
         "PYTHONUNBUFFERED": "1",
         "TZ": "Asia/Taipei",
         "IG_MONITOR_RUNTIME": "browser-probe",
     }
+
+
+def test_browser_probe_crashpad_config_uses_the_ephemeral_writable_mount():
+    # Static regression guard; Ubuntu Chromium launch is verified separately.
+    service = probe_topology()["services"]["probe"]
+    config_root = service["environment"]["XDG_CONFIG_HOME"]
+    assert config_root == "/tmp"
+    assert config_root in service["tmpfs"]
+    assert service["read_only"] is True
+    assert service["user"] == "pwuser"
 
 
 def test_existing_image_build_installs_browser_probe_module_without_a_version_upgrade():
