@@ -18,6 +18,8 @@ from urllib.parse import urlsplit
 
 import httpx
 
+from . import igwatcher_probe_diagnostics as diagnostics
+
 
 MARKER = "[IGWATCHER-PROBE] "
 BASE_URL = "https://igwatcher.com"
@@ -56,7 +58,7 @@ class _Stop(Exception):
 
 def _new_report(now: float) -> dict:
     return {
-        "schema_version": 1, "source": "igwatcher", "target": TARGET,
+        "schema_version": 2, "source": "igwatcher", "target": TARGET,
         "platform": platform.system().lower(), "architecture": platform.machine().lower(),
         "observed_at": datetime.fromtimestamp(now, timezone.utc).isoformat(timespec="seconds"),
         "elapsed_ms": 0, "request_count": 0, "events": [],
@@ -288,6 +290,11 @@ async def run_probe(*, transport: httpx.AsyncBaseTransport | None = None,
         quality = _list_quality(items, endpoint, seen[endpoint], now())
         event.update(count=len(items), quality=quality,
                      state="observed" if items else "empty_unverified")
+        try:
+            event["diagnostics"] = diagnostics.collection_diagnostics(items, endpoint)
+        except Exception:
+            # Optional observations must not change source requests or decisions.
+            event["diagnostics"] = {"collection_error": True}
         if not items or any(quality.values()):
             incomplete = True
         cursor = None
@@ -331,6 +338,10 @@ async def run_probe(*, transport: httpx.AsyncBaseTransport | None = None,
                     if type(count) is not int or count != len(items):
                         event["quality"]["album_count_mismatch"] += 1
                         incomplete = True
+                    try:
+                        event["diagnostics"]["album_comparison"] = diagnostics.album_comparison(album, len(items))
+                    except Exception:
+                        event["diagnostics"]["collection_error"] = True
                 # A single continuation per feed, not an unbounded history crawl.
                 for endpoint, cursor, limit in (("posts", posts_cursor, 24), ("reels", reels_cursor, 12)):
                     if cursor:

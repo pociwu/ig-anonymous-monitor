@@ -15,6 +15,27 @@ IGWatcher 在 Windows 的單次初查曾取得四類非空資料，但不代表 
 目前 Stories 為空、時間欄位不足或協作貼文擁有者不同，都需要個別判讀，不能因 HTTP 200 就宣稱完整成功。
 工具不寫入正式資料，不啟用媒體下載，也不改既有四分類頁面、舊資料或正式來源設定。
 
+### Ubuntu ARM64 首輪回報
+
+操作人員在 Ubuntu ARM64 的一次全新容器執行中，8 個請求均回 HTTP 200，
+耗時 14.028 秒，取得 Stories 2 筆、Posts 兩頁合計 24 筆、Reels 兩頁合計 24 筆、
+Highlights 5 個專輯，以及第一個專輯的 9 筆內文。
+這提供了目標主機單次匿名取得四類樣本的證據，**不代表長期穩定、全歷史完整或可以啟用正式來源**。
+結果仍是 `sample_incomplete`、`production_ready: false`。
+
+首輪的品質計數需要區分：
+
+- Posts 的 owner 後綴不一致合計 11 次，Reels 合計 13 次；兩分類可能有同一媒體，
+  不能相加宣稱有 24 筆不同的異常內容，也沒有證據據此確認為協作貼文。
+- 輪播相關的 21 次異常涉及子項 ID 問題；這是問題計數，**不是 21 篇父貼文都有問題**。
+  同一問題也可能同時記入輪播及子項 ID 品質欄位，不能再重複相加。
+  原摘要尚不足以拆分「缺少 ID、數字 ID、不合形狀或重複 ID」及受影響父貼文數。
+- 第一個精華專輯的 `album_count_mismatch: 1` 表示發現一次數量不一致，
+  **不是少一筆內文**。原摘要沒有輸出宣告數與實收數的差距，不能猜測缺了多少。
+
+因此後續版本只增加這三類的被動診斷；既有品質門檻、請求數與停止規則不變，
+不因 HTTP 全部成功便略過 owner、輪播或專輯數量問題。
+
 ## 隔離與請求邊界
 
 - 使用獨立 `compose.igwatcher-probe.yaml`、`ig-monitor-igwatcher-probe` 專案名稱及
@@ -50,7 +71,8 @@ URL 欄位形狀合格不表示媒體可下載；ID 字串合格不表示已對�
 git -C /srv/ig-monitor/ig-anonyig-validation pull --ff-only
 ```
 
-確認更新成功後，重建專用映像。這次新增 Python 模組，**不能只 pull 後沿用舊映像**：
+確認更新成功後，重建專用映像。`schema_version: 2` 的診斷新增 Python 輔助模組，
+**不能只 pull 後沿用舊映像**；Compose 隔離與命令不需另加參數：
 
 ```bash
 docker compose -f /srv/ig-monitor/ig-anonyig-validation/compose.igwatcher-probe.yaml build probe
@@ -97,6 +119,11 @@ echo $?
 `elapsed_ms`、`request_count`、`events` 及 `outcome`。`production_ready` **永遠是 `false`**，
 不會因一次成功而自行更改正式來源。
 
+新版摘要使用 `schema_version: 2`，在集合事件補入最小 `diagnostics`，
+分開呈現輪播子項 ID 原因、受影響父貼文數、owner 欄位形狀／一致性，以及精華數量關係。
+只從同一次既有回應計算，不新增請求，也不回傳外部 owner 值、帳號名稱或原始欄位內容。
+若更新後仍見 `schema_version: 1`，請先確認已重建並執行新版映像，不要連續重跑來源查詢。
+
 每個事件的 `endpoint`／`page` 指出本輪查詢位置；`http_status: null` 表示沒有取得狀態，
 `body_state` 區分尚未讀取、JSON、不合法 JSON、過大或不支援編碼。
 `state: observed` 只表示取得可檢查的非空資料，**不保證品質通過**；`empty_unverified` 表示空樣本尚未驗證為正常空集合。
@@ -123,6 +150,64 @@ Posts／Reels 的 `pagination` 為 `available`、`exhausted` 或 `unavailable`�
 第二頁的 `cursor_advanced` 只檢查下一個 cursor 是否不同於輸入（包含來源回報結束），
 仍須搭配重複 ID 與品質計數判讀，不是新內容或可靠續頁的單獨證據。
 
+### schema 2：被動診斷明細
+
+每個已取得有效集合的事件新增 `diagnostics`；它只補充既有 `quality`，不參與放寬品質門檻。
+即使 owner 欄位與 NASA 相符，也不會抵銷原本的後綴不一致，或讓 `sample_incomplete` 變成通過。
+診斷函式非預期失敗時，`collection_error` 會是 `true`；原有品質結果、總結果及請求順序仍保留，
+此時不能把缺少的診斷或零計數解讀為沒有問題。
+`truncated: true` 表示有內容因形狀或檢查上限而未完整檢查；不是資料已完整的訊號。
+
+#### 輪播子項 ID
+
+`diagnostics.carousel` 只出現在 Posts／Reels 集合事件。
+
+| 欄位 | 意義 |
+| --- | --- |
+| `parents` | 本事件檢查的輪播父項目數 |
+| `id_affected_parents` | 有子項 ID 問題或非物件子項的父項目數；每個父項目只計一次，不等於問題次數 |
+| `children_checked`／`non_object_children` | 已檢查子項位置總數，包含非物件項；後者另列其中不是物件的數量 |
+| `uninspected_parents` | `children` 不是清單或超過 20 個子項而未展開檢查的父項目數；同時標記 `truncated`，不能視為子項沒有問題 |
+| `id_states` | 對物件子項的 ID，互斥計入 `missing`、`null`、`numeric`、`invalid_string`、`invalid_type` 或 `valid_string`；非物件子項不進此分組 |
+| `duplicate_ids` | 同一輪播內重複的有效 ID 主體次數，是額外計數，可能同時存在於 `valid_string`；不能與互斥狀態相加當成子項總數 |
+| `ownership` | 輪播子項層級的 owner 形狀與一致性計數，規則同下節，不沿用父貼文結果替子項背書 |
+
+例如多個子項缺少 ID，可能都屬於同一父貼文；應以 `id_affected_parents` 判讀受影響父項目數，
+以 `id_states` 判讀原因。這不是補造子項 ID，也尚未確認原始輪播順序。
+每個集合最多檢查 100 個項目；超出既有邊界不會額外抓取或放寬解析。
+
+#### owner 欄位形狀與一致性
+
+`diagnostics.ownership` 記錄集合項目，`diagnostics.carousel.ownership` 記錄已檢查的子項，
+各有 `items_checked`、`fields`、`containers`、`collaboration_fields`。
+只觀察預先列出的欄位；`fields: {}` 表示沒有觀測到這些白名單欄位，**不代表回應完全沒有任何作者資訊**。
+
+| 欄位 | 記錄內容與限制 |
+| --- | --- |
+| `fields` | 只允許 `owner.id`、`owner.pk`、`user.id`、`user.pk`、`owner_id`、`user_id`；僅出現實際觀測到的路徑，不輸出來源自訂鍵或值 |
+| 每條路徑的形狀計數 | `present`、`null`、`numeric`、`invalid`、`valid_string`；`present` 是總出現數，不能再與其子分類相加 |
+| 每條路徑的一致性計數 | `target_match`／`target_mismatch` 比對固定 NASA ID；`suffix_match`／`suffix_mismatch`／`suffix_unknown` 比對該媒體 ID 的後綴，只對符合嚴格正整數字串形狀的 owner ID 比較 |
+| `containers` | 只記錄 `owner`／`user` 是 `object`、`null` 或 `other`，不列其內容 |
+| `collaboration_fields` | 只記錄 `coauthor_producers`、`invited_coauthor_producers`、`collaborators` 是 `array`、`object`、`null` 或 `other`；不解析成員、不輸出帳號或 ID，也不認定邀請已獲接受 |
+
+數字型 owner ID 只計為 `numeric`，不強制轉成字串或參與一致性比較。
+各路徑可能描述同一項目，同一項目也可能同時貢獻目標及後綴比較，不能跨欄位加總為不同作者數。
+協作欄位只是候選欄位的形狀觀察，**不是已驗證的 IGWatcher 協作契約或協作貼文證據**。
+摘要不保存或輸出外部 owner／協作者的原值、任意來源鍵、URL 或錯誤訊息。
+
+#### 精華宣告數與實收數
+
+第一個專輯內文事件另有 `diagnostics.album_comparison`：
+
+- `declared_state`／`received_state` 為 `integer`、`missing`、`null`、`invalid_type` 或 `out_of_range`。
+- `declared_count`／`received_count` 只輸出 0 至 1,000,000 內的整數，其他狀態為 `null`；
+  缺少、無效、超界或 `relation: unknown` **都不等於零筆**。
+- `relation` 為 `equal`、`declared_more`、`declared_less` 或 `unknown`，分別表示兩數相等、宣告較多、
+  宣告較少或無法比較。這比較的是來源宣告與這次實收，不是 Instagram 原始總數的真值。
+
+這些明細可區分「宣告數大於實收數」與「沒有有效宣告數」等不同情況，但不會下載其他專輯來補數，
+也不會自行解釋為刪除、快取、隱藏或抓取遺漏；原因仍需後續證據。
+
 ## 開發驗證範圍
 
 2026-09-09 在 Windows 開發過程以本工具做了一輪真實 HTTP 查詢：8 個請求均取得 200，
@@ -132,11 +217,12 @@ Stories 2 筆、Posts 與 Reels 各兩頁且每頁 12 筆、Highlights 5 個專�
 後續加嚴的類型與子項檢查使用離線合成回應驗證，沒有為此連續重跑來源。
 
 部署回歸測試靜態檢查 Compose 隔離、環境變數、程序入口、時限、套件包含與操作命令。
-探測器測試使用合成回應，不需連線 IGWatcher：
+探測器與被動診斷測試使用合成回應，不需連線 IGWatcher：
 
 ```powershell
-python -m pytest tests/test_igwatcher_probe.py tests/test_igwatcher_probe_deployment.py -ra
+python -m pytest tests/test_igwatcher_probe.py tests/test_igwatcher_probe_diagnostics.py tests/test_igwatcher_probe_deployment.py -ra
 ```
 
 Windows 開發環境沒有 Docker CLI；這些靜態／離線測試**不能代替 Ubuntu ARM64 容器實測**。
-操作人員上述一次性執行的結果，才是此次目標部署環境的來源證據。
+操作人員已提供前述第一輪目標主機結果；新增被動診斷本身仍須由更新映像後的一次性回報確認，
+不能將開發環境的合成測試當成新版已在 Ubuntu 驗證完成。
