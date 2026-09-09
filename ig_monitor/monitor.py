@@ -59,9 +59,12 @@ class Monitor:
         self.telegram = TelegramSender(config.telegram)
         self.relationship_trigger = RelationshipTrigger(db, config.instagram_enrichment)
         self.apify = apify_client or (ApifyClient(config.apify) if config.apify.enabled else None)
-        for path in (config.paths.data_dir, config.paths.download_root, config.paths.diagnostics_dir,
-                     config.browser.browsers_path):
+        for path in (config.paths.data_dir, config.paths.download_root, config.paths.diagnostics_dir):
             path.mkdir(parents=True, exist_ok=True)
+        # The HTTP-only IGWatcher adapter must not create a browser cache,
+        # especially when its unused default is inside a read-only config mount.
+        if config.browser.anonymous_source in {"legacy", "anonyig"}:
+            config.browser.browsers_path.mkdir(parents=True, exist_ok=True)
 
     async def run(self) -> int:
         self.db.sync_accounts(self.config.accounts)

@@ -44,6 +44,14 @@ docker compose -f /srv/ig-monitor/ig-anonyig-validation/compose.igwatcher-valida
 
 若出現來源驗證／限流／拒絕存取，該輪後續來源與下載請求立即停止，沿用來源冷卻機制；不要連續重跑或把失敗改當空集合。退出 `0` 只代表本輪保守保存流程沒有操作錯誤，不是 `production_ready=true`；退出 `1` 檢查分類／下載錯誤日誌，`124` 表示外層期限到達。原 `[IGWATCHER-PROBE]` 嚴格探針未修改，仍可能報 `sample_incomplete`／退出 `2`。
 
+## 啟動時出現唯讀瀏覽器目錄錯誤
+
+`84ec0fd` 在建立 `Monitor` 時仍無條件建立瀏覽器目錄；範本省略 `browser.browsers_path`，其預設因設定檔位置而解析為 `/validation-config/data/ms-playwright`，在唯讀容器中會得到 `OSError: [Errno 30] Read-only file system`。此錯誤發生於來源請求前，不是 IGWatcher 的驗證／限流結果，也不是工作目錄或其他專案的部署問題。
+
+修正後，HTTP-only IGWatcher 不建立瀏覽器目錄；AnonyIG／Legacy 保留原本的初始化。仍建立隔離資料、媒體及診斷目錄，不改 `read_only: true` 或資料卷。重新執行本頁第一次執行的 `pull`、`build validate`、`run` 即可；僅重新 `run` 舊映像不會取得修正，不需要清除 volume。
+
+回歸測試以實際範本經 `load_config` 載入，在檔案系統邊界模擬設定掛載的 EROFS，再執行真正的 `Monitor` 初始化；另驗證 AnonyIG／Legacy 仍建立瀏覽器目錄。這補上先前只檢查 YAML 明示路徑、而未測試隱含相對路徑的缺口，不代表已在開發機執行 Ubuntu Docker。
+
 ## 已知契約與未驗證部分
 
 2026-09-09 開發機補查 profile 收到 HTTP 403 後已停止，沒有重試或下載現場媒體。本地測試使用人工 HTTP／媒體資料及真實暫存 SQLite，**未在開發機執行 Ubuntu ARM64 Docker 或證明新 adapter 的現場下載成功**。先前 Ubuntu 探針成功只證明當時端點可回資料。
