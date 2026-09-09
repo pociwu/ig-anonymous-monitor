@@ -46,6 +46,118 @@ def test_profile_only_returns_exact_counts_without_browser_or_media_requests():
     assert "cookie" not in requests[0].headers
 
 
+def test_profile_accepts_observed_igwatcher_graph_counts_without_media_count():
+    """2026-09-09 search shape; synthetic identity/counts, no saved source data."""
+    payload = profile()
+    user = payload["data"]["user"]
+    del user["media_count"]
+    user.update({
+        "edge_owner_to_timeline_media": {"count": 15},
+        "edge_followed_by": {"count": 1200},
+        "edge_follow": {"count": 30},
+    })
+    requests = []
+
+    def respond(request):
+        requests.append(request)
+        return httpx.Response(200, json=payload)
+
+    async def run():
+        async with IGWatcherScraper(config(), transport=httpx.MockTransport(respond)) as scraper:
+            return await scraper.scrape_profile_only("https://instagram.com/alice/")
+
+    snapshot = asyncio.run(run())
+    assert (snapshot.posts, snapshot.followers, snapshot.following) == (15, 1200, 30)
+    assert len(requests) == 1
+
+
+PROFILE_COUNT_FIELDS = (
+    ("media_count", "edge_owner_to_timeline_media"),
+    ("follower_count", "edge_followed_by"),
+    ("following_count", "edge_follow"),
+)
+
+
+def profile_with_both_count_locations():
+    payload = profile()
+    user = payload["data"]["user"]
+    for direct, edge in PROFILE_COUNT_FIELDS:
+        user[edge] = {"count": user[direct]}
+    return payload
+
+
+@pytest.mark.parametrize("location", ["direct", "graph", "both"])
+@pytest.mark.parametrize("zero", [False, True])
+def test_profile_count_locations_agree_and_accept_real_zero(location, zero):
+    payload = profile_with_both_count_locations()
+    user = payload["data"]["user"]
+    for direct, edge in PROFILE_COUNT_FIELDS:
+        if zero:
+            user[direct] = user[edge]["count"] = 0
+        if location == "direct":
+            del user[edge]
+        elif location == "graph":
+            del user[direct]
+    base = transport_for()
+
+    def respond(request):
+        if request.url.path.endswith("/search"):
+            return httpx.Response(200, json=payload)
+        return base.handler(request)
+
+    snapshot = scrape_with(httpx.MockTransport(respond)).snapshot
+    assert (snapshot.posts, snapshot.followers, snapshot.following) == ((0, 0, 0) if zero else (15, 1200, 30))
+
+
+def assert_bad_profile_stops_before_media(payload):
+    requests = []
+
+    def respond(request):
+        requests.append(request)
+        return httpx.Response(200, json=payload)
+
+    with pytest.raises(ScrapeFailure, match="個人檔案計數"):
+        scrape_with(httpx.MockTransport(respond))
+    assert len(requests) == 1
+    assert requests[0].url.path.endswith("/search")
+
+
+@pytest.mark.parametrize("direct,edge", PROFILE_COUNT_FIELDS)
+@pytest.mark.parametrize("location", ["direct", "graph"])
+@pytest.mark.parametrize("invalid", [None, True, False, -1, 1.5, "15", "1.2K", [], {}])
+def test_invalid_present_profile_count_is_not_hidden_by_valid_alias(direct, edge, location, invalid):
+    payload = profile_with_both_count_locations()
+    user = payload["data"]["user"]
+    if location == "direct":
+        user[direct] = invalid
+    else:
+        user[edge]["count"] = invalid
+    assert_bad_profile_stops_before_media(payload)
+
+
+@pytest.mark.parametrize("direct,edge", PROFILE_COUNT_FIELDS)
+@pytest.mark.parametrize("invalid", [None, [], {}, 15, True, "secret provider payload"])
+def test_malformed_profile_count_container_is_not_hidden_by_valid_direct_count(direct, edge, invalid):
+    payload = profile_with_both_count_locations()
+    payload["data"]["user"][edge] = invalid
+    assert_bad_profile_stops_before_media(payload)
+
+
+@pytest.mark.parametrize("direct,edge", PROFILE_COUNT_FIELDS)
+def test_missing_all_profile_count_locations_is_not_zero(direct, edge):
+    payload = profile_with_both_count_locations()
+    user = payload["data"]["user"]
+    del user[direct], user[edge]
+    assert_bad_profile_stops_before_media(payload)
+
+
+@pytest.mark.parametrize("direct,edge", PROFILE_COUNT_FIELDS)
+def test_disagreeing_profile_counts_do_not_choose_an_arbitrary_alias(direct, edge):
+    payload = profile_with_both_count_locations()
+    payload["data"]["user"][edge]["count"] += 1
+    assert_bad_profile_stops_before_media(payload)
+
+
 def test_profile_block_stops_before_collection_requests_and_redacts_response_text():
     requests = []
 

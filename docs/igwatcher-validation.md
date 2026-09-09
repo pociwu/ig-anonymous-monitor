@@ -52,11 +52,27 @@ docker compose -f /srv/ig-monitor/ig-anonyig-validation/compose.igwatcher-valida
 
 回歸測試以實際範本經 `load_config` 載入，在檔案系統邊界模擬設定掛載的 EROFS，再執行真正的 `Monitor` 初始化；另驗證 AnonyIG／Legacy 仍建立瀏覽器目錄。這補上先前只檢查 YAML 明示路徑、而未測試隱含相對路徑的缺口，不代表已在開發機執行 Ubuntu Docker。
 
+## HTTP 200 後出現個人檔案計數錯誤
+
+`9d6d48c` 及先前版本只接受直接欄位 `media_count`／`follower_count`／`following_count`。2026-09-09 Ubuntu 回報來源 HTTP 200 後，開發機單次讀取 [NASA search 回應](https://igwatcher.com/wp-json/igw/v1/search?username=nasa)，確認貼文數位於 `data.user.edge_owner_to_timeline_media.count`，沒有 `media_count`；追蹤者與追蹤數則同時具有直接欄位與相同數值的巢狀欄位。因此先前的計數錯誤是欄位對應漏項，不是這次回應缺少貼文總數。
+
+修正後接受以下已確認位置，並保留原直接欄位的相容性：
+
+| 計數 | `data.user` 內的直接欄位 | `data.user` 內的巢狀欄位 |
+| --- | --- | --- |
+| 貼文數 | `media_count` | `edge_owner_to_timeline_media.count` |
+| 追蹤者數 | `follower_count` | `edge_followed_by.count` |
+| 追蹤數 | `following_count` | `edge_follow.count` |
+
+每項至少一處存在；所有出現的對應欄位都必須是非負整數，且雙處存在時必須相等。真正的 `0` 可接受，缺值、`null`、布林值、浮點數、數字字串、縮寫計數或矛盾數值都會停止，不會任選一個值或補成零。錯誤只附上固定欄位名稱，不輸出來源內容。
+
+先前嚴格探針的 profile 階段只檢查身分與隱私，沒有檢驗計數；因此探針成功未涵蓋這項契約。新增測試使用現場欄位結構、人工身分與計數，重現原錯誤；並涵蓋 profile-only、正常收集及既有資料不被錯誤計數覆蓋。修正後開發機以真正 adapter 單次讀取 NASA 個人檔案已成功；未在這次檢查下載媒體。Ubuntu 請重新執行本頁的 `pull`、`build validate`、`run`，不需要更改設定或清除資料卷。
+
 ## 已知契約與未驗證部分
 
-2026-09-09 開發機補查 profile 收到 HTTP 403 後已停止，沒有重試或下載現場媒體。本地測試使用人工 HTTP／媒體資料及真實暫存 SQLite，**未在開發機執行 Ubuntu ARM64 Docker 或證明新 adapter 的現場下載成功**。先前 Ubuntu 探針成功只證明當時端點可回資料。
+2026-09-09 較早的開發機 profile 補查曾收到 HTTP 403 並停止；後續上述計數診斷與修正驗證收到 HTTP 200。這只證明當次個人檔案回應可解析，不保證匿名來源持續可用。本地離線測試使用人工 HTTP／媒體資料及真實暫存 SQLite，**未在開發機執行 Ubuntu ARM64 Docker 或證明新 adapter 的現場下載成功**。先前 Ubuntu 探針成功只證明當時端點可回資料。
 
-目前 profile 解析明確要求 `data.user` 中字串 `id`、相符 `username`、布林 `is_private`、非負整數 `media_count`／`follower_count`／`following_count`、字串 `full_name`／`biography`／`profile_pic_url`；`pk` 若存在必須與 `id` 相同。這套完整欄位映射尚待 Ubuntu 實際回應驗證，缺欄位時會明確失敗，不填假 0。
+目前 profile 解析明確要求 `data.user` 中字串 `id`、相符 `username`、布林 `is_private`、上表的三項明確計數、字串 `full_name`／`biography`／`profile_pic_url`；`pk` 若存在必須與 `id` 相同。缺欄位或欄位互相矛盾時會明確失敗，不填假 0。
 
 媒體僅允許 HTTPS `cdninstagram.com`、`fbcdn.net` 及其子網域、預設或 443 埠，不跟隨重新導向，不接受任意代理網址。這是保守允許清單，不代表已確認 IGWatcher 所有回應都使用這些主機；其他網址會拒收並保留部分完成狀態。每份 JSON 上限 2 MiB、媒體 100 MiB；JSON 請求至多 20 秒、媒體至多 30 秒（亦受設定的較短期限限制），每類頁數有上限，本範本另有整輪 600 秒外層期限。來源變更契約需要另外查證，不會自動放寬。
 

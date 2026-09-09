@@ -42,6 +42,23 @@ class _ContractError(ValueError):
     pass
 
 
+def _profile_count(user: dict, direct: str, edge: str) -> int:
+    """Resolve known count locations without masking malformed or stale aliases."""
+    values = []
+    if direct in user:
+        values.append(user[direct])
+    if edge in user:
+        container = user[edge]
+        if not isinstance(container, dict) or "count" not in container:
+            raise _ContractError(f"個人檔案計數容器無效：{edge}.count")
+        values.append(container["count"])
+    if not values or any(type(value) is not int or value < 0 for value in values):
+        raise _ContractError(f"個人檔案計數缺失或不是非負整數：{direct}/{edge}.count")
+    if any(value != values[0] for value in values[1:]):
+        raise _ContractError(f"個人檔案計數互相矛盾：{direct}/{edge}.count")
+    return values[0]
+
+
 def _username(url: str) -> str:
     try:
         parsed = urlsplit(url)
@@ -336,14 +353,14 @@ class IGWatcherScraper(ProfileScraper):
             raise _ContractError("個人檔案身分缺失或與查詢不符")
         if type(user.get("is_private")) is not bool:
             raise _ContractError("個人檔案隱私狀態不明")
-        for key in ("media_count", "follower_count", "following_count"):
-            if type(user.get(key)) is not int or user[key] < 0:
-                raise _ContractError("個人檔案計數缺失或不是非負整數")
+        posts = _profile_count(user, "media_count", "edge_owner_to_timeline_media")
+        followers = _profile_count(user, "follower_count", "edge_followed_by")
+        following = _profile_count(user, "following_count", "edge_follow")
         if not isinstance(user.get("biography"), str) or not isinstance(user.get("full_name"), str):
             raise _ContractError("個人檔案文字欄位缺失")
         return ProfileSnapshot(
             username=actual, display_name=user["full_name"], bio=user["biography"],
-            posts=user["media_count"], followers=user["follower_count"], following=user["following_count"],
+            posts=posts, followers=followers, following=following,
             privacy=PrivacyState.PRIVATE if user["is_private"] else PrivacyState.PUBLIC,
             avatar_url=_media_url(user.get("profile_pic_url")),
             observed_at=datetime.now(UTC).isoformat(timespec="microseconds"),

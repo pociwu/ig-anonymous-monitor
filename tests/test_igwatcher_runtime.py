@@ -298,3 +298,109 @@ def test_monitor_persists_conservative_groups_and_disabled_mode_keeps_only_obser
         assert other.pending_media(other_id, 100) == []
     finally:
         other.close()
+
+
+def nested_count_profile():
+    """Synthetic values with the observed IGWatcher search count structure."""
+    return {
+        "id": "123", "pk": "123", "username": "nasa", "is_private": False,
+        "edge_owner_to_timeline_media": {"count": 12},
+        "edge_followed_by": {"count": 32}, "follower_count": 32,
+        "edge_follow": {"count": 3}, "following_count": 3,
+        "full_name": "NASA", "biography": "",
+        "profile_pic_url": "https://scontent.cdninstagram.com/avatar.png",
+    }
+
+
+def run_monitor_with_profile(media_runtime, monkeypatch, user):
+    config, db, _account, _snapshot = media_runtime
+    config = replace(config, telegram=replace(config.telegram, enabled=False),
+                     heartbeat=replace(config.heartbeat, enabled=False),
+                     apify=replace(config.apify, enabled=False))
+    requests = []
+    empty_collections = {
+        "/wp-json/igw/v1/stories", "/wp-json/igw/v1/posts",
+        "/api/reels", "/wp-json/igw/v1/highlights",
+    }
+
+    def respond(request):
+        requests.append((request.url.host, request.url.path))
+        if request.url.host == "scontent.cdninstagram.com":
+            assert request.url.path == "/avatar.png"
+            return httpx.Response(200, content=image_bytes(), headers={"content-type": "image/png"})
+        assert request.url.host == "igwatcher.com"
+        if request.url.path == "/wp-json/igw/v1/search":
+            return httpx.Response(200, json={"status": "success", "code": 200, "data": {"user": user}})
+        assert request.url.path in empty_collections
+        return httpx.Response(200, json={
+            "status": "success", "code": 200, "data": [], "has_more": False, "nextMaxId": None,
+        })
+
+    original_client = httpx.AsyncClient
+
+    class OfflineClient(original_client):
+        def __init__(self, *args, **kwargs):
+            kwargs["transport"] = httpx.MockTransport(respond)
+            super().__init__(*args, **kwargs)
+
+    monkeypatch.setattr(httpx, "AsyncClient", OfflineClient)
+    return asyncio.run(Monitor(config, db).run()), requests
+
+
+def test_monitor_persists_observed_nested_profile_counts_and_collects(media_runtime, monkeypatch):
+    _config, db, account, _snapshot = media_runtime
+    exit_code, requests = run_monitor_with_profile(media_runtime, monkeypatch, nested_count_profile())
+    assert exit_code == 0
+    saved = db.snapshot_from_row(db.get_account_by_id(account["id"]))
+    assert (saved.posts, saved.followers, saved.following) == (12, 32, 3)
+    history = db.conn.execute(
+        "SELECT posts,followers,following FROM profile_history WHERE account_id=?", (account["id"],),
+    ).fetchall()
+    assert [tuple(row) for row in history] == [(12, 32, 3)]
+    observations = db.collection_observations(account["id"], "igwatcher")
+    assert set(observations) == {
+        "stories", "posts", "reels", "highlights",
+    }
+    assert all(item["last_attempt_at"] and item["error"] is None for item in observations.values())
+    assert requests == [
+        ("igwatcher.com", "/wp-json/igw/v1/search"),
+        ("igwatcher.com", "/wp-json/igw/v1/stories"),
+        ("igwatcher.com", "/wp-json/igw/v1/posts"),
+        ("igwatcher.com", "/api/reels"),
+        ("igwatcher.com", "/wp-json/igw/v1/highlights"),
+        ("scontent.cdninstagram.com", "/avatar.png"),
+    ]
+    initial = next(event for event in db.pending_events(100) if event["kind"] == "initial")
+    assert tuple(initial["payload"]["snapshot"][key] for key in ("posts", "followers", "following")) == (12, 32, 3)
+
+
+@pytest.mark.parametrize("count_problem", ["missing", "invalid", "conflicting"])
+def test_bad_profile_counts_preserve_good_snapshot_without_zero_events(
+    media_runtime, monkeypatch, count_problem,
+):
+    _config, db, account, snapshot = media_runtime
+    db.record_success(account["id"], snapshot, [], [])
+    before = db.get_account_by_id(account["id"])["snapshot_json"]
+    collections_before = db.collection_observations(account["id"], "igwatcher")
+    user = nested_count_profile()
+    if count_problem == "missing":
+        del user["edge_owner_to_timeline_media"]
+    elif count_problem == "invalid":
+        user["media_count"] = 12
+        user["edge_owner_to_timeline_media"]["count"] = True
+    else:
+        user["media_count"] = 0
+
+    exit_code, requests = run_monitor_with_profile(media_runtime, monkeypatch, user)
+    assert exit_code == 1
+    refreshed = db.get_account_by_id(account["id"])
+    assert refreshed["snapshot_json"] == before
+    assert refreshed["fail_count"] == 1
+    assert "計數" in refreshed["last_error"]
+    history = db.conn.execute(
+        "SELECT posts,followers,following FROM profile_history WHERE account_id=?", (account["id"],),
+    ).fetchall()
+    assert [tuple(row) for row in history] == [(12, 30, 2)]
+    assert db.pending_events(100) == []
+    assert db.collection_observations(account["id"], "igwatcher") == collections_before
+    assert requests == [("igwatcher.com", "/wp-json/igw/v1/search")]
