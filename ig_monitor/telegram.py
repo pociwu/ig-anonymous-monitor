@@ -169,12 +169,15 @@ def format_event(kind: str, payload: dict[str, Any]) -> str:
         return (f"Apify 每月用量已達 {payload['cap_usd']:.2f} 美元上限\n"
                 "使用者名稱反查已暫停，將於下一個 Apify 計費週期恢復。")
     if kind == "media_summary":
-        return "\n".join([
+        lines = [
             f"{label}：媒體同步完成", f"新增照片：{payload.get('photos', 0)}",
             f"新增影片：{payload.get('videos', 0)}",
             f"略過既有檔案：{payload.get('duplicate', 0)}", f"下載失敗：{payload.get('failed', 0)}",
             f"尚待下載：{payload.get('pending', 0)}",
-        ])
+        ]
+        if payload.get("review_downloaded"):
+            lines.append(f"其中歸屬待確認：{payload['review_downloaded']}（來源查詢結果，不代表已確認作者；不附媒體）")
+        return "\n".join(lines)
     if kind == "heartbeat":
         return "\n".join([
             "IG Monitor 運作正常", f"監控帳號：{payload['accounts']}", f"正常：{payload['normal']}",

@@ -33,6 +33,18 @@ class CollectionObservation:
 
 
 @dataclass(slots=True)
+class MediaGroupObservation:
+    category: str
+    group_id: str
+    revision_id: str
+    declared_count: int | None
+    received_count: int
+    observed_at: str
+    complete: bool = False
+    album_title: str | None = None
+
+
+@dataclass(slots=True)
 class MediaCandidate:
     media_key: str
     category: str
@@ -52,6 +64,11 @@ class MediaCandidate:
     caption: str | None = None
     owner_id: str | None = None
     owner_username: str | None = None
+    # Provenance belongs to a source membership, not to its deduplicated file.
+    identity_kind: str = "source"
+    ownership_status: str = "unspecified"
+    queried_username: str | None = None
+    revision_id: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -92,6 +109,7 @@ class ScrapeResult:
     collections: dict[str, CollectionObservation] = field(default_factory=dict)
     source: str = "legacy"
     profile_id: str | None = None
+    groups: list[MediaGroupObservation] = field(default_factory=list)
 
 
 @dataclass(slots=True)

@@ -213,6 +213,18 @@ _Avoid_: 每次雙向抓取、部分共同名單
 
 ## Media identity
 
+**Source-returned membership**: 匿名來源在指定帳號查詢中回傳某個媒體的觀測；不等同於該帳號是作者或共同作者。
+_Avoid_: 已驗證作者、共同貼文
+
+**Ownership pending review**: 已保存但作者歸屬證據不足的 Source-returned membership；在獨立待確認區顯示，與跨帳號污染隔離不同。
+_Avoid_: Media quarantine review、已驗證媒體
+
+**Local carousel item identity**: 來源沒有提供子項目 ID 時，本地為特定輪播觀測及位置建立的識別；跨觀測的內容相同與否由下載內容指紋判定。
+_Avoid_: Instagram 子項目 ID、永久位置識別
+
+**Media group observation**: 一次取得的輪播順序或精華專輯項目及其宣告數量；新觀測不會單憑位置或缺席覆寫舊內容，也不證明來源完整。
+_Avoid_: 完整備份、已確認刪除
+
 **Duplicate media**: 同一 Instagram 帳號內，內容與構圖高度一致、差異主要來自解析度或壓縮的兩筆或多筆照片／影片。裁切、浮水印、文字覆蓋或重新編輯版視為不同媒體；不同 Instagram 帳號的相同內容也不視為重複。
 
 **Canonical media**: 一組 Duplicate media 中畫質最高、被保留作為顯示與檔案來源的那一筆媒體；若後續取得更高畫質版本，Canonical media 可被替換。

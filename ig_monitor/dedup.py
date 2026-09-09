@@ -186,14 +186,22 @@ def deduplicate_existing_media(db, config: DedupConfig, apply: bool = False) -> 
             errors.append(f"media {row['id']}: file not found: {path}")
             continue
         try:
-            digest = row.get("sha256") or sha256_file(path)
-            fingerprint = row_fingerprint(row) or fingerprint_file(path, row["kind"])
+            digest = sha256_file(path)
+            fingerprint = (row_fingerprint(row) if digest == row.get("sha256") else None)
+            fingerprint = fingerprint or fingerprint_file(path, row["kind"])
             if row["kind"] == "video" and not fingerprint.frame_phashes:
                 ffmpeg_missing = True
             analyzed[row["id"]] = (row, digest, fingerprint)
         except Exception as exc:
             errors.append(f"media {row['id']}: {exc}")
 
+    # Protect every exact copy of pending content before building perceptual
+    # clusters. Otherwise an early legacy cluster can absorb a later pending
+    # copy by SHA and then replace its bytes with another legacy member.
+    protected = {
+        (row["account_id"], row["kind"], digest)
+        for row, digest, _ in analyzed.values() if db.media_requires_review(row["id"])
+    }
     groups: list[list[tuple[dict[str, Any], str, MediaFingerprint]]] = []
     for entry in analyzed.values():
         row, digest, fingerprint = entry
@@ -202,7 +210,10 @@ def deduplicate_existing_media(db, config: DedupConfig, apply: bool = False) -> 
             sample_row, sample_digest, sample_fingerprint = group[0]
             if row["account_id"] != sample_row["account_id"] or row["kind"] != sample_row["kind"]:
                 continue
-            if digest == sample_digest or (config.enabled and is_similar(fingerprint, sample_fingerprint, config)):
+            exact_only = (row["account_id"], row["kind"], digest) in protected or any(
+                (member[0]["account_id"], member[0]["kind"], member[1]) in protected for member in group
+            )
+            if digest == sample_digest or (not exact_only and config.enabled and is_similar(fingerprint, sample_fingerprint, config)):
                 matching = group
                 break
         if matching is None:

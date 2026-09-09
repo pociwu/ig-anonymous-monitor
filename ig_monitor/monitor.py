@@ -171,6 +171,11 @@ class Monitor:
                                     opened.add(account["id"])
                         recorded_media = result.media if self.config.schedule.media_download_enabled else []
                         self.db.record_success(account["id"], result.snapshot, events, recorded_media)
+                        if result.groups:
+                            # Counts describe source observations, not downloaded files;
+                            # preserve them even while media recording is disabled.
+                            self.db.record_group_observations(account["id"], source, result.groups)
+                        self.db.set_meta(f"anonymous_active_source:{account['id']}", source)
                         if result.profile_id:
                             self.db.set_meta(f"anonymous_profile_id:{account['id']}:{source}", result.profile_id)
                         if result.collections:
@@ -198,6 +203,9 @@ class Monitor:
                         if self.config.schedule.media_download_enabled:
                             LOG.info("%s 載入成功：%s，發現媒體 %d", account["label"],
                                      result.snapshot.privacy.value, len(result.media))
+                            if source == "igwatcher":
+                                LOG.warning("%s：IGWatcher 保守模式，%d 筆候選歸屬待確認；不代表完整性驗收通過",
+                                            account["label"], sum(item.ownership_status == "pending" for item in result.media))
                         else:
                             LOG.warning("%s 載入成功：%s；媒體記錄與下載目前已暫停，忽略候選 %d 筆",
                                         account["label"], result.snapshot.privacy.value, len(result.media))
@@ -242,6 +250,8 @@ class Monitor:
                             failures += 1
                             break
                         attachments = stats.pop("attachments", [])
+                        if source == "igwatcher" and stats["failed"]:
+                            failures += 1
                         if self.config.telegram.send_new_media:
                             stats["attachments"] = attachments[:self.config.telegram.max_new_media_attachments]
                             stats["attachment_total"] = len(attachments)

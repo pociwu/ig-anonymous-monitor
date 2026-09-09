@@ -1,0 +1,31 @@
+# Isolated trial only. Never copy over production config.yaml.
+accounts:
+  - url: https://www.instagram.com/nasa/
+    label: NASA IGWatcher validation
+    relationship_tracking: false
+    post_tracking: false
+paths:
+  data_dir: /validation/data
+  download_root: /validation/media
+  diagnostics_dir: /validation/diagnostics
+browser:
+  anonymous_source: igwatcher
+  timeout_seconds: 20
+  retry_count: 0
+  max_pages_per_collection: 4
+schedule:
+  interval_minutes: 15
+  account_delay_min_seconds: 10
+  account_delay_max_seconds: 20
+  media_download_enabled: true
+  media_limit_per_account: 8
+telegram:
+  enabled: false
+heartbeat:
+  enabled: false
+apify:
+  enabled: false
+instagram_enrichment:
+  enabled: false
+instagram_posts:
+  enabled: false

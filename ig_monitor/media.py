@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
+from uuid import uuid4
 
 from .config import DedupConfig
 from .db import Database
@@ -16,6 +17,13 @@ from .utils import extension_for, safe_name, sha256_bytes
 
 
 LOG = logging.getLogger("ig_monitor")
+
+
+def _file_matches(path: Path, digest: str) -> bool:
+    try:
+        return path.is_file() and sha256_bytes(path.read_bytes()) == digest
+    except OSError:
+        return False
 
 
 def _validate_payload(data: bytes, content_type: str | None, kind: str) -> None:
@@ -54,8 +62,10 @@ async def download_account_media(db: Database, scraper: ProfileScraper, account:
                                  root: Path, limit: int, dedup: DedupConfig) -> dict[str, Any]:
     stats: dict[str, Any] = {"downloaded": 0, "photos": 0, "videos": 0,
                              "duplicate": 0, "upgraded": 0, "failed": 0,
-                             "pending": 0, "attachments": []}
-    items = db.pending_media(account["id"], limit)
+                             "pending": 0, "review_downloaded": 0, "attachments": []}
+    source = getattr(getattr(scraper, "config", None), "anonymous_source", None)
+    items = (db.pending_media(account["id"], limit, source=source) if source == "igwatcher"
+             else db.pending_media(account["id"], limit))
     for item in items:
         try:
             source = getattr(getattr(scraper, "config", None), "anonymous_source", None)
@@ -66,7 +76,8 @@ async def download_account_media(db: Database, scraper: ProfileScraper, account:
             _validate_payload(data, content_type, item["kind"])
             digest = sha256_bytes(data)
             duplicate = db.downloaded_by_hash(account["id"], digest)
-            if duplicate and duplicate.get("local_path"):
+            if (duplicate and duplicate.get("local_path")
+                    and _file_matches(Path(duplicate["local_path"]), digest)):
                 db.mark_media_duplicate(item["id"], duplicate["id"], digest)
                 stats["duplicate"] += 1
                 continue
@@ -79,7 +90,9 @@ async def download_account_media(db: Database, scraper: ProfileScraper, account:
                 except Exception as exc:
                     LOG.warning("Media fingerprint failed for %s: %s", item["media_key"], exc)
             similar: tuple[dict[str, Any], MediaFingerprint] | None = None
-            if fingerprint:
+            # Pending provenance/local carousel observations preserve exact bytes;
+            # visual similarity is not enough to replace their historical content.
+            if fingerprint and not db.media_requires_review(item["id"]):
                 similar = await _find_similar(db, account["id"], item["id"], item["kind"], fingerprint, dedup)
 
             category = safe_name(item["category"], "posts")
@@ -98,6 +111,10 @@ async def download_account_media(db: Database, scraper: ProfileScraper, account:
                     stats["duplicate"] += 1
                     continue
 
+            if path.exists() and not _file_matches(path, digest):
+                # Never overwrite a historical file whose bytes no longer match
+                # the digest-based name (external edits or a name collision).
+                path = path.with_name(f"{path.stem}_{uuid4().hex}{path.suffix}")
             if not path.exists():
                 temp = path.with_suffix(path.suffix + ".part")
                 temp.write_bytes(data)
@@ -120,11 +137,16 @@ async def download_account_media(db: Database, scraper: ProfileScraper, account:
                 continue
             stats["downloaded"] += 1
             stats["videos" if item["kind"] == "video" else "photos"] += 1
-            stats["attachments"].append({"kind": item["kind"], "path": str(path)})
+            if db.media_requires_review(item["id"]):
+                stats["review_downloaded"] += 1
+            else:
+                stats["attachments"].append({"kind": item["kind"], "path": str(path)})
         except Exception as exc:
             if isinstance(exc, ScrapeFailure) and exc.blocker:
                 raise
             db.mark_media_failed(item["id"], str(exc))
+            if source == "igwatcher" and isinstance(exc, ScrapeFailure):
+                LOG.warning("%s：IGWatcher 媒體下載失敗：%s", account["label"], exc)
             stats["failed"] += 1
     counts = db.media_counts(account["id"])
     stats["pending"] = counts.get("pending", 0) + counts.get("failed", 0)
@@ -136,6 +158,8 @@ async def _find_similar(
     fingerprint: MediaFingerprint, config: DedupConfig,
 ) -> tuple[dict[str, Any], MediaFingerprint] | None:
     for candidate in db.canonical_media(account_id, kind, media_id):
+        if db.media_requires_review(candidate["id"]):
+            continue
         candidate_fingerprint = row_fingerprint(candidate)
         candidate_path = Path(candidate["local_path"]) if candidate.get("local_path") else None
         if candidate_fingerprint is None and candidate_path and candidate_path.is_file():

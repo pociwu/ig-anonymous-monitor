@@ -250,8 +250,8 @@ def load_config(
                                 _resolve(base, str(browser.get("browsers_path", "./data/ms-playwright"))),
                                 str(browser.get("anonymous_source", "anonyig")),
                                 12, 12, int(browser.get("max_pages_per_collection", 4)))
-    if browser_cfg.anonymous_source not in {"anonyig", "legacy"}:
-        raise ValueError("browser.anonymous_source 必須是 anonyig 或 legacy")
+    if browser_cfg.anonymous_source not in {"anonyig", "legacy", "igwatcher"}:
+        raise ValueError("browser.anonymous_source 必須是 anonyig、legacy 或 igwatcher")
     if not 1 <= browser_cfg.max_pages_per_collection <= 20:
         raise ValueError("browser.max_pages_per_collection 必須介於 1 與 20")
 

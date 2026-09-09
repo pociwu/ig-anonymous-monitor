@@ -26,6 +26,9 @@ class ProfileScraper:
         if cls is ProfileScraper and config.anonymous_source == "anonyig":
             from .anonyig import AnonyIGScraper
             return object.__new__(AnonyIGScraper)
+        if cls is ProfileScraper and config.anonymous_source == "igwatcher":
+            from .igwatcher import IGWatcherScraper
+            return object.__new__(IGWatcherScraper)
         return object.__new__(cls)
 
     def __init__(self, config: BrowserConfig):

@@ -1,0 +1,33 @@
+# Standalone conservative download trial. Never merge with production compose.
+name: ig-monitor-igwatcher-validation
+
+x-validation: &validation
+  build:
+    context: .
+  image: ig-anonymous-monitor:igwatcher-validation
+  init: true
+  working_dir: /app
+  environment:
+    IG_MONITOR_RUNTIME: docker-igwatcher-validation
+    PYTHONUNBUFFERED: "1"
+    TZ: Asia/Taipei
+    XDG_CONFIG_HOME: /tmp
+  volumes:
+    - ./igwatcher-validation.example.yaml:/validation-config/settings.yaml:ro
+    - igwatcher-validation-state:/validation
+  read_only: true
+  tmpfs:
+    - /tmp
+
+services:
+  validate:
+    <<: *validation
+    command: [timeout, --signal=TERM, --kill-after=5s, 600s, python, -m, ig_monitor, --config, /validation-config/settings.yaml]
+  dashboard:
+    <<: *validation
+    command: [python, -m, ig_monitor.dashboard, --db, /validation/data/state.sqlite3, --host, 0.0.0.0, --port, "8888"]
+    ports:
+      - "127.0.0.1:8890:8888"
+
+volumes:
+  igwatcher-validation-state:

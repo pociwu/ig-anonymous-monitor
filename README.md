@@ -6,6 +6,8 @@
 正式媒體新增與下載仍預設關閉。AnonyIG 的 Reels 獨立完整性、任意歷史游標恢復及 Docker 長期驗證仍有限制，不能將目前版本視為已完成來源驗收。
 請先閱讀[隔離驗證與遷移說明](docs/anonyig-migration-validation.md)，不要直接開啟正式下載。
 
+另提供 **IGWatcher 保守保存版**：缺少子項 ID 的輪播使用本地觀測識別，作者未確認內容放在獨立待確認區，精華保留歷史與缺件標示；不把這些取捨當成來源完整性通過。預設來源與正式下載開關不變，請使用[IGWatcher Ubuntu 隔離驗證](docs/igwatcher-validation.md)測試實際下載，不要直接替換正式設定。
+
 ## Docker Compose 部署
 
 正式部署改用 Docker Compose，支援 Ubuntu 22.04/24.04 的 amd64 與 arm64。映像包含

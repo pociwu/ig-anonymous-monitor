@@ -86,7 +86,7 @@ CARD_PAGE = """<!doctype html>
   </div>
   <div class="row"><span>狀態</span><span class="{{ 'bad' if a.fail_count >= 3 else 'ok' }}">{{ a.privacy }} / {{ a.fail_count }} 次失敗</span></div>
   <div class="row"><span>Profile ID</span><span class="value">{{ a.instagram_profile_id or '尚未建立' }}</span></div>
-  <div class="row"><span>媒體</span><span>{{ a.downloaded }} 已下載 / {{ a.pending }} 待處理</span></div>
+  <div class="row"><span>媒體</span><span>{{ a.downloaded }} 已下載 / {{ a.pending }} 待處理{% if a.ownership_pending %}<br>{{ a.ownership_pending }} 已保存・歸屬待確認{% endif %}</span></div>
 </a>
 {% if management_enabled %}
 <form class="remove-form" method="post" action="{{ url_for('toggle_relationship_tracking', account_id=a.id) }}">
@@ -137,6 +137,7 @@ DETAIL_PAGE = """<!doctype html>
 :root{color-scheme:dark}*{box-sizing:border-box}body{font-family:system-ui,-apple-system,sans-serif;background:#0b1120;color:#e5e7eb;margin:0;padding:24px}main{max-width:1200px;margin:auto}a{color:#c4b5fd;text-decoration:none}.profile{display:flex;gap:18px;align-items:center;background:#172033;border:1px solid #27344d;border-radius:16px;padding:20px}.avatar{width:96px;height:96px;border-radius:50%;object-fit:cover;background:#27344d}.avatar-fallback{display:grid;place-items:center;font-size:2rem;font-weight:700}.muted{color:#94a3b8}.stats{display:flex;gap:18px;flex-wrap:wrap;margin-top:10px}.stats strong{display:block;font-size:1.25rem}.delta{margin-left:4px;font-size:.8em}.delta-up{color:#4ade80}.delta-down{color:#fb7185}.meta{background:#172033;border-radius:12px;padding:16px;margin:16px 0;overflow-wrap:anywhere}.quarantine-alert{display:flex;justify-content:space-between;align-items:center;gap:16px;background:#422006;border:1px solid #d97706;border-radius:12px;padding:14px 16px;margin:16px 0}.quarantine-alert a{font-weight:700;white-space:nowrap}.trend{background:#172033;border-radius:12px;margin:16px 0;overflow:hidden}.trend summary{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px;cursor:pointer;font-size:1.35rem;font-weight:700;list-style:none;user-select:none}.trend summary::-webkit-details-marker{display:none}.trend summary:after{content:'展開';color:#94a3b8;font-size:.88rem;font-weight:500}.trend[open] summary{border-bottom:1px solid #334155}.trend[open] summary:after{content:'收合'}.trend-content{padding:16px}.chart-panel h3{margin-bottom:4px}.chart-panel+.chart-panel{border-top:1px solid #334155;margin-top:24px;padding-top:16px}.chart-wrap{position:relative;width:100%;height:360px}.chart-wrap canvas{display:block;width:100%;height:360px;touch-action:pan-y}.chart-legend{display:flex;gap:18px;flex-wrap:wrap;color:#cbd5e1}.legend-key:before{content:'';display:inline-block;width:12px;height:3px;margin-right:6px;vertical-align:middle;background:var(--legend-color)}.chart-tooltip{position:absolute;z-index:2;pointer-events:none;transform:translate(-50%,-100%);padding:7px 10px;border:1px solid #64748b;border-radius:8px;background:#020617;color:#f8fafc;white-space:nowrap;font-size:.88rem;box-shadow:0 6px 18px #0008}.chart-tooltip[hidden]{display:none}.tabs{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}.tabs button{border:1px solid #334155;background:#172033;color:#cbd5e1;border-radius:999px;padding:9px 14px;cursor:pointer}.tabs button.active{background:#7c3aed;border-color:#8b5cf6;color:white}.gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px}.media{background:#172033;border-radius:14px;overflow:hidden;border:1px solid #27344d}.media[hidden]{display:none}.media img,.media video{width:100%;aspect-ratio:1/1;display:block;object-fit:cover;background:#020617}.caption{padding:10px;font-size:.85rem;color:#94a3b8}@media(max-width:600px){body{padding:14px}.profile{align-items:flex-start}.avatar{width:72px;height:72px}.gallery{grid-template-columns:repeat(2,minmax(0,1fr))}.quarantine-alert{align-items:flex-start;flex-direction:column}.chart-wrap,.chart-wrap canvas{height:300px}}\n</style></head><body><main>
 <style>.media-photo{display:block;cursor:zoom-in}.media-photo:focus-visible{outline:3px solid #a78bfa;outline-offset:-3px}body.lightbox-open{overflow:hidden}.lightbox{position:fixed;inset:0;z-index:1000;display:grid;place-items:center;padding:20px}.lightbox[hidden]{display:none}.lightbox-backdrop{position:absolute;inset:0;border:0;background:#020617e8;cursor:zoom-out}.lightbox-panel{position:relative;z-index:1;width:min(1200px,96vw);height:min(92vh,900px);display:grid;grid-template-rows:auto minmax(0,1fr) auto;background:#0b1120;border:1px solid #334155;border-radius:18px;overflow:hidden;box-shadow:0 24px 80px #000}.lightbox-header{display:flex;justify-content:flex-end;padding:8px 10px}.lightbox-close,.lightbox-nav,.lightbox-slideshow{border:1px solid #475569;background:#172033;color:#f8fafc;cursor:pointer}.lightbox-close{width:42px;height:42px;border-radius:50%;font-size:1.6rem;line-height:1}.lightbox-stage{position:relative;min-height:0;display:grid;place-items:center;padding:0 70px}.lightbox-image{max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain}.lightbox-nav{position:absolute;top:50%;transform:translateY(-50%);width:50px;height:64px;border-radius:14px;font-size:2.6rem;line-height:1}.lightbox-nav.previous{left:12px}.lightbox-nav.next{right:12px}.lightbox-nav:disabled,.lightbox-slideshow:disabled{opacity:.35;cursor:not-allowed}.lightbox-footer{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 18px;background:#111827}.lightbox-caption{min-width:0;color:#cbd5e1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.lightbox-controls{display:flex;align-items:center;gap:12px;flex:none}.lightbox-counter{color:#94a3b8;font-variant-numeric:tabular-nums}.lightbox-slideshow{border-radius:999px;padding:8px 14px}.lightbox button:focus-visible{outline:3px solid #a78bfa;outline-offset:2px}@media(max-width:600px){.lightbox{padding:0}.lightbox-panel{width:100vw;height:100vh;border:0;border-radius:0}.lightbox-stage{padding:0 48px}.lightbox-nav{width:40px;height:54px;font-size:2rem}.lightbox-nav.previous{left:4px}.lightbox-nav.next{right:4px}.lightbox-footer{align-items:flex-start;flex-direction:column}.lightbox-caption{white-space:normal}.lightbox-controls{width:100%;justify-content:space-between}}</style>
 <style>.media img{object-fit:contain}.lightbox{padding:0}.lightbox-panel{width:100vw;height:100vh;height:100dvh;border:0;border-radius:0}.lightbox-stage{overflow:hidden}.lightbox-image{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}</style>
+<style>.pending-tabs[hidden]{display:none}.gallery.pending-view{grid-template-columns:repeat(auto-fill,minmax(min(100%,320px),1fr))}.provenance{color:#fde68a;border-bottom:1px solid #92400e;line-height:1.6}.group-observation{line-height:1.7;border-top:1px solid #334155}.group-history{padding:12px;border-top:1px solid #334155}.group-history>summary{cursor:pointer;color:#c4b5fd;overflow-wrap:anywhere}.history-children{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}.history-media{font-size:.8rem;overflow-wrap:anywhere}.history-media img{aspect-ratio:1/1}.history-version+.history-version{border-top:1px solid #334155;margin-top:12px}.no-local-media{padding:16px;color:#94a3b8}</style>
 <p><a href="{{ url_for('index') }}">← 返回帳號列表</a></p>
 <section class="profile">
 {% if account.has_avatar %}<img class="avatar" src="{{ url_for('avatar_asset', account_id=account.id) }}" alt="{{ account.label }}">
@@ -159,7 +160,7 @@ DETAIL_PAGE = """<!doctype html>
 </div>
 </details>
 <h2>照片與影片</h2>
-<p class="muted">匿名來源：AnonyIG（正式環境驗證中）。此處僅顯示已保存的本地媒體；分類巡檢成功不代表正式媒體下載已啟用。時間顯示：台北時間（UTC+08:00）。</p>
+<p class="muted">匿名來源：{{ account.anonymous_source_label }}（正式環境驗證中）。此處僅顯示已保存的本地媒體；分類巡檢成功不代表正式媒體下載已啟用。時間顯示：台北時間（UTC+08:00）。</p>
 <style>.gallery-time{display:inline-block;white-space:nowrap}.collection-times{display:flex;flex-wrap:wrap;gap:4px 18px}.collection-times>span{display:inline-block}</style>
 <style>.lightbox-nav{z-index:1}.carousel-controls{display:flex;justify-content:space-between;gap:8px;padding:6px 10px}.carousel-controls button{font:inherit;font-size:.8rem;border:1px solid #475569;border-radius:8px;background:#172033;color:#e5e7eb;padding:7px 9px;cursor:pointer}.carousel-controls button:disabled{opacity:.35;cursor:not-allowed}.carousel-controls button:focus-visible{outline:3px solid #a78bfa;outline-offset:2px}</style>
 <style>.gallery-entry[hidden],.collection-state[hidden],.gallery-empty[hidden]{display:none}.group-heading{padding:14px 14px 0;margin:0;overflow-wrap:anywhere}.group-caption{white-space:pre-wrap;overflow-wrap:anywhere}.media-children{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;gap:2px}.media-child{flex:0 0 100%;min-width:0;scroll-snap-align:start}.media-child img,.media-child video{object-fit:contain}.media-position{padding:5px 10px;color:#cbd5e1;font-size:.8rem}.collection-state{background:#172033;border:1px solid #334155;border-radius:12px;padding:14px;margin:12px 0;overflow-wrap:anywhere}.collection-state[data-state="partial"],.collection-state[data-state="blocked"],.collection-state[data-state="error"],.collection-state[data-state="unknown"]{border-color:#b45309}.collection-state p{margin:6px 0}.gallery-empty{grid-column:1/-1}.album-contents{padding-top:12px}.album-contents summary{cursor:pointer;padding:0 14px 12px}.legacy-note{margin:0 0 12px}@media(max-width:600px){.gallery{grid-template-columns:1fr}}</style>
@@ -169,7 +170,10 @@ DETAIL_PAGE = """<!doctype html>
 <button data-source="highlights" aria-pressed="false">精選動態 {{ account.gallery_counts.highlights.all }}</button>
 <button data-source="reels" aria-pressed="false">Reels 短片 {{ account.gallery_counts.reels.all }}</button>
 <button data-source="legacy" aria-pressed="false">舊版媒體 {{ account.gallery_counts.legacy.all }}</button>
+{% if account.pending_gallery %}<button data-source="pending" aria-pressed="false">歸屬待確認 {{ account.pending_group_count }}</button>{% endif %}
 </nav>
+{% if account.pending_gallery %}<section class="collection-state" data-status-source="pending" data-state="partial" hidden><strong>歸屬待確認・獨立保存區</strong><p>查詢帳號不等於作者。IGWatcher 回傳於此帳號查詢中的內容，尚未取得足以驗證作者或共同作者的證據；不會自動併入一般分類。</p><p>此區與疑似跨帳號來源污染的隔離區不同，僅顯示本地已保存內容與來源觀測，不提供自動核准。</p></section>
+<nav class="tabs pending-tabs" hidden>{% for category, label in [('posts','貼文'),('stories','限時動態'),('highlights','精選動態'),('reels','Reels 短片')] %}<button data-pending-category="{{ category }}" class="{{ 'active' if category == 'posts' else '' }}" aria-pressed="{{ 'true' if category == 'posts' else 'false' }}">{{ label }} {{ account.pending_gallery_counts[category].all }}</button>{% endfor %}</nav>{% endif %}
 {% for category, observation in account.collection_observations.items() %}
 <section class="collection-state" data-status-source="{{ category }}" data-state="{{ observation.display_state }}" {% if category != 'posts' %}hidden{% endif %}>
 <strong>{{ observation.label }}</strong><p>{{ observation.message }}</p>
@@ -184,9 +188,12 @@ DETAIL_PAGE = """<!doctype html>
 <button data-kind="video" aria-pressed="false">影片</button>
 </nav>
 <section class="gallery">
-{% for group in account.gallery %}<article class="media gallery-entry" data-collection="{{ group.category }}" data-sources="{{ group.categories|join(' ') }}" data-kinds="{{ group.kinds|join(' ') }}" data-group-id="{{ group.group_id }}" {% if group.category != 'posts' %}hidden{% endif %}>
+{% for group in account.gallery + account.pending_gallery %}<article class="media gallery-entry" data-collection="{{ 'pending' if group.ownership_pending else group.category }}" data-pending-category="{{ group.category if group.ownership_pending else '' }}" data-sources="{{ group.categories|join(' ') }}" data-kinds="{{ group.kinds|join(' ') }}" data-group-id="{{ group.group_id }}" {% if group.category != 'posts' or group.ownership_pending %}hidden{% endif %}>
+{% if group.ownership_pending %}<div class="caption provenance"><strong>IGWatcher・歸屬待確認</strong><div>來源查詢帳號：@{{ group.queried_username or account.username }}（非作者確認）</div>{% if group.has_local_identity %}<div>本地子項目識別（非 Instagram ID）</div>{% endif %}</div>{% endif %}
+{% if group.observation %}<div class="caption group-observation"><div>來源宣告 {{ group.observation.declared_count if group.observation.declared_count is not none else '未知' }} · 本次回傳 {{ group.observation.received_count }} · 本地已保存 {{ group.children|length }}</div><div>完整性未確認；{% if group.category == 'highlights' %}本地保存數可能包含先前取得的內容。{% else %}本地保存數僅計目前版本；舊版本另行保留。{% endif %}</div><div>本次觀測：<time datetime="{{ group.observation.observed_at }}">{{ group.observation.observed_at|taipei_time }}</time></div>{% if group.ever_count_mismatch %}<div>來源曾有數量缺口；後續數量相等不視為已確認刪除。</div>{% endif %}</div>{% endif %}
 {% if group.category == 'highlights' %}<h3 class="group-heading">{{ group.album_title or '未命名精選專輯' }}</h3><details class="album-contents" open><summary>專輯內容 · 本地已下載 {{ group.children|length }} 個媒體</summary>{% endif %}
 <div class="media-children" aria-label="依來源順序排列的媒體">
+{% if not group.children %}<p class="no-local-media">目前版本尚無本地已保存媒體；來源回傳數不等於下載數。</p>{% endif %}
 {% for item in group.children %}<div class="media-child" data-media-id="{{ item.id }}" data-position="{{ item.position }}">
 {% if item.kind == 'video' %}<video controls preload="metadata" src="{{ url_for('media_asset', media_id=item.id) }}" aria-label="{{ '精選動態' if group.category == 'highlights' else '影片' }} {{ loop.index }}"></video>
 {% else %}<a class="media-photo" href="{{ url_for('media_asset', media_id=item.id) }}"><img loading="lazy" src="{{ url_for('media_asset', media_id=item.id) }}" alt="{{ group.album_title or '照片' }} {{ loop.index }}"></a>{% endif %}
@@ -194,6 +201,7 @@ DETAIL_PAGE = """<!doctype html>
 </div>{% endfor %}</div>
 {% if group.children|length > 1 %}<nav class="carousel-controls" aria-label="輪播媒體切換"><button type="button" data-carousel-step="-1" disabled>← 上一項</button><button type="button" data-carousel-step="1">下一項 →</button></nav>{% endif %}
 {% if group.category == 'highlights' %}</details>{% endif %}
+{% if group.history %}<details class="group-history"><summary>歷史觀測版本（{{ group.history|length }}）・不併入目前輪播</summary>{% for version in group.history %}<section class="history-version" data-revision-id="{{ version.revision_id }}"><p class="caption">觀測：{% if version.observed_at %}<time datetime="{{ version.observed_at }}">{{ version.observed_at|taipei_time }}</time>{% else %}時間未記錄{% endif %}{% if version.observation %}・來源宣告 {{ version.observation.declared_count if version.observation.declared_count is not none else '未知' }}／回傳 {{ version.observation.received_count }}{% endif %}{% if version.children %}・本地已保存 {{ version.children|length }} 個項目{% endif %}</p><div class="history-children">{% for item in version.children %}<a href="{{ url_for('media_asset', media_id=item.id) }}" target="_blank" rel="noopener" class="history-media" data-history-media-id="{{ item.id }}">{% if item.kind == 'image' %}<img loading="lazy" src="{{ url_for('media_asset', media_id=item.id) }}" alt="歷史觀測第 {{ item.position + 1 }} 項">{% else %}開啟歷史影片・第 {{ item.position + 1 }} 項{% endif %}</a>{% endfor %}</div></section>{% endfor %}</details>{% endif %}
 <div class="caption"><div>{{ group.category_labels|join(' · ') }}{% if group.published_at %} · <time class="gallery-time" datetime="{{ group.published_at }}">{{ group.published_at|taipei_time }}</time>{% endif %}</div>{% if group.caption %}<div class="group-caption">{{ group.caption }}</div>{% endif %}</div>
 </article>
 {% endfor %}
@@ -212,8 +220,9 @@ DETAIL_PAGE = """<!doctype html>
 </section>
 </div>
 <script>
-let selectedSource='posts',selectedKind='all';
+let selectedSource='posts',selectedKind='all',selectedPendingCategory='posts';
 const galleryCounts={{ account.gallery_counts|tojson }};
+const pendingGalleryCounts={{ account.pending_gallery_counts|tojson }};
 const collectionObservations={{ account.collection_observations|tojson }};
 function updateCarouselControls(card){
  const track=card.querySelector('.media-children'),previous=card.querySelector('[data-carousel-step="-1"]'),next=card.querySelector('[data-carousel-step="1"]');
@@ -232,21 +241,28 @@ document.querySelectorAll('.gallery-entry').forEach(card=>{
 window.addEventListener('resize',()=>document.querySelectorAll('.gallery-entry:not([hidden])').forEach(updateCarouselControls));
 function filterMedia(){
  let visible=0;
+ document.querySelector('.gallery').classList.toggle('pending-view',selectedSource==='pending');
  document.querySelectorAll('.gallery-entry').forEach(el=>{
-  const sourceMatch=el.dataset.collection===selectedSource;
+  const sourceMatch=el.dataset.collection===selectedSource&&(selectedSource!=='pending'||el.dataset.pendingCategory===selectedPendingCategory);
   const kindMatch=selectedKind==='all'||el.dataset.kinds.split(' ').includes(selectedKind);
   el.hidden=!(sourceMatch&&kindMatch);
   if(!el.hidden){visible++;updateCarouselControls(el)}
   else el.querySelectorAll('video').forEach(video=>video.pause());
  });
  document.querySelectorAll('[data-status-source]').forEach(el=>{el.hidden=el.dataset.statusSource!==selectedSource});
- const c=galleryCounts[selectedSource];
+ const pendingTabs=document.querySelector('.pending-tabs');if(pendingTabs)pendingTabs.hidden=selectedSource!=='pending';
+ const c=selectedSource==='pending'?pendingGalleryCounts[selectedPendingCategory]:galleryCounts[selectedSource];
  document.querySelector('.kind-tabs [data-kind="all"]').textContent=`全部 ${c.all}`;
  document.querySelector('.kind-tabs [data-kind="image"]').textContent=`照片 ${c.image}`;
  document.querySelector('.kind-tabs [data-kind="video"]').textContent=`影片 ${c.video}`;
  const empty=document.getElementById('gallery-empty');empty.hidden=visible>0;
- empty.textContent=selectedKind!=='all'&&c.all?'目前沒有符合此媒體類型的卡片。':selectedSource==='legacy'?'目前沒有未分組的舊版媒體。':collectionObservations[selectedSource].empty_message;
+ empty.textContent=selectedKind!=='all'&&c.all?'目前沒有符合此媒體類型的卡片。':selectedSource==='pending'?'此待確認分類尚無本地已保存內容；不代表來源沒有內容。':selectedSource==='legacy'?'目前沒有未分組的舊版媒體。':collectionObservations[selectedSource].empty_message;
 }
+document.querySelectorAll('.pending-tabs [data-pending-category]').forEach(button=>button.addEventListener('click',()=>{
+ selectedPendingCategory=button.dataset.pendingCategory;
+ document.querySelectorAll('.pending-tabs button').forEach(x=>{x.classList.toggle('active',x===button);x.setAttribute('aria-pressed',String(x===button))});
+ filterMedia();
+}));
 document.querySelectorAll('[data-source]').forEach(button=>button.addEventListener('click',()=>{
  selectedSource=button.dataset.source;
  document.querySelectorAll('[data-source]').forEach(x=>{x.classList.toggle('active',x===button);x.setAttribute('aria-pressed',String(x===button))});
@@ -456,6 +472,11 @@ def dashboard_data(db_path: Path, status_provider: Callable[[], dict[str, str]] 
                 )}
                 pending = int(media.get("pending", 0)) + int(media.get("failed", 0))
                 summary["pending"] += pending
+                from .anonymous_store import read_gallery_memberships
+                memberships = read_gallery_memberships(connection, row["id"])
+                pending_ids = {item["media_id"] for item in memberships if _ownership_pending(item)}
+                ordinary_ids = {item["media_id"] for item in memberships if not _ownership_pending(item)}
+                pending_only = pending_ids - ordinary_ids
                 accounts.append({
                     "id": row["id"], "label": row["label"], "username": snapshot.get("username"),
                     "display_name": snapshot.get("display_name"), "privacy": privacy,
@@ -468,7 +489,8 @@ def dashboard_data(db_path: Path, status_provider: Callable[[], dict[str, str]] 
                     "instagram_profile_id": row["instagram_profile_id"],
                     "effective_url": row["effective_url"] or row["url"], "last_success_at": row["last_success_at"],
                     "fail_count": int(row["fail_count"] or 0), "last_error": row["last_error"],
-                    "downloaded": int(media.get("downloaded", 0)), "pending": pending,
+                    "downloaded": max(0, int(media.get("downloaded", 0)) - len(pending_only)), "pending": pending,
+                    "ownership_pending": len(pending_ids),
                     "relationship_tracking": bool(row["relationship_tracking"]),
                     "relationship_status": row["relationship_status"],
                     "relationship_reconciled_at": row["relationship_reconciled_at"],
@@ -538,12 +560,30 @@ def account_detail_data(
             GROUP BY m.id,m.kind,m.published_at,m.local_path,m.downloaded_at
             ORDER BY COALESCE(m.published_at,m.downloaded_at) DESC,m.id DESC
         """, (account_id,)).fetchall()
+        from .anonymous_store import (
+            latest_collection_source, read_collection_observations,
+            read_gallery_memberships, read_group_observations,
+        )
+        memberships = read_gallery_memberships(connection, account_id)
+        group_observations = read_group_observations(connection, account_id)
+        pending_memberships = [item for item in memberships if _ownership_pending(item)]
+        ordinary_memberships = [item for item in memberships if not _ownership_pending(item)]
+        pending_categories: dict[int, set[str]] = {}
+        ordinary_categories: dict[int, set[str]] = {}
+        for item in memberships:
+            by_id = pending_categories if _ownership_pending(item) else ordinary_categories
+            by_id.setdefault(item["media_id"], set()).add(_collection_name(item["category"]))
         media = []
         counts = _empty_collection_counts()
         for item in media_rows:
             if not Path(item["local_path"]).is_file():
                 continue
             categories = sorted({_collection_name(value) for value in (item["categories"] or "").split(",")})
+            categories = sorted(set(categories) - (
+                pending_categories.get(item["id"], set()) - ordinary_categories.get(item["id"], set())
+            ))
+            if not categories:
+                continue
             media.append({
                 "id": item["id"], "kind": item["kind"], "published_at": item["published_at"],
                 "categories": categories,
@@ -551,13 +591,19 @@ def account_detail_data(
             for category in categories:
                 counts[category]["all"] += 1
                 counts[category][item["kind"]] += 1
-        from .anonymous_store import read_collection_observations, read_gallery_memberships
-
         account["gallery"], account["gallery_counts"] = _group_gallery(
-            media, read_gallery_memberships(connection, account_id)
+            media, ordinary_memberships, [item for item in group_observations if item["source"] != "igwatcher"]
         )
+        account["pending_gallery"], account["pending_gallery_counts"] = _group_gallery(
+            [], pending_memberships, [item for item in group_observations if item["source"] == "igwatcher"]
+        )
+        account["pending_group_count"] = len(account["pending_gallery"])
+        account["anonymous_source"] = latest_collection_source(connection, account_id)
+        account["anonymous_source_label"] = {
+            "igwatcher": "IGWatcher", "anonyig": "AnonyIG", "legacy": "舊版來源",
+        }.get(account["anonymous_source"], "未知來源")
         account["collection_observations"] = _collection_statuses(
-            read_collection_observations(connection, account_id, source="anonyig")
+            read_collection_observations(connection, account_id, source=account["anonymous_source"])
         )
         return account, media, counts
     finally:
@@ -821,14 +867,22 @@ def _format_taipei_time(value: str | None) -> str:
     return observed.astimezone(taipei).strftime("%Y-%m-%d %H:%M")
 
 
+def _ownership_pending(membership: dict[str, Any]) -> bool:
+    return membership.get("ownership_status") == "pending" or (
+        membership.get("source") == "igwatcher" and membership.get("ownership_status") != "verified"
+    )
+
+
 def _group_gallery(
     media: list[dict[str, Any]], memberships: list[dict[str, Any]],
+    observations: list[dict[str, Any]] | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, dict[str, int]]]:
     """Keep content membership separate from the canonical file and legacy metadata."""
     groups: dict[tuple[str, str, str], dict[str, Any]] = {}
     represented: dict[int, set[str]] = {}
-    seen: set[tuple[str, str, str, str, int, int]] = set()
-    for membership in memberships:
+    seen: set[tuple] = set()
+    ordered_memberships = sorted(memberships, key=lambda item: (item.get("updated_at") or "", item.get("id") or 0), reverse=True)
+    for membership in ordered_memberships:
         category = _collection_name(membership["category"])
         group_id = membership.get("group_id")
         if category == "legacy" or not group_id:
@@ -841,7 +895,12 @@ def _group_gallery(
         media_id = int(membership["media_id"])
         position = int(membership.get("position") or 0)
         source_media_id = str(membership.get("source_media_id") or "")
-        identity = (*key, source_media_id, position, media_id)
+        revision_id = str(membership.get("revision_id") or "")
+        identity = (*key, revision_id, source_media_id, position, media_id)
+        if source == "igwatcher" and category == "highlights":
+            # Keep the latest position for the same real source item. Two
+            # different source items may still share one deduplicated file.
+            identity = (*key, source_media_id or media_id)
         if identity in seen:
             continue
         seen.add(identity)
@@ -849,19 +908,65 @@ def _group_gallery(
             "category": category, "categories": [category], "source": source,
             "group_id": str(group_id), "album_title": None, "caption": None,
             "published_at": None, "children": [],
+            "ownership_pending": _ownership_pending(membership),
+            "queried_username": membership.get("queried_username"),
+            "has_local_identity": False, "history": [], "revision_id": "",
         })
+        group["has_local_identity"] |= membership.get("identity_kind") == "local"
         for field in ("album_title", "caption", "published_at"):
             if not group[field] and membership.get(field):
                 group[field] = membership[field]
-        group["children"].append({
+        child = {
             "id": media_id, "kind": membership["kind"], "position": position,
-            "source_media_id": source_media_id,
-        })
+            "source_media_id": source_media_id, "identity_kind": membership.get("identity_kind", "source"),
+        }
+        if membership.get("is_current", True):
+            group["children"].append(child)
+            group["revision_id"] = revision_id
+        else:
+            version = next((item for item in group["history"] if item["revision_id"] == revision_id), None)
+            if version is None:
+                version = {"revision_id": revision_id, "children": [], "observed_at": None}
+                group["history"].append(version)
+            version["children"].append(child)
         represented.setdefault(media_id, set()).add(category)
+
+    current_revisions = {
+        (item["source"], item["category"], str(item["group_id"])): item["revision_id"]
+        for item in observations or [] if item.get("is_current", False)
+    }
+    for observation in observations or []:
+        key = (observation["source"], observation["category"], str(observation["group_id"]))
+        group = groups.get(key)
+        if group is None:
+            group = groups.setdefault(key, {
+                "category": observation["category"], "categories": [observation["category"]],
+                "source": observation["source"], "group_id": str(observation["group_id"]),
+                "album_title": observation.get("album_title"), "caption": None,
+                "published_at": None, "children": [], "history": [], "revision_id": "",
+                "ownership_pending": observation["source"] == "igwatcher",
+                "queried_username": None, "has_local_identity": False,
+            })
+        if observation.get("is_current", False):
+            group["observation"] = observation
+            group["revision_id"] = observation["revision_id"]
+            group["album_title"] = observation.get("album_title") or group["album_title"]
+        elif observation["revision_id"] != current_revisions.get(key):
+            version = next((item for item in group["history"] if item["revision_id"] == observation["revision_id"]), None)
+            if version is None:
+                version = {"revision_id": observation["revision_id"], "children": []}
+                group["history"].append(version)
+            if not version.get("observed_at"):
+                version.update({"observed_at": observation["observed_at"], "observation": observation})
+        if observation.get("declared_count") is not None and observation["declared_count"] != observation["received_count"]:
+            group["ever_count_mismatch"] = True
 
     gallery = list(groups.values())
     for group in gallery:
         group["children"].sort(key=lambda item: (item["position"], item["source_media_id"], item["id"]))
+        for version in group["history"]:
+            version["children"].sort(key=lambda item: (item["position"], item["source_media_id"], item["id"]))
+        group["history"].sort(key=lambda item: (item.get("observed_at") or "", item["revision_id"]), reverse=True)
     gallery.sort(key=lambda group: (group["published_at"] or "", group["group_id"]), reverse=True)
     for item in media:
         categories = sorted(set(item["categories"]) - represented.get(item["id"], set()))

@@ -1334,11 +1334,16 @@ class Database(AnonymousStore):
         self.conn.execute("UPDATE events SET attempts=attempts+1,last_error=? WHERE id=?", (error, event_id))
         self.conn.commit()
 
-    def pending_media(self, account_id: int, limit: int) -> list[dict[str, Any]]:
+    def pending_media(self, account_id: int, limit: int, source: str | None = None) -> list[dict[str, Any]]:
         rows = self.conn.execute("""
           SELECT * FROM media WHERE account_id=? AND status IN ('pending','failed')
+            AND (? IS NULL OR EXISTS (
+              SELECT 1 FROM media_memberships mm WHERE mm.media_id=media.id AND mm.source=?
+            ) OR (?='legacy' AND NOT EXISTS (
+              SELECT 1 FROM media_memberships mm WHERE mm.media_id=media.id
+            )))
           ORDER BY CASE WHEN published_at IS NULL THEN 1 ELSE 0 END,published_at DESC,id DESC LIMIT ?
-        """, (account_id, limit)).fetchall()
+        """, (account_id, source, source, source, limit)).fetchall()
         return [dict(r) for r in rows]
 
     def mark_media_downloaded(
