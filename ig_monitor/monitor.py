@@ -10,6 +10,7 @@ from zoneinfo import ZoneInfo
 
 from .config import AppConfig, account_username
 from .apify import ApifyClient, ApifyError, IdentityResult
+from .avatar import reconcile_avatar
 from .db import Database
 from .media import download_account_media, save_avatar
 from .models import COLLECTIONS, PrivacyState, ScrapeFailure, ScrapeResult, TerminalState
@@ -151,6 +152,7 @@ class Monitor:
                                 avatar_path = old.avatar_path if old else None
                         result.snapshot.avatar_sha256 = avatar_hash
                         result.snapshot.avatar_path = avatar_path
+                        same_avatar_content = reconcile_avatar(old, result.snapshot)
                         events: list[tuple[str, str, dict]] = []
                         if account["failure_notified"]:
                             events.append((f"recovery:{account['id']}:{result.snapshot.observed_at}", "recovery",
@@ -161,6 +163,8 @@ class Monitor:
                             events.append((f"initial:{account['id']}", "initial", payload))
                         else:
                             changes = snapshot_changes(old, result.snapshot)
+                            if same_avatar_content:
+                                changes.pop("avatar_sha256", None)
                             if changes:
                                 serial = {key: [self._json_value(pair[0]), self._json_value(pair[1])]
                                           for key, pair in changes.items()}
