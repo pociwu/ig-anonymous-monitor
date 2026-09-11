@@ -4,6 +4,13 @@ from ig_monitor.telegram import event_steps, format_event
 
 
 class TelegramTests(unittest.TestCase):
+    def test_collection_failure_does_not_claim_no_content_was_updated(self):
+        text = format_event("failure", {"label": "alice / reels", "scope": "collection",
+                                      "fail_count": 3, "error": "部分項目格式無效"})
+        self.assertIn("連續 3 輪擷取或解析未完整成功", text)
+        self.assertNotIn("次未更新", text)
+        self.assertIn("既有內容保留", text)
+
     def test_collector_state_uses_chinese_labels_and_keeps_codes(self):
         text = format_event("collector_state", {
             "old_state": "risk_hold", "state": "observing", "reason": "BadPassword",

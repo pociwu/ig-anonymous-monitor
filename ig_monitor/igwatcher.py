@@ -197,8 +197,14 @@ def _post(item: dict, category: str, snapshot: ProfileSnapshot, profile_id: str)
     kind = item.get("media_type")
     if type(kind) is not int or kind not in (1, 2, 8):
         raise _ContractError("貼文媒體型別不明")
-    if category == "reels" and (kind != 2 or item.get("is_video") is not True or item.get("product_type") != "clips"):
-        raise _ContractError("來源未確認為 Reel")
+    if category == "reels":
+        if (kind != 2 or item.get("is_video") is not True
+                or item.get("product_type") not in ("clips", "feed")):
+            raise _ContractError("來源未確認為 Reel 或明確的影片貼文")
+        # IGWatcher also returns ordinary feed videos through its reels endpoint.
+        # Preserve them as pending posts, never relabel them as confirmed Reels.
+        if item["product_type"] == "feed":
+            category = "posts"
     if "is_carousel" in item and type(item["is_carousel"]) is not bool:
         raise _ContractError("輪播型別不明")
     if item.get("is_carousel") is True and kind != 8:

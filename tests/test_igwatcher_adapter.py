@@ -255,6 +255,76 @@ def scrape_with(transport, **options):
     return asyncio.run(run())
 
 
+@pytest.mark.parametrize("count", [1, 2])
+def test_feed_videos_returned_by_reels_are_saved_as_posts_without_collection_failure(count):
+    # Observed on 2026-09-11; synthetic IDs/URLs, same explicit feed/video shape.
+    items = [photo(f"{400 + index}_123", media_type=2, is_video=True,
+                   product_type="feed", children=[],
+                   video_url="https://video.cdninstagram.com/feed.mp4") for index in range(count)]
+    result = scrape_with(transport_for(reels=items))
+    assert result.collections["reels"].error is None
+    assert not result.collections["reels"].complete
+    assert len(result.media) == count
+    assert all(item.category == "posts" and item.kind == "video"
+               and item.ownership_status == "pending" for item in result.media)
+    assert all(group.category == "posts" for group in result.groups)
+
+
+@pytest.mark.parametrize("change", [
+    {"product_type": None}, {"product_type": "unknown"}, {"product_type": {}},
+    {"is_video": False}, {"media_type": 1}, {"video_url": None},
+    {"video_url": "https://localhost/private"}, {"taken_at_timestamp": None},
+    {"is_carousel": True}, {"children": [{"id": "999"}]},
+])
+def test_reels_feed_fallback_does_not_hide_invalid_data(change):
+    bad = photo("400_123", media_type=2, is_video=True, product_type="feed",
+                video_url="https://video.cdninstagram.com/feed.mp4")
+    bad.update(change)
+    result = scrape_with(transport_for(reels=[bad, reel()]))
+    assert result.collections["reels"].error
+    assert len(result.media) == 1
+    assert result.media[0].category == "reels"
+
+
+def test_mixed_reels_and_feed_videos_keep_their_actual_categories():
+    feed = photo("400_123", media_type=2, is_video=True, product_type="feed",
+                 video_url="https://video.cdninstagram.com/feed.mp4")
+    result = scrape_with(transport_for(reels=[feed, reel()]))
+    assert result.collections["reels"].error is None
+    assert [(item.source_media_id, item.category) for item in result.media] == [
+        ("400_123", "posts"), ("101_987", "reels")]
+    direct = scrape_with(transport_for(posts=[feed]))
+    assert direct.media[0].media_key == result.media[0].media_key
+
+
+def test_feed_fallback_recovers_incident_once_and_repeated_observation_keeps_one_media(tmp_path):
+    from ig_monitor.config import AccountConfig
+    from ig_monitor.db import Database
+    from ig_monitor.models import CollectionObservation
+
+    feed = photo("400_123", media_type=2, is_video=True, product_type="feed",
+                 video_url="https://video.cdninstagram.com/feed.mp4")
+    result = scrape_with(transport_for(posts=[feed], reels=[feed]))
+    db = Database(tmp_path / "state.sqlite3")
+    try:
+        db.sync_accounts([AccountConfig("https://instagram.com/alice/", True, "Alice")])
+        account_id = db.enabled_accounts()[0]["id"]
+        for _ in range(3):
+            db.record_collection_observations(account_id, "Alice", {
+                "reels": CollectionObservation(TerminalState.PARTIAL, error="old parser failure")
+            }, source="igwatcher")
+        for _ in range(2):
+            db.record_success(account_id, result.snapshot, [], result.media)
+            db.record_group_observations(account_id, "igwatcher", result.groups)
+            db.record_collection_observations(account_id, "Alice", result.collections, source="igwatcher")
+        state = db.collection_observations(account_id, "igwatcher")["reels"]
+        assert state["fail_count"] == 0 and not state["complete"]
+        assert [e["kind"] for e in db.pending_events(20)] == ["failure", "recovery"]
+        assert len(db.pending_media(account_id, 20)) == 1
+    finally:
+        db.close()
+
+
 def test_all_four_categories_are_saved_as_pending_without_invented_ownership():
     now = int(time.time())
     story = {"id": "301_123", "taken_at": now - 60, "expiring_at": now + 80000,
