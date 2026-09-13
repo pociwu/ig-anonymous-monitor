@@ -11,7 +11,7 @@ import hashlib
 import json
 import re
 import time
-from urllib.parse import urlsplit
+from urllib.parse import urljoin, urlsplit
 
 import httpx
 
@@ -292,7 +292,7 @@ class IGWatcherScraper(ProfileScraper):
         if self._blocked or (self.source_guard and self.source_guard()):
             raise ScrapeFailure("來源暫停，未送出請求", "IGWatcher", blocker="source_cooldown")
 
-    async def _read(self, url: str, *, params=None, media=False) -> tuple[bytes, str]:
+    async def _read(self, url: str, *, params=None, media=False, _redirects=0) -> tuple[bytes, str]:
         self._guard()
         if self._client is None:
             raise ScrapeFailure("來源 HTTP 工作階段尚未開啟", "IGWatcher")
@@ -323,6 +323,21 @@ class IGWatcherScraper(ProfileScraper):
                     if blocked:
                         self._blocked = True
                         raise ScrapeFailure("來源要求驗證", "IGWatcher", blocker="source_blocked")
+                    if media and response.status_code in (301, 302, 303, 307, 308):
+                        detail = f" [http_status={response.status_code}]"
+                        if _redirects >= 3:
+                            raise _ContractError("媒體重新導向超過 3 次上限" + detail)
+                        location = response.headers.get("location", "")
+                        try:
+                            if (not location or len(location) > 8192 or "\\" in location
+                                    or any(ord(c) <= 32 or ord(c) == 127 for c in location)):
+                                raise ValueError
+                            target = _media_url(urljoin(url, location))
+                        except (ValueError, _ContractError):
+                            raise _ContractError("媒體重新導向目的地缺失或不在允許範圍" + detail) from None
+                        # Keep the outer timeout active across the entire chain.
+                        # _read clears cookies and checks the source guard on every hop.
+                        return await self._read(target, media=True, _redirects=_redirects + 1)
                     if response.status_code != 200:
                         detail = f" [http_status={response.status_code}]" if media else ""
                         raise _ContractError("來源 HTTP 回應不成功" + detail)
