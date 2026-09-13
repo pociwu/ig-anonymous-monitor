@@ -1,5 +1,6 @@
 """Conservative source integration through configuration and the media pipeline."""
 import asyncio
+import re
 from dataclasses import replace
 from datetime import UTC, datetime
 from io import BytesIO
@@ -84,6 +85,62 @@ def image_bytes(changed=False):
     output = BytesIO()
     image.save(output, format="PNG")
     return output.getvalue()
+
+
+@pytest.mark.parametrize("status", [302, 404, 410, 500, 502])
+def test_failed_media_reports_safe_status_category_and_elapsed(media_runtime, caplog, status):
+    from ig_monitor.igwatcher import IGWatcherScraper
+    config, db, account, snapshot = media_runtime
+    item = replace(pending_item(), url="https://scontent.cdninstagram.com/private-path?token=secret")
+    db.record_success(account["id"], snapshot, [], [item])
+    requests = []
+
+    def respond(request):
+        requests.append(request)
+        return httpx.Response(status, content=b"secret body", headers={
+            "Location": "https://example.com/secret", "Set-Cookie": "secret=value"})
+
+    async def run():
+        async with IGWatcherScraper(config.browser, transport=httpx.MockTransport(respond)) as scraper:
+            return await download_account_media(db, scraper, account, config.paths.download_root, 8, config.dedup)
+
+    stats = asyncio.run(run())
+    assert stats["failed"] == stats["pending"] == 1
+    assert stats["downloaded"] == 0
+    assert len(requests) == 1
+    message = next(r.getMessage() for r in caplog.records if "IGWatcher 媒體下載失敗" in r.getMessage())
+    assert f"http_status={status}" in message
+    assert "category=posts" in message
+    assert "kind=image" in message
+    assert re.search(r"elapsed_ms=\d+", message)
+    for forbidden in ("secret", "token", "private-path", "https://", "Set-Cookie", "Location"):
+        assert forbidden not in message
+
+
+@pytest.mark.parametrize("failure", ["timeout", "connection", "payload"])
+def test_media_diagnostics_do_not_invent_http_status(media_runtime, caplog, failure):
+    from ig_monitor.igwatcher import IGWatcherScraper
+    config, db, account, snapshot = media_runtime
+    item = replace(pending_item(), url="https://scontent.cdninstagram.com/private?token=secret")
+    db.record_success(account["id"], snapshot, [], [item])
+
+    def respond(request):
+        if failure == "timeout":
+            raise httpx.ReadTimeout("secret timeout URL", request=request)
+        if failure == "connection":
+            raise httpx.ConnectError("secret connection URL", request=request)
+        return httpx.Response(200, content=b"secret invalid payload")
+
+    async def run():
+        async with IGWatcherScraper(config.browser, transport=httpx.MockTransport(respond)) as scraper:
+            return await download_account_media(db, scraper, account, config.paths.download_root, 8, config.dedup)
+
+    assert asyncio.run(run())["failed"] == 1
+    message = next(r.getMessage() for r in caplog.records if "IGWatcher 媒體下載失敗" in r.getMessage())
+    assert "[IGWATCHER-MEDIA-DIAG]" in message
+    assert "http_status=" not in message
+    assert "secret" not in message
+    assert "https://" not in message
 
 
 def test_download_saves_review_content_without_notification_attachments(media_runtime):

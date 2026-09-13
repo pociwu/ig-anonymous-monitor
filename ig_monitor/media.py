@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -67,6 +68,7 @@ async def download_account_media(db: Database, scraper: ProfileScraper, account:
     items = (db.pending_media(account["id"], limit, source=source) if source == "igwatcher"
              else db.pending_media(account["id"], limit))
     for item in items:
+        attempt_started = time.monotonic()
         try:
             source = getattr(getattr(scraper, "config", None), "anonymous_source", None)
             if source and db.source_cooldown(source):
@@ -146,7 +148,17 @@ async def download_account_media(db: Database, scraper: ProfileScraper, account:
                 raise
             db.mark_media_failed(item["id"], str(exc))
             if source == "igwatcher" and isinstance(exc, ScrapeFailure):
-                LOG.warning("%s：IGWatcher 媒體下載失敗：%s", account["label"], exc)
+                # Only fixed enums and elapsed time: never log signed URLs,
+                # response bodies, cookies or redirect destinations.
+                category = item.get("category")
+                category = category if category in {"posts", "stories", "highlights", "reels"} else "unknown"
+                kind = item.get("kind")
+                kind = kind if kind in {"image", "video"} else "unknown"
+                LOG.warning(
+                    "%s：IGWatcher 媒體下載失敗：%s [IGWATCHER-MEDIA-DIAG] category=%s kind=%s elapsed_ms=%d",
+                    account["label"], exc, category, kind,
+                    max(0, int((time.monotonic() - attempt_started) * 1000)),
+                )
             stats["failed"] += 1
     counts = db.media_counts(account["id"])
     stats["pending"] = counts.get("pending", 0) + counts.get("failed", 0)

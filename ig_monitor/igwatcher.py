@@ -324,7 +324,8 @@ class IGWatcherScraper(ProfileScraper):
                         self._blocked = True
                         raise ScrapeFailure("來源要求驗證", "IGWatcher", blocker="source_blocked")
                     if response.status_code != 200:
-                        raise _ContractError("來源 HTTP 回應不成功")
+                        detail = f" [http_status={response.status_code}]" if media else ""
+                        raise _ContractError("來源 HTTP 回應不成功" + detail)
                     return result, response.headers.get("content-type", "")
         except ScrapeFailure:
             raise
