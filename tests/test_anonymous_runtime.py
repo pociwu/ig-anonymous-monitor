@@ -271,6 +271,47 @@ def test_source_recovery_waits_until_run_has_no_new_block(runtime):
     assert db.source_cooldown("anonyig")["block_count"] == 2
 
 
+def test_igwatcher_cooldown_runs_do_not_open_source(runtime):
+    import asyncio
+    config, db = runtime
+    config = replace(config, browser=replace(config.browser, anonymous_source="igwatcher"))
+    db.record_source_block("igwatcher", "429")
+    with patch("ig_monitor.monitor.ProfileScraper") as scraper:
+        for _ in range(3):
+            assert asyncio.run(Monitor(config, db).run()) == 0
+        scraper.assert_not_called()
+    assert all(row["fail_count"] == 0 for row in db.enabled_accounts())
+
+
+def test_igwatcher_partial_round_does_not_reset_cooldown_backoff(runtime):
+    config, db = runtime
+    config = replace(config, browser=replace(config.browser, anonymous_source="igwatcher"),
+                     schedule=replace(config.schedule, media_download_enabled=False))
+    db.record_source_block("igwatcher", "429", datetime.now(UTC) - timedelta(hours=1))
+    good = result_for("alpha")
+    good.source = "igwatcher"
+    assert run_monitor(config, db, {"alpha": good, "beta": ScrapeFailure("來源請求逾時", "IGWatcher")})[0] == 1
+    events = [e for e in db.pending_events(100) if e["payload"].get("scope") == "source"]
+    assert [e["kind"] for e in events] == ["failure"]
+    assert db.conn.execute("SELECT block_count FROM anonymous_source_state WHERE source='igwatcher'").fetchone()[0] == 1
+    row = db.record_source_block("igwatcher", "429")
+    assert row["block_count"] == 2
+    assert datetime.fromisoformat(row["next_allowed_at"]) > datetime.now(UTC) + timedelta(minutes=59)
+
+
+def test_igwatcher_clean_round_can_recover(runtime):
+    config, db = runtime
+    config = replace(config, browser=replace(config.browser, anonymous_source="igwatcher"),
+                     schedule=replace(config.schedule, media_download_enabled=False))
+    db.record_source_block("igwatcher", "429", datetime.now(UTC) - timedelta(hours=1))
+    results = {name: result_for(name) for name in ("alpha", "beta")}
+    for result in results.values():
+        result.source = "igwatcher"
+    assert run_monitor(config, db, results)[0] == 0
+    events = [e for e in db.pending_events(100) if e["payload"].get("scope") == "source"]
+    assert [e["kind"] for e in events] == ["failure", "recovery"]
+
+
 def test_identity_conflict_does_not_mask_simultaneous_source_block(runtime):
     config, db = runtime
     result = result_for("unrelated", blocked=True)

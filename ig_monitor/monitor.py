@@ -270,7 +270,10 @@ class Monitor:
                 else:
                     LOG.warning("媒體記錄與下載已由 schedule.media_download_enabled=false 暫停")
 
-            if source_access_succeeded and not self.db.source_cooldown(source):
+            # A single good profile is not evidence of recovery while other
+            # IGWatcher requests still fail; retain the escalating backoff.
+            if (source_access_succeeded and not self.db.source_cooldown(source)
+                    and (source != "igwatcher" or failures == 0)):
                 self.db.record_source_recovery(source)
             self._enqueue_heartbeat_if_due()
             self.db.enqueue_relationship_watchdogs(datetime.now(UTC))
