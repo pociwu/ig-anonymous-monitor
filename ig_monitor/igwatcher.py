@@ -260,7 +260,7 @@ def _story(item: dict, snapshot: ProfileSnapshot, profile_id: str, *, position=0
 
 
 class IGWatcherScraper(ProfileScraper):
-    """Same scraper interface, with no browser, retries, credentials or redirects."""
+    """HTTP-only scraper; bounded media redirects, no credentials or retries."""
 
     media_referer = BASE_URL + "/"
     supports_progress = True
@@ -292,7 +292,18 @@ class IGWatcherScraper(ProfileScraper):
         if self._blocked or (self.source_guard and self.source_guard()):
             raise ScrapeFailure("來源暫停，未送出請求", "IGWatcher", blocker="source_cooldown")
 
-    async def _read(self, url: str, *, params=None, media=False, _redirects=0) -> tuple[bytes, str]:
+    def _block_failure(self, reason: str, *, status: int, media: bool, redirects: int,
+                       endpoint: str, signal: str) -> ScrapeFailure:
+        self._blocked = True
+        # Fixed enums and integers only; never reflect URLs, headers or bodies.
+        endpoint = "cdn" if media else endpoint if endpoint in PATHS else "unknown"
+        detail = (f" [IGWATCHER-BLOCK-DIAG] http_status={status}"
+                  f" phase={'media' if media else 'api'} endpoint={endpoint}"
+                  f" redirects={redirects} signal={signal}")
+        return ScrapeFailure(reason + detail, "IGWatcher", blocker="source_blocked")
+
+    async def _read(self, url: str, *, params=None, media=False, _redirects=0,
+                    _endpoint="unknown") -> tuple[bytes, str]:
         self._guard()
         if self._client is None:
             raise ScrapeFailure("來源 HTTP 工作階段尚未開啟", "IGWatcher")
@@ -303,8 +314,9 @@ class IGWatcherScraper(ProfileScraper):
                 headers = {"Accept": "image/*, video/*, application/octet-stream", "Referer": self.media_referer} if media else None
                 async with self._client.stream("GET", url, params=params, headers=headers) as response:
                     if response.status_code in (401, 403, 422, 429):
-                        self._blocked = True
-                        raise ScrapeFailure("來源驗證／限流／拒絕存取", "IGWatcher", blocker="source_blocked")
+                        raise self._block_failure(
+                            "來源驗證／限流／拒絕存取", status=response.status_code, media=media,
+                            redirects=_redirects, endpoint=_endpoint, signal="http_status")
                     if response.headers.get("content-encoding", "identity").lower() != "identity":
                         raise _ContractError("來源回應壓縮格式未驗證")
                     response_limit = limit if response.status_code == 200 else JSON_BYTE_LIMIT
@@ -321,8 +333,9 @@ class IGWatcherScraper(ProfileScraper):
                         except _ContractError:
                             pass
                     if blocked:
-                        self._blocked = True
-                        raise ScrapeFailure("來源要求驗證", "IGWatcher", blocker="source_blocked")
+                        raise self._block_failure(
+                            "來源要求驗證", status=response.status_code, media=media,
+                            redirects=_redirects, endpoint=_endpoint, signal="challenge")
                     if media and response.status_code in (301, 302, 303, 307, 308):
                         detail = f" [http_status={response.status_code}]"
                         if _redirects >= 3:
@@ -350,11 +363,11 @@ class IGWatcherScraper(ProfileScraper):
             raise ScrapeFailure("來源連線失敗；本輪不重試", "IGWatcher") from None
 
     async def _get(self, endpoint: str, params: dict) -> dict:
-        body, _ = await self._read(BASE_URL + PATHS[endpoint], params=params)
+        body, _ = await self._read(BASE_URL + PATHS[endpoint], params=params, _endpoint=endpoint)
         data = _json(body)
         if _challenge(data):
-            self._blocked = True
-            raise ScrapeFailure("來源要求驗證", "IGWatcher", blocker="source_blocked")
+            raise self._block_failure("來源要求驗證", status=200, media=False, redirects=0,
+                                      endpoint=endpoint, signal="challenge")
         if (any(data.get(key) for key in ("error", "errors", "error_type", "note", "toolDown"))
                 or ("success" in data and data["success"] is not True)
                 or data.get("status") != "success" or type(data.get("code")) is not int or data["code"] != 200):

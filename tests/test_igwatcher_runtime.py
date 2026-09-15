@@ -143,6 +143,83 @@ def test_media_diagnostics_do_not_invent_http_status(media_runtime, caplog, fail
     assert "https://" not in message
 
 
+@pytest.mark.parametrize("operation", ["queue", "avatar"])
+@pytest.mark.parametrize("status", [401, 403, 422, 429])
+def test_source_block_reports_account_and_redirect_context(media_runtime, caplog, operation, status):
+    from ig_monitor.igwatcher import IGWatcherScraper
+    from ig_monitor.media import save_avatar
+    from ig_monitor.models import ScrapeFailure
+    config, db, account, snapshot = media_runtime
+    item = replace(pending_item(), url="https://scontent.cdninstagram.com/private-path?token=secret")
+    db.record_success(account["id"], snapshot, [], [item])
+    requests = []
+
+    def respond(request):
+        requests.append(request)
+        if len(requests) == 1:
+            return httpx.Response(302, headers={"Location": "/private-final?token=secret"})
+        return httpx.Response(status, content=b"secret body", headers={"Set-Cookie": "session=secret"})
+
+    async def run():
+        async with IGWatcherScraper(config.browser, transport=httpx.MockTransport(respond)) as scraper:
+            with pytest.raises(ScrapeFailure) as error:
+                if operation == "avatar":
+                    await save_avatar(scraper, config.paths.download_root, account["account_key"], item.url, "https://igwatcher.com/")
+                else:
+                    await download_account_media(db, scraper, account, config.paths.download_root, 8, config.dedup)
+            assert error.value.blocker == "source_blocked"
+            with pytest.raises(ScrapeFailure):
+                await scraper.download(item.url, "https://igwatcher.com/")
+
+    asyncio.run(run())
+    assert len(requests) == 2
+    messages = [r.getMessage() for r in caplog.records if "[IGWATCHER-BLOCK-DIAG]" in r.getMessage()]
+    assert len(messages) == 1
+    message = messages[0]
+    for expected in ("nasa", f"http_status={status}", "phase=media", "redirects=1", f"operation={operation}"):
+        assert expected in message
+    for forbidden in ("secret", "private-path", "private-final", "https://", "Set-Cookie"):
+        assert forbidden not in message
+    assert db.media_counts(account["id"]) == {"pending": 1}
+
+
+@pytest.mark.parametrize("endpoint", ["profile", "stories"])
+def test_monitor_logs_blocked_api_with_current_account(media_runtime, monkeypatch, caplog, endpoint):
+    from ig_monitor.igwatcher import IGWatcherScraper
+    config, db, account, _snapshot = media_runtime
+    config = replace(config, telegram=replace(config.telegram, enabled=False),
+                     heartbeat=replace(config.heartbeat, enabled=False),
+                     apify=replace(config.apify, enabled=False))
+    requests = []
+    def respond(request):
+        requests.append(request)
+        if endpoint == "stories" and request.url.path.endswith("/search"):
+            return httpx.Response(200, json={"status": "success", "code": 200, "data": {"user": {
+                "id": "123", "username": "nasa", "is_private": False,
+                "media_count": 12, "follower_count": 30, "following_count": 2,
+                "full_name": "NASA", "biography": "", "profile_pic_url": "https://scontent.cdninstagram.com/private-avatar",
+            }}})
+        return httpx.Response(403, content=b"secret body")
+    monkeypatch.setattr("ig_monitor.monitor.ProfileScraper", lambda browser:
+                        IGWatcherScraper(browser, transport=httpx.MockTransport(respond)))
+    assert asyncio.run(Monitor(config, db).run()) == 1
+    messages = [r.getMessage() for r in caplog.records if "[IGWATCHER-BLOCK-DIAG]" in r.getMessage()]
+    assert len(messages) == 1
+    assert "nasa" in messages[0]
+    assert f"endpoint={endpoint}" in messages[0]
+    assert "http_status=403" in messages[0]
+    assert "phase=api" in messages[0]
+    assert "secret" not in messages[0]
+    assert "private-avatar" not in messages[0]
+    assert len(requests) == (1 if endpoint == "profile" else 2)
+    assert db.source_cooldown("igwatcher")
+    assert db.get_account("nasa")["fail_count"] == 0
+    request_count = len(requests)
+    assert asyncio.run(Monitor(config, db).run()) == 0
+    assert len(requests) == request_count
+    assert len([r for r in caplog.records if "[IGWATCHER-BLOCK-DIAG]" in r.getMessage()]) == 1
+
+
 def test_download_saves_review_content_without_notification_attachments(media_runtime):
     config, db, account, snapshot = media_runtime
     item = pending_item()

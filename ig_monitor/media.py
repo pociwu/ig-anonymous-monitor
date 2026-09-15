@@ -42,7 +42,13 @@ def _validate_payload(data: bytes, content_type: str | None, kind: str) -> None:
 
 async def save_avatar(scraper: ProfileScraper, root: Path, account_key: str,
                       url: str, referer: str) -> tuple[str, str]:
-    data, content_type = await scraper.download(url, referer)
+    try:
+        data, content_type = await scraper.download(url, referer)
+    except ScrapeFailure as exc:
+        if (getattr(getattr(scraper, "config", None), "anonymous_source", None) == "igwatcher"
+                and exc.blocker == "source_blocked"):
+            LOG.warning("%s：IGWatcher 來源暫停 operation=avatar：%s", account_key, exc)
+        raise
     _validate_payload(data, content_type, "image")
     digest = sha256_bytes(data)
     directory = root / safe_name(account_key) / "avatar"
@@ -145,6 +151,15 @@ async def download_account_media(db: Database, scraper: ProfileScraper, account:
                 stats["attachments"].append({"kind": item["kind"], "path": str(path)})
         except Exception as exc:
             if isinstance(exc, ScrapeFailure) and exc.blocker:
+                if source == "igwatcher" and exc.blocker == "source_blocked":
+                    category = item.get("category")
+                    category = category if category in {"posts", "stories", "highlights", "reels"} else "unknown"
+                    kind = item.get("kind")
+                    kind = kind if kind in {"image", "video"} else "unknown"
+                    LOG.warning(
+                        "%s：IGWatcher 來源暫停 operation=queue category=%s kind=%s：%s",
+                        account["label"], category, kind, exc,
+                    )
                 raise
             db.mark_media_failed(item["id"], str(exc))
             if source == "igwatcher" and isinstance(exc, ScrapeFailure):

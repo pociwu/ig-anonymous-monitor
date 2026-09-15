@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import random
+import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -12,6 +14,9 @@ from .config import BrowserConfig, InstagramEnrichmentConfig, canonical_account_
 from .db import Database
 from .models import ProfileSnapshot, ScrapeFailure
 from .relationships import WorkOutcome
+
+
+LOG = logging.getLogger("ig_monitor")
 
 
 class AnonymousMemberProfileSource(Protocol):
@@ -106,6 +111,13 @@ class MemberEnrichmentWorker:
         except Exception as exc:
             if isinstance(exc, ScrapeFailure) and exc.blocker and source_name:
                 self.db.record_source_block(source_name, str(exc), now)
+                if source_name == "igwatcher" and exc.blocker == "source_blocked":
+                    username = member.get("username")
+                    username = username if isinstance(username, str) and re.fullmatch(r"[A-Za-z0-9_.]{1,30}", username) else "unknown"
+                    LOG.warning(
+                        "%s：IGWatcher 成員資料來源暫停：%s operation=member_profile",
+                        username, exc,
+                    )
             retry_at = now + timedelta(hours=self.config.member_retry_min_hours)
             self.db.retry_member_enrichment_job(
                 job["id"], retry_at.isoformat(timespec="seconds"), type(exc).__name__

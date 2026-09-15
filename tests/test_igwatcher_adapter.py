@@ -46,6 +46,26 @@ def test_profile_only_returns_exact_counts_without_browser_or_media_requests():
     assert "cookie" not in requests[0].headers
 
 
+@pytest.mark.parametrize("status,body,signal", [(429, b"private secret", "http_status"),
+    (200, b"cf-chl-private-secret", "challenge")])
+def test_api_source_block_preserves_safe_response_diagnostics(status, body, signal):
+    requests = []
+    def respond(request):
+        requests.append(request)
+        return httpx.Response(status, content=body)
+    async def run():
+        async with IGWatcherScraper(config(), transport=httpx.MockTransport(respond)) as scraper:
+            return await scraper.scrape_profile_only("https://instagram.com/alice/")
+    with pytest.raises(ScrapeFailure) as error:
+        asyncio.run(run())
+    message = str(error.value)
+    assert error.value.blocker == "source_blocked"
+    for expected in ("[IGWATCHER-BLOCK-DIAG]", f"http_status={status}", "phase=api", "endpoint=profile", "redirects=0", f"signal={signal}"):
+        assert expected in message
+    assert "secret" not in message
+    assert len(requests) == 1
+
+
 def test_profile_accepts_observed_igwatcher_graph_counts_without_media_count():
     """2026-09-09 search shape; synthetic identity/counts, no saved source data."""
     payload = profile()
