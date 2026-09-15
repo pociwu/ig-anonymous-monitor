@@ -30,6 +30,22 @@ heartbeat:
             self.assertTrue(config.accounts[0].relationship_tracking)
             self.assertTrue(config.accounts[0].post_tracking)
             self.assertFalse(config.accounts[0].full_post_backfill_on_reopen)
+            self.assertFalse(config.telegram.send_ownership_pending_media)
+
+    def test_ownership_pending_attachments_require_explicit_boolean(self):
+        for value in ("true", "false", "'true'", "'false'", "1", "null"):
+            with self.subTest(value=value), tempfile.TemporaryDirectory() as tmp:
+                path = Path(tmp) / "config.yaml"
+                path.write_text(
+                    "accounts:\n  - url: https://instagram.com/nasa/\n"
+                    f"telegram:\n  send_ownership_pending_media: {value}\n", encoding="utf-8",
+                )
+                if value in ("true", "false"):
+                    config = load_config(path, require_telegram=False)
+                    self.assertEqual(config.telegram.send_ownership_pending_media, value == "true")
+                else:
+                    with self.assertRaisesRegex(ValueError, "telegram.send_ownership_pending_media"):
+                        load_config(path, require_telegram=False)
 
     def test_media_download_can_be_paused_without_disabling_profile_monitoring(self):
         with tempfile.TemporaryDirectory() as tmp:

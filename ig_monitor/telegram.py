@@ -61,10 +61,22 @@ def event_steps(kind: str, payload: dict[str, Any]) -> list[tuple[str, str, str 
         for item in attachments:
             if item.get("kind") == "video":
                 video_index += 1
-                steps.append(("video", f"{payload.get('label', 'IG')}：新增影片 {video_index}/{video_total}", item["path"]))
+                action = "video"
+                media_label = f"新增影片 {video_index}/{video_total}"
             else:
                 photo_index += 1
-                steps.append(("photo", f"{payload.get('label', 'IG')}：新增照片 {photo_index}/{photo_total}", item["path"]))
+                action = "photo"
+                media_label = f"新增照片 {photo_index}/{photo_total}"
+            label = payload.get("label", "IG")
+            if item.get("ownership_pending") is True:
+                caption = (
+                    "IGWatcher・歸屬待確認\n"
+                    f"監控標籤：{label}（來源查詢結果，不代表已確認作者）\n"
+                    f"{media_label}"
+                )
+            else:
+                caption = f"{label}：{media_label}"
+            steps.append((action, caption, item["path"]))
     return steps
 
 
@@ -176,7 +188,14 @@ def format_event(kind: str, payload: dict[str, Any]) -> str:
             f"尚待下載：{payload.get('pending', 0)}",
         ]
         if payload.get("review_downloaded"):
-            lines.append(f"其中歸屬待確認：{payload['review_downloaded']}（來源查詢結果，不代表已確認作者；不附媒體）")
+            attached_review_count = sum(
+                1 for item in payload.get("attachments", []) if item.get("ownership_pending") is True
+            )
+            attachment_note = f"本通知附{attached_review_count}筆媒體" if attached_review_count else "不附媒體"
+            lines.append(
+                f"其中歸屬待確認：{payload['review_downloaded']}"
+                f"（來源查詢結果，不代表已確認作者；{attachment_note}）"
+            )
         return "\n".join(lines)
     if kind == "heartbeat":
         return "\n".join([

@@ -249,7 +249,11 @@ class Monitor:
                             stats = await download_account_media(self.db, scraper, account,
                                                                  self.config.paths.download_root,
                                                                  self.config.schedule.media_limit_per_account,
-                                                                 self.config.dedup)
+                                                                 self.config.dedup,
+                                                                 send_ownership_pending_media=(
+                                                                     self.config.telegram.send_new_media
+                                                                     and self.config.telegram.send_ownership_pending_media
+                                                                 ))
                         except ScrapeFailure as exc:
                             if not exc.blocker:
                                 raise

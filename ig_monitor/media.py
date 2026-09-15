@@ -66,7 +66,8 @@ async def save_avatar(scraper: ProfileScraper, root: Path, account_key: str,
 
 
 async def download_account_media(db: Database, scraper: ProfileScraper, account: dict[str, Any],
-                                 root: Path, limit: int, dedup: DedupConfig) -> dict[str, Any]:
+                                 root: Path, limit: int, dedup: DedupConfig, *,
+                                 send_ownership_pending_media: bool = False) -> dict[str, Any]:
     stats: dict[str, Any] = {"downloaded": 0, "photos": 0, "videos": 0,
                              "duplicate": 0, "upgraded": 0, "failed": 0,
                              "pending": 0, "review_downloaded": 0, "attachments": []}
@@ -147,6 +148,10 @@ async def download_account_media(db: Database, scraper: ProfileScraper, account:
             stats["videos" if item["kind"] == "video" else "photos"] += 1
             if db.media_requires_review(item["id"]):
                 stats["review_downloaded"] += 1
+                if source == "igwatcher" and send_ownership_pending_media:
+                    # Sending a labeled source observation is not author verification.
+                    stats["attachments"].append({"kind": item["kind"], "path": str(path),
+                                                 "ownership_pending": True})
             else:
                 stats["attachments"].append({"kind": item["kind"], "path": str(path)})
         except Exception as exc:

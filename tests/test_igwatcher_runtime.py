@@ -238,6 +238,73 @@ def test_download_saves_review_content_without_notification_attachments(media_ru
     assert len(list(config.paths.download_root.rglob("*.png"))) == 1
 
 
+@pytest.mark.parametrize("kind", ["image", "video"])
+def test_review_opt_in_attaches_only_new_files_without_promoting_ownership(media_runtime, kind):
+    config, db, account, snapshot = media_runtime
+    item = replace(pending_item(), kind=kind)
+    db.record_success(account["id"], snapshot, [], [item])
+
+    class Downloader(ByteDownloader):
+        async def download(self, url, referer):
+            data, _content_type = await super().download(url, referer)
+            return data, "image/png" if kind == "image" else "video/mp4"
+
+    data = image_bytes() if kind == "image" else b"synthetic video payload"
+    downloader = Downloader(config, {item.url: data})
+    stats = asyncio.run(download_account_media(
+        db, downloader, account, config.paths.download_root, 8,
+        replace(config.dedup, enabled=False), send_ownership_pending_media=True,
+    ))
+    assert stats["downloaded"] == stats["review_downloaded"] == 1
+    assert len(stats["attachments"]) == 1
+    attachment = stats["attachments"][0]
+    assert attachment["kind"] == kind
+    assert attachment["ownership_pending"] is True
+    assert Path(attachment["path"]).read_bytes() == data
+    memberships = db.gallery_memberships(account["id"])
+    assert {row["ownership_status"] for row in memberships} == {"pending"}
+    assert not db.media_notification_allowed(memberships[0]["media_id"])
+    assert account_detail_data(db.path, account["id"])[1] == []
+
+    # A new source URL for identical bytes must not send the same file again.
+    rotated = replace(item, media_key="rotated", url="https://igwatcher.com/rotated",
+                      revision_id="rotated-revision")
+    db.record_success(account["id"], snapshot, [], [rotated])
+    downloader.payloads[rotated.url] = data
+    duplicate = asyncio.run(download_account_media(
+        db, downloader, account, config.paths.download_root, 8,
+        replace(config.dedup, enabled=False), send_ownership_pending_media=True,
+    ))
+    assert duplicate["downloaded"] == 0
+    assert duplicate["duplicate"] == 1
+    assert duplicate["attachments"] == []
+    repeat = asyncio.run(download_account_media(
+        db, downloader, account, config.paths.download_root, 8,
+        config.dedup, send_ownership_pending_media=True,
+    ))
+    assert repeat["attachments"] == []
+    assert downloader.calls == [item.url, rotated.url]
+
+
+def test_enabling_review_attachments_does_not_resend_previously_saved_files(media_runtime):
+    config, db, account, snapshot = media_runtime
+    item = pending_item()
+    db.record_success(account["id"], snapshot, [], [item])
+    downloader = ByteDownloader(config, {item.url: image_bytes()})
+    first = asyncio.run(download_account_media(
+        db, downloader, account, config.paths.download_root, 8, config.dedup,
+    ))
+    assert first["downloaded"] == 1
+    assert first["attachments"] == []
+    enabled = asyncio.run(download_account_media(
+        db, downloader, account, config.paths.download_root, 8, config.dedup,
+        send_ownership_pending_media=True,
+    ))
+    assert enabled["downloaded"] == 0
+    assert enabled["attachments"] == []
+    assert downloader.calls == [item.url]
+
+
 def test_review_replacement_preserves_exact_old_bytes_despite_visual_similarity(media_runtime):
     config, db, account, snapshot = media_runtime
     first = pending_item()
@@ -355,11 +422,18 @@ def test_clean_conservative_observation_resets_operational_failure_without_claim
 
 
 @pytest.mark.parametrize("bad_download", [False, True])
+@pytest.mark.parametrize("send_new,send_review,attachment_limit", [
+    (True, False, 10), (True, True, 10), (True, True, 1),
+    (True, True, 0), (False, True, 10),
+])
 def test_monitor_persists_conservative_groups_and_disabled_mode_keeps_only_observations(
-    media_runtime, monkeypatch, bad_download,
+    media_runtime, monkeypatch, bad_download, send_new, send_review, attachment_limit,
 ):
     config, db, account, _snapshot = media_runtime
-    config = replace(config, telegram=replace(config.telegram, enabled=False),
+    config = replace(config, telegram=replace(config.telegram, enabled=False,
+                                              send_new_media=send_new,
+                                              send_ownership_pending_media=send_review,
+                                              max_new_media_attachments=attachment_limit),
                      heartbeat=replace(config.heartbeat, enabled=False),
                      apify=replace(config.apify, enabled=False),
                      schedule=replace(config.schedule, media_download_enabled=True))
@@ -393,7 +467,8 @@ def test_monitor_persists_conservative_groups_and_disabled_mode_keeps_only_obser
         assert request.url.host == "scontent.cdninstagram.com"
         if bad_download and request.url.path != "/avatar.png":
             return httpx.Response(200, content=b"not an image", headers={"content-type": "image/png"})
-        return httpx.Response(200, content=image_bytes(), headers={"content-type": "image/png"})
+        return httpx.Response(200, content=image_bytes(changed=request.url.path in ("/1.png", "/3.png")),
+                              headers={"content-type": "image/png"})
 
     original_client = httpx.AsyncClient
 
@@ -419,7 +494,14 @@ def test_monitor_persists_conservative_groups_and_disabled_mode_keeps_only_obser
     assert len(story["children"]) == 1
     assert story["children"][0]["source_media_id"] == "500_123"
     events = [event for event in db.pending_events(100) if event["kind"] == "media_summary"]
-    assert events and not events[-1]["payload"]["attachments"]
+    assert events
+    summary = events[-1]["payload"]
+    assert summary["review_downloaded"] == 2
+    attachments = summary.get("attachments", [])
+    assert len(attachments) == (min(2, attachment_limit) if send_new and send_review else 0)
+    assert all(item["ownership_pending"] is True for item in attachments)
+    assert all(Path(item["path"]).is_file() for item in attachments)
+    assert {row["ownership_status"] for row in db.gallery_memberships(account["id"])} == {"pending"}
     assert all(not value["baseline_complete"] for value in db.collection_observations(account["id"], "igwatcher").values())
 
     disabled = replace(config, schedule=replace(config.schedule, media_download_enabled=False))

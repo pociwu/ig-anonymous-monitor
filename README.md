@@ -333,6 +333,8 @@ heartbeat:
   timezone: Asia/Taipei
 ```
 
+### Telegram 通知
+
 若要調整新媒體是否傳到 Telegram，使用：
 
 ```yaml
@@ -340,10 +342,15 @@ telegram:
   enabled: true
   retry_limit_per_run: 20
   send_new_media: true
+  send_ownership_pending_media: false
   max_new_media_attachments: 10
 ```
 
 `send_new_media: false` 只發數量摘要；`max_new_media_attachments` 控制每個帳號每輪最多傳送幾個新照片或影片。超過上限的檔案仍會完整保存到本機下載目錄。
+
+IGWatcher 的「歸屬待確認」媒體預設只報數量。若也要傳送這些新下載的照片／影片，請在既有 `telegram:` 區塊設定 `send_ownership_pending_media: true`（不加引號），並保持 `send_new_media: true`。附件會標示「IGWatcher・歸屬待確認」及監控標籤，明確說明來源查詢結果不代表已確認作者；不會改變資料庫歸屬或將內容移入一般分類。
+
+這個開關只影響之後建立的媒體通知：只附本輪新保存且非重複的檔案，不回補先前已下載的歷史檔案、既有摘要或畫質升級。尚待下載的舊貼文日後首次保存成功仍算本輪新增。一般與待確認附件共用上述每帳號每輪上限，超額部分不另排補傳。傳送使用本地檔案，不增加 IGWatcher 請求；待確認不是跨帳號污染隔離，本開關不解除隔離。已排入的通知及傳送失敗的附件仍依原事件內容續傳，修改開關不回溯取消它們。
 
 ## 網站載入判定
 

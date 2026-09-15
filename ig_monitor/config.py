@@ -77,6 +77,7 @@ class TelegramConfig:
     bot_token: str | None
     chat_id: str | None
     message_thread_id: int | None
+    send_ownership_pending_media: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -284,6 +285,9 @@ def load_config(
     retention_cfg = RetentionConfig(max(1, int(retention.get("diagnostic_runs", 10))),
                                     max(1, int(retention.get("database_backups", 7))))
     telegram = _section(raw, "telegram")
+    send_ownership_pending_media = telegram.get("send_ownership_pending_media", False)
+    if not isinstance(send_ownership_pending_media, bool):
+        raise ValueError("telegram.send_ownership_pending_media 必須是 true 或 false（不可加引號）")
     topic = os.getenv("TELEGRAM_MESSAGE_THREAD_ID", "").strip()
     telegram_cfg = TelegramConfig(bool(telegram.get("enabled", True)),
                                   max(1, int(telegram.get("retry_limit_per_run", 20))),
@@ -291,7 +295,8 @@ def load_config(
                                   max(0, int(telegram.get("max_new_media_attachments", 10))),
                                   os.getenv("TELEGRAM_BOT_TOKEN") or None,
                                   os.getenv("TELEGRAM_CHAT_ID") or None,
-                                  int(topic) if topic else None)
+                                  int(topic) if topic else None,
+                                  send_ownership_pending_media)
     if require_telegram and telegram_cfg.enabled and (not telegram_cfg.bot_token or not telegram_cfg.chat_id):
         raise ValueError("Telegram 已啟用，但 .env 缺少 TELEGRAM_BOT_TOKEN 或 TELEGRAM_CHAT_ID")
 

@@ -46,6 +46,8 @@ telegram:
   enabled: true
   retry_limit_per_run: 20
   send_new_media: true
+  # 明確啟用才附上 IGWatcher 歸屬待確認的新媒體；附件仍標示作者未確認。
+  send_ownership_pending_media: false
   max_new_media_attachments: 10
 
 # API token is kept in .env as APIFY_API_TOKEN, never here.
