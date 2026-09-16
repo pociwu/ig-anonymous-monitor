@@ -10,12 +10,85 @@ from ig_monitor.telegram import TelegramSender, event_steps, format_event
 
 
 class TelegramTests(unittest.TestCase):
+    def test_igwatcher_posts_failure_reports_actual_attempts_and_earliest_retry(self):
+        text = format_event("failure", {
+            "label": "alice / posts", "scope": "collection", "source": "igwatcher",
+            "category": "posts", "fail_count": 3,
+            "error": "來源暫時無法提供貼文（posts_gated）；不是貼文為空",
+            "next_retry_at": "2026-09-16T06:30:00+00:00",
+        })
+        self.assertEqual(text,
+            "alice / posts：媒體分類連續 3 次實際擷取或解析未完整成功\n"
+            "錯誤：來源暫時無法提供貼文（posts_gated）；不是貼文為空\n"
+            "既有內容保留，其他分類獨立更新。\n"
+            "最早可重試時間：2026-09-16T06:30:00+00:00\n"
+            "到期後由下一次排程嘗試，不保證在該時間執行或恢復。")
+
     def test_collection_failure_does_not_claim_no_content_was_updated(self):
         text = format_event("failure", {"label": "alice / reels", "scope": "collection",
                                       "fail_count": 3, "error": "部分項目格式無效"})
         self.assertIn("連續 3 輪擷取或解析未完整成功", text)
         self.assertNotIn("次未更新", text)
         self.assertIn("既有內容保留", text)
+
+    def test_igwatcher_posts_failure_without_retry_deadline_keeps_legacy_format(self):
+        for retry in ({}, {"next_retry_at": None}, {"next_retry_at": ""}):
+            with self.subTest(retry=retry):
+                text = format_event("failure", {
+                    "label": "alice / posts", "scope": "collection", "source": "igwatcher",
+                    "category": "posts", "fail_count": 3, "error": "部分項目格式無效", **retry,
+                })
+                self.assertEqual(text,
+                    "alice / posts：媒體分類連續 3 輪擷取或解析未完整成功\n"
+                    "錯誤：部分項目格式無效\n既有內容保留，其他分類獨立更新。")
+
+    def test_retry_deadline_does_not_change_other_collection_failure_formats(self):
+        for source, category in (("igwatcher", "reels"), ("igwatcher", "stories"),
+                                 ("igwatcher", "highlights"), ("anonyig", "posts"),
+                                 (None, None)):
+            with self.subTest(source=source, category=category):
+                text = format_event("failure", {
+                    "label": "alice", "scope": "collection", "source": source,
+                    "category": category, "fail_count": 4, "error": "部分項目格式無效",
+                    "next_retry_at": "2026-09-16T06:30:00+00:00",
+                })
+                self.assertEqual(text,
+                    "alice：媒體分類連續 4 輪擷取或解析未完整成功\n"
+                    "錯誤：部分項目格式無效\n既有內容保留，其他分類獨立更新。")
+
+    def test_posts_retry_deadline_does_not_change_source_or_account_failure_formats(self):
+        for scope, expected in (
+            ("source", "匿名來源 alice 暫停請求\n原因：來源要求驗證\n"
+                       "下次自動嘗試：2026-09-16T08:30:00+00:00\n既有資料保留，不需要人工驗證。"),
+            (None, "alice：連續無法取得（3 次）\n可能改名、刪除或網站異常\n錯誤：來源要求驗證"),
+        ):
+            with self.subTest(scope=scope):
+                self.assertEqual(format_event("failure", {
+                    "label": "alice", "scope": scope, "source": "igwatcher", "category": "posts",
+                    "fail_count": 3, "error": "來源要求驗證",
+                    "next_allowed_at": "2026-09-16T08:30:00+00:00",
+                    "next_retry_at": "2026-09-16T06:30:00+00:00",
+                }), expected)
+
+    def test_posts_retry_notification_keeps_sanitized_error_descriptions(self):
+        for error in (
+            "來源暫時無法提供貼文（posts_gated）；不是貼文為空",
+            "來源抓取失敗（fetch_failed）；不是內容為空",
+            "來源回報失敗或未支援的狀態提示",
+            "來源成功狀態格式不符（需要 status=success、整數 code=200）",
+            "來源 HTTP 回應不成功",
+            "來源請求逾時；本輪不重試",
+            "來源連線失敗；本輪不重試",
+        ):
+            with self.subTest(error=error):
+                text = format_event("failure", {
+                    "label": "alice / posts", "scope": "collection", "source": "igwatcher",
+                    "category": "posts", "fail_count": 3, "error": error,
+                    "next_retry_at": "2026-09-16T06:30:00+00:00",
+                })
+                self.assertIn("錯誤：" + error + "\n", text)
+                self.assertNotIn("http://", text)
+                self.assertNotIn("https://", text)
 
     def test_collector_state_uses_chinese_labels_and_keeps_codes(self):
         text = format_event("collector_state", {

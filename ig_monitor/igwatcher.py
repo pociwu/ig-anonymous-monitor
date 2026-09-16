@@ -39,7 +39,9 @@ _ALBUM_ID = re.compile(r"highlight:[1-9][0-9]{0,24}", re.ASCII)
 
 
 class _ContractError(ValueError):
-    pass
+    def __init__(self, message: str, *, error_code: str = "invalid_response"):
+        super().__init__(message)
+        self.error_code = error_code
 
 
 def _profile_count(user: dict, direct: str, edge: str) -> int:
@@ -271,6 +273,7 @@ class IGWatcherScraper(ProfileScraper):
     def __init__(self, config: BrowserConfig, *, transport=None):
         self.config = config
         self.source_guard = None
+        self.collection_guard = None
         self._transport = transport
         self._client = None
         self._blocked = False
@@ -300,7 +303,8 @@ class IGWatcherScraper(ProfileScraper):
         detail = (f" [IGWATCHER-BLOCK-DIAG] http_status={status}"
                   f" phase={'media' if media else 'api'} endpoint={endpoint}"
                   f" redirects={redirects} signal={signal}")
-        return ScrapeFailure(reason + detail, "IGWatcher", blocker="source_blocked")
+        return ScrapeFailure(reason + detail, "IGWatcher", blocker="source_blocked",
+                             error_code="source_blocked")
 
     async def _read(self, url: str, *, params=None, media=False, _redirects=0,
                     _endpoint="unknown") -> tuple[bytes, str]:
@@ -353,14 +357,14 @@ class IGWatcherScraper(ProfileScraper):
                         return await self._read(target, media=True, _redirects=_redirects + 1)
                     if response.status_code != 200:
                         detail = f" [http_status={response.status_code}]" if media else ""
-                        raise _ContractError("來源 HTTP 回應不成功" + detail)
+                        raise _ContractError("來源 HTTP 回應不成功" + detail, error_code="http_error")
                     return result, response.headers.get("content-type", "")
         except ScrapeFailure:
             raise
         except (TimeoutError, httpx.TimeoutException):
-            raise ScrapeFailure("來源請求逾時；本輪不重試", "IGWatcher") from None
+            raise ScrapeFailure("來源請求逾時；本輪不重試", "IGWatcher", error_code="request_timeout") from None
         except httpx.HTTPError:
-            raise ScrapeFailure("來源連線失敗；本輪不重試", "IGWatcher") from None
+            raise ScrapeFailure("來源連線失敗；本輪不重試", "IGWatcher", error_code="connection_failed") from None
 
     async def _get(self, endpoint: str, params: dict) -> dict:
         body, _ = await self._read(BASE_URL + PATHS[endpoint], params=params, _endpoint=endpoint)
@@ -368,10 +372,21 @@ class IGWatcherScraper(ProfileScraper):
         if _challenge(data):
             raise self._block_failure("來源要求驗證", status=200, media=False, redirects=0,
                                       endpoint=endpoint, signal="challenge")
+        if data.get("note") == "posts_gated":
+            raise _ContractError("來源暫時無法提供貼文（posts_gated）；不是貼文為空",
+                                 error_code="posts_gated")
+        if "fetch_failed" in data:
+            if type(data["fetch_failed"]) is not bool:
+                raise _ContractError("來源 fetch_failed 欄位格式無效")
+            if data["fetch_failed"]:
+                raise _ContractError("來源抓取失敗（fetch_failed）；不是內容為空",
+                                     error_code="fetch_failed")
         if (any(data.get(key) for key in ("error", "errors", "error_type", "note", "toolDown"))
                 or ("success" in data and data["success"] is not True)
-                or data.get("status") != "success" or type(data.get("code")) is not int or data["code"] != 200):
-            raise _ContractError("來源未回傳明確成功狀態")
+                or data.get("status") in ("error", "failed", "fail")):
+            raise _ContractError("來源回報失敗或未支援的狀態提示", error_code="source_error")
+        if data.get("status") != "success" or type(data.get("code")) is not int or data["code"] != 200:
+            raise _ContractError("來源成功狀態格式不符（需要 status=success、整數 code=200）")
         return data
 
     async def _profile(self, url: str) -> tuple[ProfileSnapshot, str]:
@@ -407,7 +422,7 @@ class IGWatcherScraper(ProfileScraper):
             snapshot, self.last_profile_id = await self._profile(url)
             return snapshot
         except _ContractError as exc:
-            raise ScrapeFailure(str(exc), "IGWatcher 個人檔案") from None
+            raise ScrapeFailure(str(exc), "IGWatcher 個人檔案", error_code=exc.error_code) from None
 
     async def download(self, url: str, referer: str) -> tuple[bytes, str]:
         """Download only allowlisted HTTPS CDN objects, never arbitrary proxies."""
@@ -426,13 +441,13 @@ class IGWatcherScraper(ProfileScraper):
                 raise _ContractError("下載回應不是受支援的媒體檔案")
             return body, content_type
         except _ContractError as exc:
-            raise ScrapeFailure(str(exc), "IGWatcher 媒體下載") from None
+            raise ScrapeFailure(str(exc), "IGWatcher 媒體下載", error_code=exc.error_code) from None
 
     async def scrape(self, url: str, *, cursors=None, known_ids=None, completed_categories=None) -> ScrapeResult:
         try:
             snapshot, profile_id = await self._profile(url)
         except _ContractError as exc:
-            raise ScrapeFailure(str(exc), "IGWatcher 個人檔案") from None
+            raise ScrapeFailure(str(exc), "IGWatcher 個人檔案", error_code=exc.error_code) from None
         result = ScrapeResult(snapshot=snapshot, source="igwatcher", profile_id=profile_id)
         if snapshot.privacy == PrivacyState.PRIVATE:
             result.collections = {key: CollectionObservation(TerminalState.PRIVATE) for key in COLLECTIONS}
@@ -441,6 +456,12 @@ class IGWatcherScraper(ProfileScraper):
         for category in ("stories", "posts", "reels", "highlights"):
             invalid, progress_cursor = False, None
             try:
+                self._guard()
+                if category == "posts" and self.collection_guard and self.collection_guard(category):
+                    result.collections[category] = CollectionObservation(
+                        TerminalState.PARTIAL, error="貼文分類退避中，本輪未送出請求",
+                        error_code="collection_backoff", attempted=False)
+                    continue
                 params = {"username": snapshot.username}
                 if category in ("posts", "reels"):
                     params["limit"] = 24 if category == "posts" else 12
@@ -529,11 +550,12 @@ class IGWatcherScraper(ProfileScraper):
                         items = _items(payload)
                 result.collections[category] = CollectionObservation(
                     TerminalState.PARTIAL, error="部分項目未成功取得或格式無效，已保留可接納的項目" if invalid else None,
-                    cursor=progress_cursor)
+                    cursor=progress_cursor, error_code="invalid_response" if invalid else None)
             except (_ContractError, ScrapeFailure) as exc:
                 blocked = isinstance(exc, ScrapeFailure) and bool(exc.blocker)
                 result.collections[category] = CollectionObservation(
-                    TerminalState.BLOCKED if blocked else TerminalState.PARTIAL, error=str(exc))
+                    TerminalState.BLOCKED if blocked else TerminalState.PARTIAL, error=str(exc),
+                    error_code=exc.error_code)
                 if blocked:
                     for key in COLLECTIONS:
                         result.collections.setdefault(key, CollectionObservation(TerminalState.BLOCKED, error="來源暫停，未送出後續請求"))

@@ -105,6 +105,10 @@ class Monitor:
                     blocked = None
                     try:
                         target_url = account.get("effective_url") or account["url"]
+                        if source == "igwatcher":
+                            scraper.collection_guard = lambda category, account_id=account["id"]: (
+                                self.db.collection_backoff(account_id, source, category)
+                            )
                         if getattr(scraper, "supports_progress", False):
                             progress = self.db.collection_observations(account["id"], source)
                             cursors = {key: value["cursor"] for key, value in progress.items()
@@ -190,6 +194,16 @@ class Monitor:
                                 account["id"], account["label"], result.collections, source,
                                 persist_progress=self.config.schedule.media_download_enabled,
                             )
+                            if source == "igwatcher":
+                                collection_state = self.db.collection_observations(account["id"], source)
+                                for category, observation in result.collections.items():
+                                    if observation.error and observation.state != TerminalState.BLOCKED:
+                                        LOG.warning(
+                                            "%s / %s：%s [IGWATCHER-COLLECTION-DIAG] code=%s attempted=%s next_retry_at=%s",
+                                            account["label"], category, observation.error,
+                                            observation.error_code or "invalid_response", observation.attempted,
+                                            collection_state.get(category, {}).get("next_retry_at") or "none",
+                                        )
                         if blocked:
                             self.db.record_source_block(source, blocked)
                             failures += 1

@@ -275,6 +275,84 @@ def scrape_with(transport, **options):
     return asyncio.run(run())
 
 
+@pytest.mark.parametrize("extra,code,phrase", [
+    ({"note": "posts_gated"}, "posts_gated", "來源暫時無法提供貼文"),
+    ({"fetch_failed": True}, "fetch_failed", "來源抓取失敗"),
+    ({"error": "private upstream detail"}, "source_error", "來源回報失敗"),
+    ({"note": "private unsupported note"}, "source_error", "來源回報失敗"),
+    ({"status": None}, "invalid_response", "成功狀態格式不符"),
+    ({"code": "200"}, "invalid_response", "成功狀態格式不符"),
+    ({"fetch_failed": "false"}, "invalid_response", "fetch_failed 欄位格式無效"),
+    ({"fetch_failed": 0}, "invalid_response", "fetch_failed 欄位格式無效"),
+    ({"fetch_failed": None}, "invalid_response", "fetch_failed 欄位格式無效"),
+])
+def test_collection_failure_envelopes_are_classified_without_false_success(extra, code, phrase):
+    paths = []
+
+    def respond(request):
+        paths.append(request.url.path)
+        if request.url.path.endswith("/search"):
+            return httpx.Response(200, json=profile())
+        if request.url.path.endswith("/posts"):
+            return httpx.Response(200, json=envelope([], **extra))
+        return httpx.Response(200, json=envelope([]))
+
+    result = scrape_with(httpx.MockTransport(respond))
+    observation = result.collections["posts"]
+    assert observation.state == TerminalState.PARTIAL
+    assert getattr(observation, "error_code", None) == code
+    assert phrase in observation.error
+    assert "private" not in observation.error
+    assert observation.attempted is True
+    assert not observation.complete
+    assert result.media == []
+    assert result.collections["reels"].error is None
+    assert paths.count("/wp-json/igw/v1/posts") == 1
+    assert paths[-1] == "/wp-json/igw/v1/highlights"
+
+
+def test_fetch_failed_false_keeps_explicit_success_compatible():
+    def respond(request):
+        return httpx.Response(200, json=profile() if request.url.path.endswith("/search")
+                              else envelope([], fetch_failed=False))
+    result = scrape_with(httpx.MockTransport(respond))
+    assert all(observation.error is None for observation in result.collections.values())
+
+
+def test_posts_backoff_skips_request_without_claiming_attempt_or_recovery():
+    paths = []
+    def respond(request):
+        paths.append(request.url.path)
+        return httpx.Response(200, json=profile() if request.url.path.endswith("/search") else envelope([]))
+    async def run():
+        async with IGWatcherScraper(config(), transport=httpx.MockTransport(respond)) as scraper:
+            scraper.collection_guard = lambda category: {"next_retry_at": "2099-01-01T00:00:00+00:00"} if category == "posts" else None
+            return await scraper.scrape("https://instagram.com/alice/")
+    result = asyncio.run(run())
+    assert "/wp-json/igw/v1/posts" not in paths
+    assert len(paths) == 4
+    posts = result.collections["posts"]
+    assert posts.attempted is False
+    assert posts.error_code == "collection_backoff"
+    assert posts.state == TerminalState.PARTIAL
+    assert posts.error
+    assert all(result.collections[name].error is None for name in ("stories", "reels", "highlights"))
+
+
+def test_verification_signal_overrides_posts_gated_and_fetch_failed():
+    paths = []
+    def respond(request):
+        paths.append(request.url.path)
+        if request.url.path.endswith("/search"):
+            return httpx.Response(200, json=profile())
+        return httpx.Response(200, json=envelope([], note="posts_gated", fetch_failed=True,
+                                                verification_required=True))
+    result = scrape_with(httpx.MockTransport(respond))
+    assert len(paths) == 2
+    assert result.collections["stories"].state == TerminalState.BLOCKED
+    assert "[IGWATCHER-BLOCK-DIAG]" in result.collections["stories"].error
+
+
 @pytest.mark.parametrize("count", [1, 2])
 def test_feed_videos_returned_by_reels_are_saved_as_posts_without_collection_failure(count):
     # Observed on 2026-09-11; synthetic IDs/URLs, same explicit feed/video shape.

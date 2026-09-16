@@ -92,7 +92,8 @@ def read_gallery_memberships(connection, account_id: int) -> list[dict[str, Any]
 
 def read_collection_observations(connection, account_id: int, source: str = "anonyig") -> dict[str, dict]:
     result = {category: {
-        "state": "unknown", "error": None, "last_success_at": None,
+        "state": "unknown", "error": None, "error_code": None, "next_retry_at": None,
+        "last_success_at": None,
         "last_attempt_at": None, "cursor": None, "complete": False,
         "baseline_complete": False, "fail_count": 0,
     } for category in CATEGORIES}
@@ -102,6 +103,8 @@ def read_collection_observations(connection, account_id: int, source: str = "ano
         "SELECT * FROM anonymous_collection_state WHERE account_id=? AND source=?", (account_id, source),
     ):
         item = dict(row)
+        item.setdefault("error_code", None)
+        item.setdefault("next_retry_at", None)
         item["complete"] = bool(item["complete"])
         item["baseline_complete"] = bool(item["baseline_complete"])
         result[item["category"]] = item
@@ -136,12 +139,12 @@ class AnonymousStore:
         CREATE TABLE IF NOT EXISTS anonymous_collection_state (
           account_id INTEGER NOT NULL REFERENCES accounts(id),
           source TEXT NOT NULL, category TEXT NOT NULL,
-          state TEXT NOT NULL DEFAULT 'unknown', error TEXT,
+          state TEXT NOT NULL DEFAULT 'unknown', error TEXT, error_code TEXT,
           last_success_at TEXT, last_attempt_at TEXT,
           cursor TEXT, complete INTEGER NOT NULL DEFAULT 0,
           baseline_complete INTEGER NOT NULL DEFAULT 0,
           fail_count INTEGER NOT NULL DEFAULT 0,
-          failure_notified INTEGER NOT NULL DEFAULT 0, failure_since TEXT,
+          failure_notified INTEGER NOT NULL DEFAULT 0, failure_since TEXT, next_retry_at TEXT,
           PRIMARY KEY(account_id,source,category)
         );
         CREATE TABLE IF NOT EXISTS anonymous_group_observations (
@@ -167,6 +170,8 @@ class AnonymousStore:
         self._add_column_if_missing("media_memberships", "ownership_status", "TEXT NOT NULL DEFAULT 'unspecified'")
         self._add_column_if_missing("media_memberships", "queried_username", "TEXT")
         self._add_column_if_missing("media_memberships", "revision_id", "TEXT NOT NULL DEFAULT ''")
+        self._add_column_if_missing("anonymous_collection_state", "error_code", "TEXT")
+        self._add_column_if_missing("anonymous_collection_state", "next_retry_at", "TEXT")
         self.conn.commit()
         self._backfill_ungrouped_legacy_memberships()
 
@@ -326,6 +331,18 @@ class AnonymousStore:
     def collection_observations(self, account_id: int, source: str = "anonyig") -> dict[str, dict]:
         return read_collection_observations(self.conn, account_id, source)
 
+    def collection_backoff(
+        self, account_id: int, source: str, category: str, now: datetime | str | None = None,
+    ) -> dict | None:
+        if source != "igwatcher" or category != "posts":
+            return None
+        row = self.conn.execute("""SELECT * FROM anonymous_collection_state
+                                   WHERE account_id=? AND source=? AND category=?""",
+                                (account_id, source, category)).fetchone()
+        if row and row["next_retry_at"] and _time(row["next_retry_at"]) > _time(now):
+            return dict(row)
+        return None
+
     def known_source_ids(self, account_id: int, category: str, source: str = "anonyig") -> set[str]:
         if not self.collection_observations(account_id, source).get(category, {}).get("baseline_complete"):
             return set()
@@ -340,13 +357,16 @@ class AnonymousStore:
         source: str = "anonyig", now: datetime | str | None = None,
         persist_progress: bool = True,
     ) -> None:
-        timestamp = _time(now).isoformat(timespec="seconds")
+        moment = _time(now)
+        timestamp = moment.isoformat(timespec="seconds")
         with self.transaction() as con:
             con.execute("BEGIN IMMEDIATE")
             for category, observation in observations.items():
                 if category not in CATEGORIES:
                     raise ValueError(f"Unknown anonymous collection: {category}")
                 value = observation if isinstance(observation, dict) else vars_from_observation(observation)
+                if value.get("attempted", True) is False:
+                    continue
                 state = str(value.get("state", "unknown"))
                 if state not in {"unknown", "media", "empty", "private", "partial", "failed", "blocked"}:
                     raise ValueError(f"Unknown collection state: {state}")
@@ -356,7 +376,11 @@ class AnonymousStore:
                                      WHERE account_id=? AND source=? AND category=?""",
                                   (account_id, source, category)).fetchone()
                 error = value.get("error")
-                success = state in {"media", "empty", "private"} and not error
+                error_code = value.get("error_code") if error else None
+                posts_backoff = source == "igwatcher" and category == "posts"
+                next_retry = row["next_retry_at"]
+                success = (state in {"media", "empty", "private"} and not error
+                           and not (posts_backoff and state == "private"))
                 # Conservative IGWatcher success cannot claim completeness, but
                 # a clean observation still resolves an operational incident.
                 conservative_success = source == "igwatcher" and state == "partial" and not error
@@ -366,12 +390,18 @@ class AnonymousStore:
                 if failure:
                     count += 1
                     since = since or timestamp
+                    if posts_backoff:
+                        delay = (30, 60, 120, 240)[min(count - 1, 3)]
+                        next_retry = (moment + timedelta(minutes=delay)).isoformat(timespec="seconds")
                     if count >= 3 and not notified:
-                        self._anonymous_event(con, f"failure:{scope}:{since}", account_id, "failure", {
+                        payload = {
                             "label": f"{label} / {category}", "source": source, "category": category,
                             "scope": "collection", "scope_key": scope, "error": error or "Collection result unknown",
                             "blocker": None, "fail_count": count, "since": since,
-                        }, timestamp)
+                        }
+                        if posts_backoff:
+                            payload["next_retry_at"] = next_retry
+                        self._anonymous_event(con, f"failure:{scope}:{since}", account_id, "failure", payload, timestamp)
                         notified = 1
                 elif success or conservative_success:
                     if notified:
@@ -380,7 +410,9 @@ class AnonymousStore:
                             "category": category, "scope": "collection", "scope_key": scope, "since": since,
                         }, timestamp)
                     count, since, notified = 0, None, 0
-                # Blocked and still-running batches never erase an incident or advance it.
+                    next_retry = None
+                # Blocked and private Posts did not complete a successful fetch;
+                # neither can erase an incident or advance its backoff.
                 # A partial result can include a durable checkpoint plus a failed
                 # album/page; the source keeps that failed scope in its retry cursor.
                 progress = persist_progress and (success or state == "partial")
@@ -391,10 +423,11 @@ class AnonymousStore:
                 cursor = value.get("cursor") if progress else row["cursor"]
                 con.execute("""UPDATE anonymous_collection_state SET state=?,error=?,last_attempt_at=?,
                   last_success_at=?,cursor=?,complete=?,baseline_complete=?,fail_count=?,
-                  failure_notified=?,failure_since=? WHERE account_id=? AND source=? AND category=?""",
+                  failure_notified=?,failure_since=?,error_code=?,next_retry_at=?
+                  WHERE account_id=? AND source=? AND category=?""",
                   (state, error, timestamp, timestamp if success else row["last_success_at"],
                    cursor, int(complete), int(bool(row["baseline_complete"]) or established_baseline), count,
-                   notified, since, account_id, source, category))
+                   notified, since, error_code, next_retry, account_id, source, category))
 
     @staticmethod
     def _anonymous_event(con, key: str, account_id: int | None, kind: str, payload: dict, now: str) -> None:
@@ -455,4 +488,6 @@ class AnonymousStore:
 
 def vars_from_observation(observation) -> dict:
     """Also accepts the slots-based CollectionObservation value object."""
-    return {key: getattr(observation, key, None) for key in ("state", "error", "cursor", "complete")}
+    value = {key: getattr(observation, key, None) for key in ("state", "error", "cursor", "complete", "error_code")}
+    value["attempted"] = getattr(observation, "attempted", True)
+    return value

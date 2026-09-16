@@ -30,6 +30,9 @@ class CollectionObservation:
     error: str | None = None
     cursor: str | None = None
     complete: bool = False
+    error_code: str | None = None
+    # A deferred collection must not advance attempts or resolve an incident.
+    attempted: bool = True
 
 
 @dataclass(slots=True)
@@ -119,6 +122,7 @@ class ScrapeFailure(Exception):
     html: str | None = None
     screenshot: bytes | None = None
     blocker: str | None = None
+    error_code: str | None = None
 
     def __str__(self) -> str:
         return f"{self.stage}: {self.reason}"

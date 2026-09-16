@@ -160,6 +160,12 @@ def format_event(kind: str, payload: dict[str, Any]) -> str:
                     f"下次自動嘗試：{payload.get('next_allowed_at', '依退避排程')}\n"
                     "既有資料保留，不需要人工驗證。")
         if payload.get("scope") == "collection":
+            if (payload.get("source") == "igwatcher" and payload.get("category") == "posts"
+                    and payload.get("next_retry_at")):
+                return (f"{label}：媒體分類連續 {payload.get('fail_count', 3)} 次實際擷取或解析未完整成功\n"
+                        f"錯誤：{payload.get('error', '未知')}\n既有內容保留，其他分類獨立更新。\n"
+                        f"最早可重試時間：{payload['next_retry_at']}\n"
+                        "到期後由下一次排程嘗試，不保證在該時間執行或恢復。")
             return (f"{label}：媒體分類連續 {payload.get('fail_count', 3)} 輪擷取或解析未完整成功\n"
                     f"錯誤：{payload.get('error', '未知')}\n既有內容保留，其他分類獨立更新。")
         blocker = f"\n判定原因：{payload['blocker']}" if payload.get("blocker") else ""
