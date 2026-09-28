@@ -46,7 +46,7 @@ def test_failed_item_waits_after_restart_and_does_not_starve_other_media(tmp_pat
         db.close()
 
 
-@pytest.mark.parametrize('mode', ['ok', 'failed', 'blocked', 'cooldown', 'disabled', 'bounded', 'mid_cooldown', 'account_failed', 'private', 'account_disabled', 'normal_failed'])
+@pytest.mark.parametrize('mode', ['ok', 'failed', 'blocked', 'cooldown', 'disabled', 'bounded', 'mid_cooldown', 'account_failed', 'private', 'account_disabled', 'normal_failed', 'query_403', 'normal_query_403'])
 def test_download_only_is_serial_bounded_and_never_scrapes_profiles(tmp_path, monkeypatch, mode):
     db, account = populated_db(tmp_path)
     p = tmp_path / 'config.yaml'
@@ -88,20 +88,22 @@ def test_download_only_is_serial_bounded_and_never_scrapes_profiles(tmp_path, mo
             db.conn.execute('UPDATE accounts SET enabled=0 WHERE id=?', (account['id'],))
             db.conn.commit()
         if mode == 'cooldown': db.record_source_block('igwatcher', 'blocked')
+        if mode in ('query_403', 'normal_query_403'):
+            db.record_source_block('igwatcher', 'http_status=403 phase=api endpoint=stories redirects=0 signal=http_status')
         if mode == 'account_failed':
             assert db.media_backlog('igwatcher')['ready'] == 2
             assert db.media_backlog('igwatcher')['ineligible'] == 0
         monitor = Monitor(cfg, db)
-        asyncio.run(monitor.run() if mode == 'normal_failed' else monitor.download_pending())
+        asyncio.run(monitor.run() if mode in ('normal_failed','normal_query_403') else monitor.download_pending())
         assert len(calls) == (0 if mode in ('disabled', 'cooldown', 'private', 'account_disabled') else 1 if mode in ('blocked', 'bounded', 'mid_cooldown') else 2)
-        assert sleeps == ([10] if mode in ('ok', 'failed', 'mid_cooldown', 'account_failed') else [])
+        assert sleeps == ([10] if mode in ('ok', 'failed', 'mid_cooldown', 'account_failed', 'query_403', 'normal_query_403', 'normal_failed') else [])
         if mode in ('account_failed', 'normal_failed'):
             assert db.enabled_accounts()[0]['fail_count'] == 1
             assert db.media_backlog('igwatcher')['ineligible'] == 0
         if mode == 'failed':
             assert db.media_backlog('igwatcher')['retry_wait'] == 1
             assert db.media_counts(account['id'])['downloaded'] == 1
-        if mode == 'blocked': assert db.source_cooldown('igwatcher')
+        if mode == 'blocked': assert db.media_cooldown('igwatcher')
         assert not any(e['kind']=='recovery' for e in db.pending_events(100))
     finally:
         db.close()

@@ -437,9 +437,35 @@ class AnonymousStore:
 
     def source_cooldown(self, source: str, now: datetime | str | None = None) -> dict | None:
         row = self.conn.execute("SELECT * FROM anonymous_source_state WHERE source=?", (source,)).fetchone()
+        if source == "igwatcher":
+            media = self.conn.execute("SELECT * FROM anonymous_source_state WHERE source=?", (source + ":media",)).fetchone()
+            if (media and media["next_allowed_at"] and _time(media["next_allowed_at"]) > _time(now)
+                    and ("http_status=429" in (media["error"] or "") or "signal=challenge" in (media["error"] or ""))):
+                if not row or not row["next_allowed_at"] or _time(media["next_allowed_at"]) > _time(row["next_allowed_at"]):
+                    return dict(media)
         if row and row["next_allowed_at"] and _time(row["next_allowed_at"]) > _time(now):
             return dict(row)
         return None
+
+    def media_cooldown(self, source: str, now: datetime | str | None = None) -> dict | None:
+        """Separate known API-only refusals; retain ambiguous/global protection."""
+        if source != "igwatcher":
+            return self.source_cooldown(source, now)
+        media = self.source_cooldown(source + ":media", now)
+        if media:
+            return media
+        query = self.source_cooldown(source, now)
+        if query:
+            tokens = set((query.get("error") or "").split())
+            api_only = {"http_status=403", "phase=api", "signal=http_status"}.issubset(tokens)
+            if not api_only:
+                return query
+        return None
+
+    def record_media_block(self, source: str, error: str, now: datetime | str | None = None) -> dict:
+        if source == "igwatcher" and ("http_status=429" in error or "signal=challenge" in error):
+            self.record_source_block(source, error, now)
+        return self.record_source_block(source + ":media" if source == "igwatcher" else source, error, now)
 
     def record_source_block(self, source: str, error: str, now: datetime | str | None = None) -> dict:
         moment = _time(now)

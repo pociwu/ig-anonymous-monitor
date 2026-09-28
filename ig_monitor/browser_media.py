@@ -14,7 +14,8 @@ ORIGIN = 'https://igwatcher.com'
 def decode_result(result: dict, limit: int) -> tuple[bytes, str]:
     status = result.get('status')
     if status in (401, 403, 422, 429) or result.get('challenge'):
-        raise ScrapeFailure(f'瀏覽器媒體來源拒絕或要求驗證 [http_status={status}]',
+        signal = 'challenge' if result.get('challenge') else 'http_status'
+        raise ScrapeFailure(f'瀏覽器媒體來源拒絕或要求驗證 [http_status={status}] signal={signal}',
                             'IGWatcher', blocker='source_blocked', error_code='source_blocked')
     if status != 200 or result.get('error'):
         raise ScrapeFailure(f'瀏覽器媒體未取得完整回應 [http_status={status}]',

@@ -78,7 +78,7 @@ async def download_account_media(db: Database, scraper: ProfileScraper, account:
         attempt_started = time.monotonic()
         try:
             source = getattr(getattr(scraper, "config", None), "anonymous_source", None)
-            if source and db.source_cooldown(source):
+            if source and db.media_cooldown(source):
                 raise ScrapeFailure("匿名來源全域冷卻中", "下載媒體", blocker="source_cooldown")
             referer = getattr(scraper, "media_referer", None) or account.get("effective_url") or account["url"]
             data, content_type = await scraper.download(item["url"], referer)

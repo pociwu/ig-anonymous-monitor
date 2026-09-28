@@ -75,7 +75,7 @@ class Monitor:
         if not self.config.schedule.media_download_enabled:
             LOG.warning('既有媒體下載：下載功能已關閉，未送出請求')
             return 0
-        cooldown = self.db.source_cooldown(source)
+        cooldown = self.db.media_cooldown(source)
         if cooldown:
             LOG.warning('既有媒體下載：來源冷卻中，未送出請求；下次允許：%s', cooldown['next_allowed_at'])
             return 0
@@ -83,7 +83,7 @@ class Monitor:
         failures, attempted, blocked = 0, False, False
         try:
             async with ProfileScraper(self.config.browser) as scraper:
-                scraper.source_guard = lambda: bool(self.db.source_cooldown(source))
+                scraper.source_guard = lambda: bool(self.db.media_cooldown(source))
                 for account in self.db.enabled_accounts():
                     snapshot = self.db.snapshot_from_row(account)
                     if snapshot is None or snapshot.privacy != PrivacyState.PUBLIC:
@@ -92,14 +92,14 @@ class Monitor:
                                   failed=0, review_downloaded=0)
                     attachments = []
                     for _ in range(self.config.schedule.media_limit_per_account):
-                        if self.db.source_cooldown(source):
+                        if self.db.media_cooldown(source):
                             blocked = True
                             break
                         if not self.db.pending_media(account['id'], 1, source=source):
                             break
                         if attempted:
                             await asyncio.sleep(10)
-                        if self.db.source_cooldown(source):
+                        if self.db.media_cooldown(source):
                             blocked = True
                             break
                         attempted = True
@@ -111,7 +111,7 @@ class Monitor:
                         except ScrapeFailure as exc:
                             if not exc.blocker:
                                 raise
-                            self.db.record_source_block(source, str(exc))
+                            self.db.record_media_block(source, str(exc))
                             LOG.warning('既有媒體下載：來源暫停，停止後續請求；%s', exc)
                             blocked = True
                             failures += 1
@@ -151,6 +151,8 @@ class Monitor:
             LOG.warning("匿名來源 %s 冷卻中，下次允許：%s", source, cooldown["next_allowed_at"])
             await self.telegram.deliver_pending(self.db)
             self.db.finish_run(run_id, "cooldown", f"source={source}, next_allowed_at={cooldown['next_allowed_at']}")
+            if source == "igwatcher":
+                return await self.download_pending()
             return 0
         failures = 0
         source_access_succeeded = False
@@ -326,7 +328,7 @@ class Monitor:
                         if self.db.source_cooldown(source):
                             break
 
-                if self.config.schedule.media_download_enabled:
+                if self.config.schedule.media_download_enabled and source != "igwatcher":
                     refreshed = {row["id"]: row for row in self.db.enabled_accounts()}
                     for account_id, account in refreshed.items():
                         if self.db.source_cooldown(source):
@@ -363,9 +365,11 @@ class Monitor:
                             self.db.enqueue_event(f"media:{run_id}:{account_id}", "media_summary", payload, account_id)
                         LOG.info("%s 媒體：新增 %d、重複 %d、失敗 %d、待下載 %d", account["label"],
                                  stats["downloaded"], stats["duplicate"], stats["failed"], stats["pending"])
-                else:
+                elif not self.config.schedule.media_download_enabled:
                     LOG.warning("媒體記錄與下載已由 schedule.media_download_enabled=false 暫停")
 
+            if source == "igwatcher":
+                failures += await self.download_pending()
             # A single good profile is not evidence of recovery while other
             # IGWatcher requests still fail; retain the escalating backoff.
             if (source_access_succeeded and not self.db.source_cooldown(source)

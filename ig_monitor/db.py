@@ -1454,7 +1454,7 @@ class Database(AnonymousStore):
     def media_backlog(self, source: str, *, enabled: bool = True,
                       now: datetime | None = None) -> dict[str, Any]:
         moment = now or datetime.now(UTC)
-        cooldown = self.source_cooldown(source, now=moment)
+        cooldown = self.media_cooldown(source, now=moment)
         result = dict(total=0, ready=0, retry_wait=0, source_wait=0,
                       other_source=0, ineligible=0, paused=0)
         rows = self.conn.execute("""SELECT m.next_retry_at,a.enabled,a.fail_count,a.snapshot_json,

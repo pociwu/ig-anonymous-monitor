@@ -31,3 +31,9 @@ docker compose run --rm --no-deps monitor python -m ig_monitor --config /srv/ig-
 媒體下載成功不代表來源 API 已恢復，因此不解除來源冷卻或登入帳號風控。
 到期僅代表允許下次嘗試，不保證可下載；此命令不建立額外排程。
 一般巡檢仍維持原有擷取順序，逐筆退避也適用於一般巡檢的下載佇列。
+# 查詢與下載冷卻拆分（2026-09-28）
+
+IGWatcher 的查詢冷卻沿用 `igwatcher` 狀態；下載拒絕使用 `igwatcher:media` 獨立狀態。
+只有診斷明確為 `http_status=403 phase=api signal=http_status` 的查詢拒絕不影響下載；不刪除舊冷卻紀錄。429、明確 challenge、下載端拒絕及範圍不明的舊來源錯誤仍阻擋下載。下載端 429/challenge 也記錄查詢暫停。
+
+排程查詢冷卻時仍會執行下載佇列；正常巡檢結束後以新的下載工作階段執行，避免沿用查詢端的本輪 blocked 狀態。兩者仍共用 monitor.lock，不平行搶同一筆。下載逐筆執行、間隔 10 秒，沿用每帳號上限、媒體去重及逐檔退避；不以增加並行量放大來源負荷。

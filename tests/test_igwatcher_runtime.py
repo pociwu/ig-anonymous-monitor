@@ -44,7 +44,11 @@ def test_scraper_factory_selects_http_adapter_only_when_explicit(media_runtime):
 
 
 @pytest.fixture
-def media_runtime(tmp_path):
+def media_runtime(tmp_path, monkeypatch):
+    async def no_wait(_seconds):
+        pass
+    # Pacing is asserted separately in test_media_backlog; these fixtures test storage.
+    monkeypatch.setattr('ig_monitor.monitor.asyncio.sleep', no_wait)
     path = tmp_path / "settings.yaml"
     path.write_text("accounts:\n  - url: https://instagram.com/nasa/\n"
                     "browser:\n  anonymous_source: igwatcher\n", encoding="utf-8")
