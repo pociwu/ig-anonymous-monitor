@@ -67,6 +67,81 @@ class Monitor:
         if config.browser.anonymous_source in {"legacy", "anonyig"}:
             config.browser.browsers_path.mkdir(parents=True, exist_ok=True)
 
+    async def download_pending(self) -> int:
+        """Bounded, serial replay of cached IGWatcher media; caller holds monitor.lock."""
+        source = self.config.browser.anonymous_source
+        if source != 'igwatcher':
+            raise ValueError('download-pending currently requires igwatcher')
+        if not self.config.schedule.media_download_enabled:
+            LOG.warning('既有媒體下載：下載功能已關閉，未送出請求')
+            return 0
+        cooldown = self.db.source_cooldown(source)
+        if cooldown:
+            LOG.warning('既有媒體下載：來源冷卻中，未送出請求；下次允許：%s', cooldown['next_allowed_at'])
+            return 0
+        run_id = self.db.start_run()
+        failures, attempted, blocked = 0, False, False
+        try:
+            async with ProfileScraper(self.config.browser) as scraper:
+                scraper.source_guard = lambda: bool(self.db.source_cooldown(source))
+                for account in self.db.enabled_accounts():
+                    snapshot = self.db.snapshot_from_row(account)
+                    if snapshot is None or snapshot.privacy != PrivacyState.PUBLIC:
+                        continue
+                    totals = dict(downloaded=0, photos=0, videos=0, duplicate=0, upgraded=0,
+                                  failed=0, review_downloaded=0)
+                    attachments = []
+                    for _ in range(self.config.schedule.media_limit_per_account):
+                        if self.db.source_cooldown(source):
+                            blocked = True
+                            break
+                        if not self.db.pending_media(account['id'], 1, source=source):
+                            break
+                        if attempted:
+                            await asyncio.sleep(10)
+                        if self.db.source_cooldown(source):
+                            blocked = True
+                            break
+                        attempted = True
+                        try:
+                            stats = await download_account_media(
+                                self.db, scraper, account, self.config.paths.download_root, 1, self.config.dedup,
+                                send_ownership_pending_media=(self.config.telegram.send_new_media
+                                                             and self.config.telegram.send_ownership_pending_media))
+                        except ScrapeFailure as exc:
+                            if not exc.blocker:
+                                raise
+                            self.db.record_source_block(source, str(exc))
+                            LOG.warning('既有媒體下載：來源暫停，停止後續請求；%s', exc)
+                            blocked = True
+                            failures += 1
+                            break
+                        for key in totals:
+                            totals[key] += stats[key]
+                        attachments.extend(stats['attachments'])
+                        LOG.info('%s：逐筆媒體下載 新增=%d 重複=%d 失敗=%d',
+                                 account['label'], stats['downloaded'], stats['duplicate'], stats['failed'])
+                    failures += totals['failed']
+                    if totals['downloaded'] or totals['failed']:
+                        counts = self.db.media_counts(account['id'])
+                        payload = dict(label=account['label'], **totals,
+                                       pending=counts.get('pending', 0)+counts.get('failed', 0))
+                        if self.config.telegram.send_new_media:
+                            payload.update(attachments=attachments[:self.config.telegram.max_new_media_attachments],
+                                           attachment_total=len(attachments))
+                        self.db.enqueue_event(f'media:{run_id}:{account["id"]}', 'media_summary', payload, account['id'])
+                    if blocked:
+                        break
+            # Media success alone is not evidence that the source API recovered.
+            _, send_failed = await self.telegram.deliver_pending(self.db)
+            self.db.finish_run(run_id, 'cooldown' if blocked else 'partial' if failures or send_failed else 'success',
+                               f'download_only=1, failures={failures}, telegram_failures={send_failed}')
+            LOG.info('既有媒體下載摘要：%s', json.dumps(self.db.media_backlog(source), ensure_ascii=False))
+            return 1 if failures or send_failed else 0
+        except Exception as exc:
+            self.db.finish_run(run_id, 'failed', type(exc).__name__)
+            raise
+
     async def run(self) -> int:
         self.db.sync_accounts(self.config.accounts)
         run_id = self.db.start_run()
@@ -257,7 +332,10 @@ class Monitor:
                         if self.db.source_cooldown(source):
                             break
                         current = self.db.snapshot_from_row(account)
-                        if account["fail_count"] or current is None or current.privacy != PrivacyState.PUBLIC:
+                        # Cached IGWatcher media is independent of profile/API failures.
+                        # Preserve privacy and global source guards; do not reset account health.
+                        if ((source != "igwatcher" and account["fail_count"])
+                                or current is None or current.privacy != PrivacyState.PUBLIC):
                             continue
                         try:
                             stats = await download_account_media(self.db, scraper, account,
@@ -377,7 +455,9 @@ class Monitor:
         today = now.date().isoformat()
         if (now.hour, now.minute) < (hour, minute) or self.db.get_meta("heartbeat_date") == today:
             return
-        self.db.enqueue_event(f"heartbeat:{today}", "heartbeat", self.db.summary())
+        summary = {**self.db.summary(), 'media_backlog': self.db.media_backlog(
+            self.config.browser.anonymous_source, enabled=self.config.schedule.media_download_enabled)}
+        self.db.enqueue_event(f"heartbeat:{today}", "heartbeat", summary)
         self.db.set_meta("heartbeat_date", today)
 
     def _backup_if_due(self) -> None:

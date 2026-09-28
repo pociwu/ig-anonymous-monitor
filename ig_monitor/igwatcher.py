@@ -262,7 +262,7 @@ def _story(item: dict, snapshot: ProfileSnapshot, profile_id: str, *, position=0
 
 
 class IGWatcherScraper(ProfileScraper):
-    """HTTP-only scraper; bounded media redirects, no credentials or retries."""
+    """HTTP collection with optional browser media transport; no credentials or retries."""
 
     media_referer = BASE_URL + "/"
     supports_progress = True
@@ -277,6 +277,7 @@ class IGWatcherScraper(ProfileScraper):
         self._transport = transport
         self._client = None
         self._blocked = False
+        self._browser_media = None
 
     async def __aenter__(self):
         self._client = httpx.AsyncClient(
@@ -287,6 +288,9 @@ class IGWatcherScraper(ProfileScraper):
         return self
 
     async def __aexit__(self, *_):
+        if self._browser_media is not None:
+            await self._browser_media.close()
+            self._browser_media = None
         if self._client is not None:
             await self._client.aclose()
             self._client = None
@@ -428,7 +432,14 @@ class IGWatcherScraper(ProfileScraper):
         """Download only allowlisted HTTPS CDN objects, never arbitrary proxies."""
         try:
             safe_url = _media_url(url)
-            body, content_type = await self._read(safe_url, media=True)
+            self._guard()
+            if self.config.igwatcher_media_transport == "browser_proxy":
+                from .browser_media import BrowserMedia
+                if self._browser_media is None:
+                    self._browser_media = BrowserMedia(self.config, self._guard, MEDIA_BYTE_LIMIT)
+                body, content_type = await self._browser_media.download(safe_url)
+            else:
+                body, content_type = await self._read(safe_url, media=True)
             mime = content_type.split(";", 1)[0].strip().lower()
             image = (body.startswith((b"\xff\xd8\xff", b"\x89PNG\r\n\x1a\n", b"GIF87a", b"GIF89a"))
                      or (body.startswith(b"RIFF") and body[8:12] == b"WEBP")
@@ -440,6 +451,10 @@ class IGWatcherScraper(ProfileScraper):
             ):
                 raise _ContractError("下載回應不是受支援的媒體檔案")
             return body, content_type
+        except ScrapeFailure as exc:
+            if exc.blocker == "source_blocked":
+                self._blocked = True
+            raise
         except _ContractError as exc:
             raise ScrapeFailure(str(exc), "IGWatcher 媒體下載", error_code=exc.error_code) from None
 

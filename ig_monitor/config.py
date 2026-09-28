@@ -44,6 +44,7 @@ class BrowserConfig:
     initial_posts: int = 12
     initial_reels: int = 12
     max_pages_per_collection: int = 4
+    igwatcher_media_transport: str = "http"
 
 
 @dataclass(frozen=True, slots=True)
@@ -250,7 +251,10 @@ def load_config(
                                 max(0, int(browser.get("retry_count", 1))),
                                 _resolve(base, str(browser.get("browsers_path", "./data/ms-playwright"))),
                                 str(browser.get("anonymous_source", "anonyig")),
-                                12, 12, int(browser.get("max_pages_per_collection", 4)))
+                                12, 12, int(browser.get("max_pages_per_collection", 4)),
+                                str(browser.get("igwatcher_media_transport", "http")))
+    if browser_cfg.igwatcher_media_transport not in {"http", "browser_proxy"}:
+        raise ValueError("browser.igwatcher_media_transport 必須是 http 或 browser_proxy")
     if browser_cfg.anonymous_source not in {"anonyig", "legacy", "igwatcher"}:
         raise ValueError("browser.anonymous_source 必須是 anonyig、legacy 或 igwatcher")
     if not 1 <= browser_cfg.max_pages_per_collection <= 20:

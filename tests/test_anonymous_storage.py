@@ -129,14 +129,16 @@ def test_refreshed_candidate_retries_same_failed_media_without_duplicate_members
     item = candidate("asset", group="parent", owner_username="alice")
     account_id = record(db, [item])
     media_id = db.pending_media(account_id, 1)[0]["id"]
-    db.mark_media_failed(media_id, "expired URL")
+    now = datetime.now(UTC)
+    db.mark_media_failed(media_id, "expired URL", now=now)
     db.record_collection_observations(account_id, "Alice", {
         "posts": CollectionObservation(TerminalState.MEDIA, complete=True),
     })
     assert db.known_source_ids(account_id, "posts") == {"parent"}
     item.url = "https://cdn.example/asset?fresh=2"
     record(db, [item])
-    retry = db.pending_media(account_id, 1)[0]
+    assert db.pending_media(account_id, 1, now=now) == []
+    retry = db.pending_media(account_id, 1, now=now + timedelta(hours=1))[0]
     assert retry["id"] == media_id
     assert retry["url"] == item.url
     assert retry["status"] == "failed"

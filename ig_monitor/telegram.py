@@ -204,11 +204,22 @@ def format_event(kind: str, payload: dict[str, Any]) -> str:
             )
         return "\n".join(lines)
     if kind == "heartbeat":
-        return "\n".join([
-            "IG Monitor 運作正常", f"監控帳號：{payload['accounts']}", f"正常：{payload['normal']}",
+        lines = [
+            "IG Monitor 狀態摘要", f"監控帳號：{payload['accounts']}", f"帳號未達異常門檻：{payload['normal']}",
             f"私人：{payload['private']}", f"公開：{payload['public']}", f"異常：{payload['error']}",
             f"待下載：{payload['pending']}",
-        ])
+        ]
+        backlog = payload.get('media_backlog')
+        if backlog:
+            lines.extend([
+                f"可排入下載：{backlog['ready']}／檔案退避：{backlog['retry_wait']}",
+                f"來源冷卻：{backlog['source_wait']}／帳號暫不符合：{backlog['ineligible']}",
+                f"其他來源保留：{backlog['other_source']}／下載關閉：{backlog['paused']}",
+                f"最後成功存檔：{backlog.get('last_download_at') or '尚無紀錄'}",
+            ])
+            if backlog.get('source_cooldown_until'):
+                lines.append(f"來源最早可重試：{backlog['source_cooldown_until']}")
+        return "\n".join(lines)
     return str(payload.get("text") or f"{label}：{kind}")
 
 

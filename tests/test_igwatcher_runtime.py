@@ -485,7 +485,9 @@ def test_monitor_persists_conservative_groups_and_disabled_mode_keeps_only_obser
     assert (album["declared_count"], album["received_count"], album["complete"]) == (2, 1, False)
     if bad_download:
         assert db.gallery_memberships(account["id"]) == []
-        assert len(db.pending_media(account["id"], 100)) == 4
+        assert db.pending_media(account["id"], 100) == []
+        assert db.media_counts(account["id"])["failed"] == 4
+        assert db.media_backlog("igwatcher")["retry_wait"] == 4
         return
     assert len(db.gallery_memberships(account["id"])) == 4
     detail, ordinary_media, _counts = account_detail_data(db.path, account["id"])

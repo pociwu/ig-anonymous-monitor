@@ -270,6 +270,8 @@ class Database(AnonymousStore):
         self._add_column_if_missing("media", "file_size", "INTEGER")
         self._add_column_if_missing("media", "video_duration", "REAL")
         self._add_column_if_missing("media", "video_bitrate", "INTEGER")
+        self._add_column_if_missing("media", "last_attempt_at", "TEXT")
+        self._add_column_if_missing("media", "next_retry_at", "TEXT")
         self.conn.execute("UPDATE accounts SET effective_url=url WHERE effective_url IS NULL")
         self.conn.execute(
             """CREATE UNIQUE INDEX IF NOT EXISTS idx_accounts_one_full_post_backfill
@@ -1334,16 +1336,20 @@ class Database(AnonymousStore):
         self.conn.execute("UPDATE events SET attempts=attempts+1,last_error=? WHERE id=?", (error, event_id))
         self.conn.commit()
 
-    def pending_media(self, account_id: int, limit: int, source: str | None = None) -> list[dict[str, Any]]:
+    def pending_media(self, account_id: int, limit: int, source: str | None = None,
+                      *, now: datetime | None = None) -> list[dict[str, Any]]:
+        timestamp = (now or datetime.now(UTC)).isoformat(timespec="seconds")
         rows = self.conn.execute("""
           SELECT * FROM media WHERE account_id=? AND status IN ('pending','failed')
+            AND (next_retry_at IS NULL OR julianday(next_retry_at)<=julianday(?))
             AND (? IS NULL OR EXISTS (
               SELECT 1 FROM media_memberships mm WHERE mm.media_id=media.id AND mm.source=?
             ) OR (?='legacy' AND NOT EXISTS (
               SELECT 1 FROM media_memberships mm WHERE mm.media_id=media.id
             )))
-          ORDER BY CASE WHEN published_at IS NULL THEN 1 ELSE 0 END,published_at DESC,id DESC LIMIT ?
-        """, (account_id, source, source, source, limit)).fetchall()
+          ORDER BY CASE WHEN last_attempt_at IS NULL THEN 0 ELSE 1 END,
+            last_attempt_at,CASE WHEN published_at IS NULL THEN 1 ELSE 0 END,published_at DESC,id DESC LIMIT ?
+        """, (account_id, timestamp, source, source, source, limit)).fetchall()
         return [dict(r) for r in rows]
 
     def mark_media_downloaded(
@@ -1354,14 +1360,23 @@ class Database(AnonymousStore):
         self.conn.execute("""UPDATE media SET status='downloaded',local_path=?,sha256=?,fingerprint_json=?,
                              width=COALESCE(?,width),height=COALESCE(?,height),file_size=?,
                              video_duration=?,video_bitrate=?,duplicate_of_id=NULL,
-                             downloaded_at=?,last_error=NULL WHERE id=?""",
+                             downloaded_at=?,last_error=NULL,next_retry_at=NULL WHERE id=?""",
                           (local_path, sha256, fingerprint_json, width, height, file_size,
                            video_duration, video_bitrate, utc_now(), media_id))
         self.conn.commit()
 
-    def mark_media_failed(self, media_id: int, error: str) -> None:
-        self.conn.execute("UPDATE media SET status='failed',attempts=attempts+1,last_error=? WHERE id=?", (error, media_id))
-        self.conn.commit()
+    def mark_media_failed(self, media_id: int, error: str, *, now: datetime | None = None) -> None:
+        moment = now or datetime.now(UTC)
+        with self.transaction() as con:
+            con.execute("BEGIN IMMEDIATE")
+            row = con.execute("SELECT attempts FROM media WHERE id=?", (media_id,)).fetchone()
+            if row is None:
+                return
+            hours = min(24, 2 ** min(row["attempts"], 5))
+            con.execute("""UPDATE media SET status='failed',attempts=attempts+1,last_error=?,
+                          last_attempt_at=?,next_retry_at=? WHERE id=?""",
+                        (error, moment.isoformat(timespec="seconds"),
+                         (moment + timedelta(hours=hours)).isoformat(timespec="seconds"), media_id))
 
     def downloaded_by_hash(self, account_id: int, sha256: str) -> dict[str, Any] | None:
         row = self.conn.execute(
@@ -1435,6 +1450,38 @@ class Database(AnonymousStore):
     def media_counts(self, account_id: int) -> dict[str, int]:
         rows = self.conn.execute("SELECT status,COUNT(*) n FROM media WHERE account_id=? GROUP BY status", (account_id,))
         return {row["status"]: row["n"] for row in rows}
+
+    def media_backlog(self, source: str, *, enabled: bool = True,
+                      now: datetime | None = None) -> dict[str, Any]:
+        moment = now or datetime.now(UTC)
+        cooldown = self.source_cooldown(source, now=moment)
+        result = dict(total=0, ready=0, retry_wait=0, source_wait=0,
+                      other_source=0, ineligible=0, paused=0)
+        rows = self.conn.execute("""SELECT m.next_retry_at,a.enabled,a.fail_count,a.snapshot_json,
+          EXISTS(SELECT 1 FROM media_memberships mm WHERE mm.media_id=m.id AND mm.source=?)
+          OR (?='legacy' AND NOT EXISTS(SELECT 1 FROM media_memberships mm WHERE mm.media_id=m.id)) AS selected
+          FROM media m JOIN accounts a ON a.id=m.account_id WHERE m.status IN ('pending','failed')""",
+          (source, source))
+        for row in rows:
+            result['total'] += 1
+            snapshot = json.loads(row['snapshot_json']) if row['snapshot_json'] else {}
+            if not row['selected']:
+                reason = 'other_source'
+            elif (not row['enabled'] or (source != 'igwatcher' and row['fail_count'])
+                  or snapshot.get('privacy') != 'public'):
+                reason = 'ineligible'
+            elif not enabled:
+                reason = 'paused'
+            elif row['next_retry_at'] and datetime.fromisoformat(row['next_retry_at']) > moment:
+                reason = 'retry_wait'
+            elif cooldown:
+                reason = 'source_wait'
+            else:
+                reason = 'ready'
+            result[reason] += 1
+        result['source_cooldown_until'] = cooldown['next_allowed_at'] if cooldown else None
+        result['last_download_at'] = self.conn.execute('SELECT MAX(downloaded_at) FROM media').fetchone()[0]
+        return result
 
     def summary(self) -> dict[str, int]:
         result = {"accounts": 0, "normal": 0, "private": 0, "public": 0, "error": 0, "pending": 0}
