@@ -11,6 +11,21 @@ OLD = 'https://s.cdninstagram.com/a/123456789_987654321_n.jpg?old=1'
 NEW = 'https://other.cdninstagram.com/a/123456789_987654321_n.jpg?new=2'
 
 
+def test_failed_parent_preserves_original_reason_without_second_request(monkeypatch):
+    calls = []
+    async def load(self, username, group):
+        calls.append(group)
+        raise ScrapeFailure('原貼文不在查詢範圍', 'IGWatcher 網址刷新', error_code='refresh_unavailable')
+    monkeypatch.setattr(PostRefresher, '_load', load)
+    async def run():
+        refresher = PostRefresher(SimpleNamespace(headless=True), lambda: False)
+        for _ in range(2):
+            with pytest.raises(ScrapeFailure, match='原貼文不在查詢範圍'):
+                await refresher.resolve('alice', '123_456', OLD, 'image')
+        assert len(calls) == 1
+    asyncio.run(run())
+
+
 def test_match_requires_parent_and_unique_asset_not_position():
     parent = {'id': '123_456', 'children': [{'image_url': NEW}]}
     assert match_asset(parent, '123_456', OLD, 'image') == NEW

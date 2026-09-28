@@ -46,6 +46,7 @@ class PostRefresher:
         self.config, self.guard = config, guard
         self.cache = {}
         self.attempted = set()
+        self.failures = {}
 
     def check(self):
         if self.guard():
@@ -61,9 +62,15 @@ class PostRefresher:
         if cached and time.monotonic() - cached[0] < 180:
             return match_asset(cached[1], group_id, old_url, kind)
         if key in self.attempted:
-            raise failure('本輪已刷新此貼文，不重複請求')
+            if key in self.failures:
+                raise self.failures[key]
+            raise failure('本輪刷新快取已到期，等待下輪更新連結')
         self.attempted.add(key)
-        parent = await self._load(username, group_id)
+        try:
+            parent = await self._load(username, group_id)
+        except ScrapeFailure as exc:
+            self.failures[key] = exc
+            raise
         self.check()
         self.cache[key] = (time.monotonic(), parent)
         return match_asset(parent, group_id, old_url, kind)
@@ -77,9 +84,11 @@ class PostRefresher:
         rejection = None
         code = None
         count = 0
+        posts_pages = 0
+        next_cursor = None
 
         async def route(r):
-            nonlocal count, rejection
+            nonlocal count, rejection, posts_pages
             try: self.check()
             except ScrapeFailure as exc:
                 rejection = exc; stopped.set(); return await r.abort()
@@ -93,8 +102,15 @@ class PostRefresher:
                             and q.get('username') == [username])
                            or (u.path == '/api/post-full' and code and q.get('code') == [code]
                                and q.get('kind') == ['p'] and q.get('owner') == [group_id.split('_')[1]]))
-                if not allowed or endpoint in seen: return await r.abort()
-                seen.add(endpoint)
+                if endpoint == 'posts':
+                    cursor = q.get('maxId', [None])[0]
+                    allowed = allowed and posts_pages < 3 and cursor == next_cursor
+                    marker = (endpoint, cursor)
+                else:
+                    marker = endpoint
+                if not allowed or marker in seen: return await r.abort()
+                if endpoint == 'posts': posts_pages += 1
+                seen.add(marker)
             elif r.request.resource_type not in ('document', 'script', 'stylesheet'):
                 return await r.abort()
             count += 1
@@ -103,7 +119,7 @@ class PostRefresher:
             await r.continue_()
 
         async def response(r):
-            nonlocal rejection
+            nonlocal rejection, next_cursor
             endpoint = urlsplit(r.url).path.rsplit('/', 1)[-1]
             if r.status in (401, 403, 422, 429):
                 rejection = ScrapeFailure(
@@ -122,7 +138,14 @@ class PostRefresher:
                 if (r.status != 200 or payload.get('status') != 'success' or payload.get('fetch_failed')
                         or any(payload.get(k) for k in ('error', 'errors', 'error_type', 'note', 'toolDown'))):
                     raise ValueError
-                data[endpoint] = payload.get('data')
+                if endpoint == 'posts':
+                    items = payload.get('data')
+                    if not isinstance(items, list) or len(items) > 100: raise ValueError
+                    data[endpoint] = data.get(endpoint, []) + items
+                    cursor = payload.get('nextMaxId') or payload.get('next_max_id')
+                    next_cursor = cursor if isinstance(cursor, str) and 0 < len(cursor) <= 2048 else None
+                else:
+                    data[endpoint] = payload.get('data')
             except Exception:
                 rejection = failure('網址刷新回應不完整'); stopped.set()
             finally: ready[endpoint].set()
@@ -152,10 +175,24 @@ class PostRefresher:
                         raise failure('刷新時帳號身分或公開狀態未確認')
                     await page.locator('.tab-btn[data-tab="posts"]').click(timeout=15000)
                     await ready['posts'].wait()
+                    for _ in range(6):
+                        if any(isinstance(x, dict) and x.get('id') == group_id for x in data.get('posts', [])):
+                            break
+                        if not next_cursor or posts_pages >= 3: break
+                        ready['posts'].clear()
+                        before_pages = posts_pages
+                        await page.locator('.tab-btn[data-tab="posts"]').click()
+                        await page.locator('.load-more').click(timeout=15000)
+                        # Show-more can reveal buffered cards without fetching a page.
+                        await page.wait_for_timeout(250)
+                        if posts_pages == before_pages:
+                            continue
+                        await ready['posts'].wait()
                     items = data.get('posts')
-                    if not isinstance(items, list) or len(items) > 100: raise failure()
+                    if not isinstance(items, list) or len(items) > 300: raise failure()
+                    items = list({x.get('id'): x for x in items if isinstance(x, dict) and x.get('id')}.values())
                     parents = [x for x in items if isinstance(x, dict) and x.get('id') == group_id]
-                    if len(parents) != 1: raise failure('第一頁沒有原貼文；保留待處理，不使用舊連結')
+                    if len(parents) != 1: raise failure('限定三頁內未找到原貼文；來源未提供可確認連結，保留待處理')
                     parent = parents[0]
                     if parent.get('anon') is True:
                         code = parent.get('shortcode')

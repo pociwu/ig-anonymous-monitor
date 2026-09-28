@@ -29,7 +29,7 @@ document.querySelector('input').onkeydown=async e=>{
 async def main():
     original = BrowserContext.route
     cfg = BrowserConfig(True, 30, 0, Path('/tmp'), 'igwatcher')
-    for mode in ('full', 'lazy', 'refused', 'wrong_identity'):
+    for mode in ('full', 'lazy', 'refused', 'wrong_identity', 'page_two'):
         requests = []
         async def install(context, pattern, handler, **kwargs):
             async def intercepted(route):
@@ -40,14 +40,20 @@ async def main():
                         path = urlsplit(route.request.url).path
                         requests.append(path)
                         if path == '/':
-                            return await route.fulfill(status=200, content_type='text/html', body=HTML)
+                            html = HTML
+                            if mode == 'page_two':
+                                html = html.replace('<div class="igw-posts"></div>', '<button class="load-more">More</button><div class="igw-posts"></div>')
+                                html = html.replace("document.querySelector('button').onclick=", "document.querySelector('.load-more').onclick=()=>fetch('/wp-json/igw/v1/posts?username=alice&maxId=next1'); document.querySelector('button').onclick=")
+                            return await route.fulfill(status=200, content_type='text/html', body=html)
                         if path.endswith('search'):
                             payload={'user':{'username':'alice','is_private':False}}
                         else:
                             parent={'id':'123_456','shortcode':'ABCdef123','is_carousel':True,
                                     'taken_at':100,'children':[{'image_url':NEW}]}
                             if path.endswith('posts'):
-                                if mode != 'full': parent.update(anon=True, children=[])
+                                if mode not in ('full', 'page_two'): parent.update(anon=True, children=[])
+                                if mode == 'page_two' and 'maxId=' not in route.request.url:
+                                    return await route.fulfill(status=200, content_type='application/json', body=json.dumps({'status':'success','data':[], 'nextMaxId':'next1'}))
                                 payload=[parent]
                             else:
                                 if mode=='refused': return await route.fulfill(status=403,body='denied')
@@ -69,7 +75,7 @@ async def main():
                 before=len(requests)
                 assert await refresher.resolve('alice','123_456',OLD,'image') == NEW
                 assert len(requests)==before
-            assert requests.count('/wp-json/igw/v1/posts')==1
+            assert requests.count('/wp-json/igw/v1/posts') == (2 if mode == 'page_two' else 1)
             assert '/wp-json/igw/v1/media' not in requests
             print(mode,'OK',flush=True)
         finally: BrowserContext.route=original
