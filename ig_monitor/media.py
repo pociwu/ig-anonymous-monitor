@@ -81,7 +81,17 @@ async def download_account_media(db: Database, scraper: ProfileScraper, account:
             if source and db.media_cooldown(source):
                 raise ScrapeFailure("匿名來源全域冷卻中", "下載媒體", blocker="source_cooldown")
             referer = getattr(scraper, "media_referer", None) or account.get("effective_url") or account["url"]
-            data, content_type = await scraper.download(item["url"], referer)
+            queued = getattr(scraper, 'download_queued', None)
+            if source == 'igwatcher' and queued and getattr(scraper.config, 'igwatcher_media_transport', None) == 'browser_proxy' and item['category'] == 'posts':
+                memberships = db.conn.execute(
+                    "SELECT DISTINCT queried_username,group_id FROM media_memberships WHERE media_id=? AND account_id=? AND source='igwatcher' AND category='posts'",
+                    (item['id'], account['id'])).fetchall()
+                if len(memberships) != 1:
+                    raise ScrapeFailure('待下載媒體缺少唯一父貼文關聯', 'IGWatcher 網址刷新', error_code='refresh_unavailable')
+                scraper.refresh_guard = lambda: bool(db.source_cooldown('igwatcher'))
+                data, content_type = await queued(item, dict(memberships[0]))
+            else:
+                data, content_type = await scraper.download(item["url"], referer)
             _validate_payload(data, content_type, item["kind"])
             digest = sha256_bytes(data)
             duplicate = db.downloaded_by_hash(account["id"], digest)

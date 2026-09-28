@@ -111,7 +111,11 @@ class Monitor:
                         except ScrapeFailure as exc:
                             if not exc.blocker:
                                 raise
-                            self.db.record_media_block(source, str(exc))
+                            if exc.blocker != 'source_cooldown':
+                                if 'phase=refresh' in str(exc):
+                                    self.db.record_source_block(source, str(exc))
+                                else:
+                                    self.db.record_media_block(source, str(exc))
                             LOG.warning('既有媒體下載：來源暫停，停止後續請求；%s', exc)
                             blocked = True
                             failures += 1

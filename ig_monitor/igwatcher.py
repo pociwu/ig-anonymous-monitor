@@ -278,6 +278,8 @@ class IGWatcherScraper(ProfileScraper):
         self._client = None
         self._blocked = False
         self._browser_media = None
+        self._post_refresher = None
+        self.refresh_guard = None
 
     async def __aenter__(self):
         self._client = httpx.AsyncClient(
@@ -427,6 +429,21 @@ class IGWatcherScraper(ProfileScraper):
             return snapshot
         except _ContractError as exc:
             raise ScrapeFailure(str(exc), "IGWatcher 個人檔案", error_code=exc.error_code) from None
+
+    async def download_queued(self, item: dict, membership: dict) -> tuple[bytes, str]:
+        """Refresh post transport URLs without mutating historical observations."""
+        if item['category'] != 'posts' or self.config.igwatcher_media_transport != 'browser_proxy':
+            return await self.download(item['url'], self.media_referer)
+        from .media_refresh import PostRefresher
+        self._guard()
+        if self._post_refresher is None:
+            self._post_refresher = PostRefresher(self.config, lambda: bool(
+                self._blocked or (self.source_guard and self.source_guard())
+                or (self.refresh_guard and self.refresh_guard())))
+        fresh = await self._post_refresher.resolve(
+            membership.get('queried_username'), membership.get('group_id'), item['url'], item['kind'])
+        self._guard()
+        return await self.download(fresh, self.media_referer)
 
     async def download(self, url: str, referer: str) -> tuple[bytes, str]:
         """Download only allowlisted HTTPS CDN objects, never arbitrary proxies."""
