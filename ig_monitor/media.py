@@ -6,7 +6,7 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 from uuid import uuid4
 
 from .config import DedupConfig
@@ -18,6 +18,22 @@ from .utils import extension_for, safe_name, sha256_bytes
 
 
 LOG = logging.getLogger("ig_monitor")
+
+
+def stale_cdn_locator(url: str, now: datetime | None = None) -> bool:
+    """An expiry hint means refresh first, not proof the media was deleted."""
+    parsed = urlparse(url)
+    host = (parsed.hostname or '').lower()
+    if not host.endswith(('.cdninstagram.com', '.fbcdn.net')):
+        return False
+    values = parse_qs(parsed.query).get('oe', [])
+    if len(values) != 1 or len(values[0]) != 8:
+        return False
+    try:
+        expiry = int(values[0], 16)
+    except ValueError:
+        return False
+    return expiry <= (now or datetime.now(UTC)).timestamp()
 
 
 def _file_matches(path: Path, digest: str) -> bool:
@@ -91,6 +107,9 @@ async def download_account_media(db: Database, scraper: ProfileScraper, account:
                 scraper.refresh_guard = lambda: bool(db.source_cooldown('igwatcher'))
                 data, content_type = await queued(item, dict(memberships[0]))
             else:
+                if source == 'igwatcher' and stale_cdn_locator(item['url']):
+                    raise ScrapeFailure('舊媒體連結有過期時間特徵，待刷新；未送出下載請求',
+                                        'IGWatcher 媒體', error_code='refresh_unavailable')
                 data, content_type = await scraper.download(item["url"], referer)
             _validate_payload(data, content_type, item["kind"])
             digest = sha256_bytes(data)

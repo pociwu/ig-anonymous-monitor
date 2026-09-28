@@ -123,8 +123,9 @@ class Monitor:
                         for key in totals:
                             totals[key] += stats[key]
                         attachments.extend(stats['attachments'])
-                        LOG.info('%s：逐筆媒體下載 新增=%d 重複=%d 失敗=%d',
-                                 account['label'], stats['downloaded'], stats['duplicate'], stats['failed'])
+                        LOG.info('%s：逐筆媒體下載 新增=%d 重複=%d 失敗=%d 全部待處理=%d',
+                                 account['label'], stats['downloaded'], stats['duplicate'], stats['failed'],
+                                 self.db.summary()['pending'])
                     failures += totals['failed']
                     if totals['downloaded'] or totals['failed']:
                         counts = self.db.media_counts(account['id'])
