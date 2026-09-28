@@ -283,6 +283,18 @@ def test_igwatcher_cooldown_runs_do_not_open_source(runtime):
     assert all(row["fail_count"] == 0 for row in db.enabled_accounts())
 
 
+def test_inspection_only_never_starts_backlog_during_cooldown(runtime, monkeypatch):
+    import asyncio
+    from ig_monitor.monitor import Monitor
+    config, db = runtime
+    config = replace(config, browser=replace(config.browser, anonymous_source="igwatcher"))
+    db.record_source_block("igwatcher", "http_status=403")
+    async def forbidden(self):
+        raise AssertionError("inspection must not run download queue")
+    monkeypatch.setattr(Monitor, "download_pending", forbidden)
+    assert asyncio.run(Monitor(config, db).run(download_media=False)) == 0
+
+
 def test_igwatcher_partial_round_does_not_reset_cooldown_backoff(runtime):
     config, db = runtime
     config = replace(config, browser=replace(config.browser, anonymous_source="igwatcher"),

@@ -147,7 +147,7 @@ class Monitor:
             self.db.finish_run(run_id, 'failed', type(exc).__name__)
             raise
 
-    async def run(self) -> int:
+    async def run(self, *, download_media: bool = True) -> int:
         self.db.sync_accounts(self.config.accounts)
         run_id = self.db.start_run()
         source = self.config.browser.anonymous_source
@@ -156,7 +156,7 @@ class Monitor:
             LOG.warning("匿名來源 %s 冷卻中，下次允許：%s", source, cooldown["next_allowed_at"])
             await self.telegram.deliver_pending(self.db)
             self.db.finish_run(run_id, "cooldown", f"source={source}, next_allowed_at={cooldown['next_allowed_at']}")
-            if source == "igwatcher":
+            if source == "igwatcher" and download_media:
                 return await self.download_pending()
             return 0
         failures = 0
@@ -333,7 +333,7 @@ class Monitor:
                         if self.db.source_cooldown(source):
                             break
 
-                if self.config.schedule.media_download_enabled and source != "igwatcher":
+                if download_media and self.config.schedule.media_download_enabled and source != "igwatcher":
                     refreshed = {row["id"]: row for row in self.db.enabled_accounts()}
                     for account_id, account in refreshed.items():
                         if self.db.source_cooldown(source):
@@ -373,7 +373,7 @@ class Monitor:
                 elif not self.config.schedule.media_download_enabled:
                     LOG.warning("媒體記錄與下載已由 schedule.media_download_enabled=false 暫停")
 
-            if source == "igwatcher":
+            if source == "igwatcher" and download_media:
                 failures += await self.download_pending()
             # A single good profile is not evidence of recovery while other
             # IGWatcher requests still fail; retain the escalating backoff.

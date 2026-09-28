@@ -35,6 +35,7 @@ def build_parser() -> argparse.ArgumentParser:
     group.add_argument("--collector-approve", metavar="ACCOUNT", help="Approve one account as the seven-day canary")
     group.add_argument("--collector-recovery", action="store_true", help="Begin a new observation after risk_hold")
     group.add_argument("--download-pending", action="store_true", help="Serially download eligible cached IGWatcher media without scraping profiles")
+    group.add_argument("--inspect-only", action="store_true", help="Inspect and store observations without running media downloads")
     parser.add_argument("--collector-session", default="collector-secrets/session.json")
     parser.add_argument("--media-since", help="Only quarantine media downloaded at or after this ISO-8601 time")
     parser.add_argument(
@@ -183,7 +184,9 @@ async def _async_main(args: argparse.Namespace) -> int:
                 logging.info("上一輪仍在執行，本輪略過")
                 return 0
             monitor = Monitor(config, db)
-            return await (monitor.download_pending() if args.download_pending else monitor.run())
+            if args.download_pending:
+                return await monitor.download_pending()
+            return await (monitor.run(download_media=False) if args.inspect_only else monitor.run())
     finally:
         db.close()
 

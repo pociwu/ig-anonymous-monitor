@@ -32,9 +32,37 @@ async def run_scheduler(interval_seconds: float, run_once: RunOnce, stop: asynci
             pass
 
 
-async def _run_monitor_process(config_path: Path) -> int:
+async def run_split_scheduler(interval_seconds: float, inspect: RunOnce, download: RunOnce,
+                              stop: asyncio.Event, *, download_interval: float = 60) -> None:
+    """Independent due times, serialized work; due downloads run before inspection."""
+    loop = asyncio.get_running_loop()
+    inspection_due = download_due = loop.time()
+    async def invoke(name, callback):
+        try:
+            status = await callback()
+            if status:
+                LOG.warning('%s exited with status %d', name, status)
+        except Exception:
+            LOG.exception('%s failed', name)
+    while not stop.is_set():
+        if loop.time() >= download_due:
+            await invoke('Download', download)
+            download_due = loop.time() + download_interval
+        if not stop.is_set() and loop.time() >= inspection_due:
+            await invoke('Inspection', inspect)
+            inspection_due = loop.time() + interval_seconds
+        if stop.is_set():
+            break
+        try:
+            await asyncio.wait_for(stop.wait(), timeout=max(0, min(inspection_due, download_due) - loop.time()))
+        except TimeoutError:
+            pass
+
+
+async def _run_monitor_process(config_path: Path, mode: str | None = None) -> int:
     process = await asyncio.create_subprocess_exec(
-        sys.executable, "-m", "ig_monitor", "--config", str(config_path)
+        sys.executable, "-m", "ig_monitor", "--config", str(config_path),
+        *([mode] if mode else []),
     )
     return await process.wait()
 
@@ -56,11 +84,13 @@ async def _async_main(config_path: Path) -> None:
                 pass
     interval_seconds = config.schedule.interval_minutes * 60
     LOG.info("Scheduler started; interval=%d minutes", config.schedule.interval_minutes)
-    await run_scheduler(
-        interval_seconds,
-        lambda: _run_monitor_process(config.config_path),
-        stop,
-    )
+    if config.browser.anonymous_source == 'igwatcher' and config.schedule.media_download_enabled:
+        LOG.info('Independent download queue enabled; check interval=60 seconds; shared lock retained')
+        await run_split_scheduler(interval_seconds,
+            lambda: _run_monitor_process(config.config_path, '--inspect-only'),
+            lambda: _run_monitor_process(config.config_path, '--download-pending'), stop)
+    else:
+        await run_scheduler(interval_seconds, lambda: _run_monitor_process(config.config_path), stop)
     LOG.info("Scheduler stopped")
 
 
