@@ -477,7 +477,8 @@ class AnonymousStore:
             if row["next_allowed_at"] and _time(row["next_allowed_at"]) > moment:
                 return dict(row)
             count = int(row["block_count"]) + 1
-            next_allowed = (moment + timedelta(minutes=(30, 60, 120, 240)[min(count - 1, 3)])).isoformat(timespec="seconds")
+            delays = (10, 15) if source in ("igwatcher", "igwatcher:media") else (30, 60, 120, 240)
+            next_allowed = (moment + timedelta(minutes=delays[min(count - 1, len(delays) - 1)])).isoformat(timespec="seconds")
             since = row["failure_since"] or timestamp
             if not row["failure_notified"]:
                 self._anonymous_event(con, f"failure:anonymous-source:{source}:{since}", None, "failure", {

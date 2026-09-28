@@ -296,7 +296,7 @@ def test_igwatcher_partial_round_does_not_reset_cooldown_backoff(runtime):
     assert db.conn.execute("SELECT block_count FROM anonymous_source_state WHERE source='igwatcher'").fetchone()[0] == 1
     row = db.record_source_block("igwatcher", "429")
     assert row["block_count"] == 2
-    assert datetime.fromisoformat(row["next_allowed_at"]) > datetime.now(UTC) + timedelta(minutes=59)
+    assert datetime.now(UTC) + timedelta(minutes=14) < datetime.fromisoformat(row["next_allowed_at"]) <= datetime.now(UTC) + timedelta(minutes=15)
 
 
 def test_igwatcher_clean_round_can_recover(runtime):
