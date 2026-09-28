@@ -103,7 +103,13 @@ def test_download_only_is_serial_bounded_and_never_scrapes_profiles(tmp_path, mo
         if mode == 'failed':
             assert db.media_backlog('igwatcher')['retry_wait'] == 1
             assert db.media_counts(account['id'])['downloaded'] == 1
-        if mode == 'blocked': assert db.media_cooldown('igwatcher')
+        if mode == 'blocked':
+            assert db.media_cooldown('igwatcher')
+            rejected = db.conn.execute('SELECT * FROM media WHERE url=?', (calls[0],)).fetchone()
+            assert rejected['attempts'] == 1
+            assert rejected['last_attempt_at'] is not None
+            assert rejected['next_retry_at'] is not None
+            assert db.pending_media(account['id'], 1, source='igwatcher')[0]['id'] != rejected['id']
         assert not any(e['kind']=='recovery' for e in db.pending_events(100))
     finally:
         db.close()

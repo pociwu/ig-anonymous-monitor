@@ -184,7 +184,7 @@ def test_source_block_reports_account_and_redirect_context(media_runtime, caplog
         assert expected in message
     for forbidden in ("secret", "private-path", "private-final", "https://", "Set-Cookie"):
         assert forbidden not in message
-    assert db.media_counts(account["id"]) == {"pending": 1}
+    assert db.media_counts(account["id"]) == ({"failed": 1} if operation == "queue" else {"pending": 1})
 
 
 @pytest.mark.parametrize("endpoint", ["profile", "stories"])

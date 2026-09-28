@@ -47,6 +47,17 @@ def test_proxy_denial_is_global_stop(status):
     assert exc.value.blocker == 'source_blocked'
 
 
+@pytest.mark.parametrize('phase', ['homepage', 'media_proxy', 'https://secret.invalid/token'])
+def test_denial_diagnostic_identifies_phase_without_reflecting_arbitrary_input(phase):
+    from ig_monitor.browser_media import decode_result
+    with pytest.raises(ScrapeFailure) as exc:
+        decode_result({'status': 403}, 100, phase=phase)
+    expected = phase if phase in ('homepage', 'media_proxy') else 'unknown'
+    assert f'phase={expected}' in str(exc.value)
+    assert 'http_status=403' in str(exc.value)
+    assert 'secret.invalid' not in str(exc.value)
+
+
 @pytest.mark.parametrize('result', [
     {'status': 206}, {'status': 302}, {'status': 404},
     {'status': 200, 'error': 'size'},

@@ -51,6 +51,18 @@ async def main():
             except ScrapeFailure as exc:
                 if status == 429 or mime == 'text/html':
                     assert exc.blocker == 'source_blocked'
+                assert 'phase=media_proxy' in str(exc) or status == 200 and mime == 'video/mp4'
+        await transport.close()
+        async def homepage_denied(route):
+            await route.fulfill(status=403, content_type='text/plain', body='denied')
+        transport._route = homepage_denied
+        transport._denied = False
+        try:
+            await transport.download('https://s.cdninstagram.com/fixture')
+            raise AssertionError('homepage denial accepted')
+        except ScrapeFailure as exc:
+            assert exc.blocker == 'source_blocked'
+            assert 'phase=homepage' in str(exc)
         print('BROWSER_MEDIA_OFFLINE_OK complete_200 cooldown_zero_requests partial_rejected size_bounded challenge_stop rate_limit_stop')
     finally:
         await transport.close()

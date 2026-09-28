@@ -157,13 +157,16 @@ async def download_account_media(db: Database, scraper: ProfileScraper, account:
         except Exception as exc:
             if isinstance(exc, ScrapeFailure) and exc.blocker:
                 if source == "igwatcher" and exc.blocker == "source_blocked":
+                    # Record the actual rejected attempt before stopping globally.
+                    # A cooldown-only skip above must not count as an attempt.
+                    db.mark_media_failed(item["id"], str(exc))
                     category = item.get("category")
                     category = category if category in {"posts", "stories", "highlights", "reels"} else "unknown"
                     kind = item.get("kind")
                     kind = kind if kind in {"image", "video"} else "unknown"
                     LOG.warning(
-                        "%s：IGWatcher 來源暫停 operation=queue category=%s kind=%s：%s",
-                        account["label"], category, kind, exc,
+                        "%s：IGWatcher 來源暫停 operation=queue media_id=%s category=%s kind=%s：%s",
+                        account["label"], item["id"], category, kind, exc,
                     )
                 raise
             db.mark_media_failed(item["id"], str(exc))

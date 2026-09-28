@@ -11,14 +11,16 @@ from .models import ScrapeFailure
 ORIGIN = 'https://igwatcher.com'
 
 
-def decode_result(result: dict, limit: int) -> tuple[bytes, str]:
+def decode_result(result: dict, limit: int, *, phase: str = 'media_proxy') -> tuple[bytes, str]:
+    phase = phase if phase in ('homepage', 'media_proxy') else 'unknown'
+    diagnostic = f'[IGWATCHER-BROWSER-MEDIA-DIAG] phase={phase}'
     status = result.get('status')
     if status in (401, 403, 422, 429) or result.get('challenge'):
         signal = 'challenge' if result.get('challenge') else 'http_status'
-        raise ScrapeFailure(f'瀏覽器媒體來源拒絕或要求驗證 [http_status={status}] signal={signal}',
+        raise ScrapeFailure(f'瀏覽器媒體來源拒絕或要求驗證 [http_status={status}] signal={signal} {diagnostic}',
                             'IGWatcher', blocker='source_blocked', error_code='source_blocked')
     if status != 200 or result.get('error'):
-        raise ScrapeFailure(f'瀏覽器媒體未取得完整回應 [http_status={status}]',
+        raise ScrapeFailure(f'瀏覽器媒體未取得完整回應 [http_status={status}] {diagnostic}',
                             'IGWatcher', error_code='http_error')
     mime = result.get('mime', '').split(';')[0].strip().lower()
     if not mime.startswith(('image/', 'video/')) and mime != 'application/octet-stream':
@@ -71,6 +73,7 @@ class BrowserMedia:
         self._pw = self._browser = self._context = self._page = None
         self._allowed_media = None
         self._denied = False
+        self._stage = 'launch'
 
     def _check(self):
         self.guard()
@@ -97,18 +100,20 @@ class BrowserMedia:
         from playwright.async_api import async_playwright
         self._pw = await async_playwright().start()
         try:
+            self._stage = 'launch'
             self._browser = await self._pw.chromium.launch(channel='chromium', headless=self.config.headless)
             self._context = await self._browser.new_context(service_workers='block')
             await self._context.route('**/*', self._route)
             self._page = await self._context.new_page()
+            self._stage = 'homepage'
             r = await self._page.goto(ORIGIN + '/', wait_until='domcontentloaded', timeout=30000)
             if r is None or r.status != 200:
-                decode_result({'status': r.status if r else None}, self.limit)
+                decode_result({'status': r.status if r else None}, self.limit, phase='homepage')
             if urlsplit(self._page.url).netloc != 'igwatcher.com':
                 raise ScrapeFailure('瀏覽器媒體來源位置不符', 'IGWatcher')
             body = (await self._page.locator('body').inner_text())[:131072].lower()
             if any(x in body for x in ('verify you are human', 'captcha', 'turnstile')):
-                decode_result({'status': 200, 'challenge': True}, self.limit)
+                decode_result({'status': 200, 'challenge': True}, self.limit, phase='homepage')
         except BaseException:
             await self.close()
             raise
@@ -121,6 +126,7 @@ class BrowserMedia:
         try:
             await self._start()
             self._check()
+            self._stage = 'media_proxy'
             async with asyncio.timeout(65):
                 result = await self._page.evaluate(FETCH_MEDIA, {
                     'url': self._allowed_media, 'limit': self.limit, 'timeout': 60000})
@@ -131,7 +137,8 @@ class BrowserMedia:
                 self._denied = True
             raise
         except Exception:
-            raise ScrapeFailure('瀏覽器媒體請求未完成；本輪不重試', 'IGWatcher',
+            raise ScrapeFailure('瀏覽器媒體請求未完成；本輪不重試 '
+                                f'[IGWATCHER-BROWSER-MEDIA-DIAG] phase={self._stage}', 'IGWatcher',
                                 error_code='browser_media_failed') from None
         finally:
             self._allowed_media = None
